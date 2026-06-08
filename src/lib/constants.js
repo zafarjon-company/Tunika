@@ -21,7 +21,7 @@ export const DEFAULT_LATOK = {
   ustaHaqqi: 3000,
 };
 
-export const DEFAULT_SHOP_NAME = "Tunika Sex";
+export const DEFAULT_SHOP_NAME = "Tunika";
 export const BOSHQA_USTA = { id: 'boshqa', name: 'Boshqa', phones: [''] };
 
 export const DEFAULT_PRODUCTS = [

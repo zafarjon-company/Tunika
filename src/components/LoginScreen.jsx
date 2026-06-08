@@ -22,7 +22,7 @@ export function LoginScreen({ onLogin }) {
           <div className="w-12 h-12 mx-auto rounded-full bg-slate-900 flex items-center justify-center mb-2">
             <Lock className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>Tunika Sex</h1>
+          <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>Tunika</h1>
           <p className="text-xs text-slate-500">Kirish uchun login va parolni kiriting</p>
         </div>
 

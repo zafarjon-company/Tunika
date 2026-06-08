@@ -1,4 +1,4 @@
-# Tunika Sex — Savdo boshqaruv bazasi
+# Tunika — Savdo boshqaruv bazasi
 
 Tunika / metall mahsulotlar sexi uchun to'liq savdo-boshqaruv tizimi:
 zakaslar, mijozlar, ustalar, to'lovlar, ishchilar, yo'qlama, oylik,

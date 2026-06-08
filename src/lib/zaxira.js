@@ -19,7 +19,7 @@ export async function eksportZaxira() {
     if (snap.exists()) data[k] = snap.data().value;
   }));
 
-  const payload = { __app: 'tunika-sex', __version: 2, sana: toDateInput(), data };
+  const payload = { __app: 'tunika', __version: 2, sana: toDateInput(), data };
   const json = JSON.stringify(payload, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
