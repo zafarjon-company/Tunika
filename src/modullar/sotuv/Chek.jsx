@@ -1,0 +1,278 @@
+// ============================================================
+//  CHEK (RECEIPT) MODALI
+// ------------------------------------------------------------
+//  Asl faylda bu komponent yarmida uzilib qolgan edi —
+//  shu yerda to'liq tiklandi. Chop etishda faqat `.receipt-print`
+//  ko'rinadi (index.css dagi @media print qoidalariga qarang).
+// ============================================================
+import React, { useState, useEffect, useRef } from 'react';
+import { Printer, Receipt, MapPin, Phone, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check } from 'lucide-react';
+import { toBlob } from 'html-to-image';
+import { fmt, formatDate, rangHex, rangMatn } from '../../lib/helpers.js';
+import { applyTil, getTil } from '../../lib/til.js';
+import { KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
+import { itemDisp } from './Zakazlar.jsx';
+
+function RangChip({ rang }) {
+  if (!rang) return <span>—</span>;
+  return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold border border-black/10 whitespace-nowrap" style={rangChipStyle(rang)}>{rang}</span>;
+}
+
+export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, onClose }) {
+  const printRef = useRef(null);
+  const [narxsiz, setNarxsiz] = useState(false);   // narxsiz rejim — narxlarni yashiradi (oldindan yoqiladi)
+  const [busy, setBusy] = useState(false);          // rasm tayyorlanmoqda
+
+  // Chek ochilganda / narxsiz o'zgarganda — interfeys tilini chekka ham qo'llaymiz
+  // (chek/PDF/rasm tanlangan tilda chiqsin)
+  useEffect(() => { applyTil(getTil()); }, [narxsiz, order]);
+
+  if (!order) return null;
+  const olishUsd = usdOlish > 0 && order.debt > 0 ? order.debt / usdOlish : 0;
+  const sotishUsd = usdRate > 0 && order.debt > 0 ? order.debt / usdRate : 0;
+  const statBadge = {
+    paid:    { t: "To'liq to'langan", Icon: CheckCircle2, c: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+    partial: { t: 'Qisman to\'langan', Icon: Clock,       c: 'bg-amber-100 text-amber-800 border-amber-300' },
+    unpaid:  { t: "To'lanmagan",       Icon: XCircle,     c: 'bg-red-100 text-red-800 border-red-300' },
+  }[order.status] || null;
+
+  // Zakas xulosasi — mijozga yuborish uchun matn (WhatsApp/Telegram)
+  function buildText() {
+    const L = [];
+    L.push(shopName);
+    L.push(`Zakas № ${order.number} · ${formatDate(order.createdAt)}`);
+    L.push(`Mijoz: ${order.customer.name}`);
+    L.push('');
+    order.items.forEach((it) => {
+      const d = itemDisp(it);
+      L.push(`• ${d.nomi}${it.rang ? ` (${it.rang})` : ''} — ${d.olchov}${narxsiz ? '' : ` = ${fmt(d.jami)} so'm`}`);
+    });
+    (order.aksessuarlar || []).forEach((a) => L.push(`• ${a.nomi} — ${a.soni} ${a.birlik || 'dona'}${narxsiz ? '' : ` = ${fmt(a.jami)} so'm`}`));
+    if (!narxsiz) {
+      if (order.dastafka?.ichida) L.push('Dastafka xizmati: ichida (narxga kiritilgan)');
+      else if (order.dastafka?.summa > 0) L.push(`Dastafka xizmati: ${fmt(order.dastafka.summa)} so'm`);
+      L.push('');
+      L.push(`Umumiy: ${fmt(order.totalSum)} so'm`);
+      L.push(`To'landi: ${fmt(order.totalPaid)} so'm`);
+      if (order.debt > 0) L.push(`Qoldiq qarz: ${fmt(order.debt)} so'm`);
+    }
+    if (shopPhone) L.push(`Tel: ${shopPhone}`);
+    return L.join('\n');
+  }
+  // Mijozning birinchi telefoni (xalqaro format, faqat raqam) — to'g'ridan-to'g'ri yuborish uchun
+  function mijozTel() {
+    const raw = (order.customer.phones || []).filter(Boolean)[0] || '';
+    let d = raw.replace(/\D/g, '');
+    if (d.startsWith('998')) return d;
+    if (d.length === 9) return `998${d}`;
+    return d; // noma'lum format — raqamsiz ulashishga tushadi
+  }
+  // Matn bilan ochish (rasm ulashib bo'lmasa — zaxira)
+  function openMatn(app) {
+    const text = encodeURIComponent(buildText());
+    if (app === 'wa') {
+      const tel = mijozTel();
+      window.open(tel ? `https://wa.me/${tel}?text=${text}` : `https://wa.me/?text=${text}`, '_blank', 'noopener');
+    } else {
+      window.open(`https://t.me/share/url?url=${text}`, '_blank', 'noopener');
+    }
+  }
+  // Chekning RASMINI yuborish (WhatsApp/Telegram — qurilma ulashish oynasi orqali)
+  async function shareImage(app) {
+    if (!printRef.current || busy) return;
+    setBusy(true);
+    try {
+      const blob = await toBlob(printRef.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
+      if (!blob) throw new Error('rasm yo\'q');
+      const file = new File([blob], `zakas-${order.number}.png`, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: `Zakas № ${order.number}`, text: shopName });
+      } else {
+        // zaxira: rasmni yuklab, ilovani matn bilan ochish (qo'lda biriktirish uchun)
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
+        URL.revokeObjectURL(url);
+        openMatn(app);
+      }
+    } catch (e) {
+      openMatn(app);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const sendWhatsApp = () => shareImage('wa');
+  const sendTelegram = () => shareImage('tg');
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/50 flex items-start justify-center p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full max-w-md rounded-2xl shadow-2xl my-4 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ===== CHOP ETILADIGAN QISM ===== */}
+        <div ref={printRef} className="receipt-print text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>
+          {/* Accent sarlavha tasmasi (mavzu rangida) */}
+          <div className="bg-slate-900 text-white px-6 pt-6 pb-5 text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/15 mb-2">
+              <Receipt className="w-6 h-6" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight leading-none">{shopName}</h1>
+            <p className="text-[11px] opacity-80 mt-1.5 uppercase tracking-[0.25em]">Zakas · Chek</p>
+            <div className="flex justify-center flex-wrap gap-1.5 mt-3">
+              <span className="px-3 py-1 rounded-full bg-white/15 text-[11px] font-semibold">№ {order.number}</span>
+              <span className="px-3 py-1 rounded-full bg-white/15 text-[11px]">{formatDate(order.createdAt)}</span>
+              {order.masterName && order.masterName !== 'Boshqa' && (
+                <span className="px-3 py-1 rounded-full bg-white/15 text-[11px]">Usta: {order.masterName}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6 pt-5">
+            <div className="border border-slate-300 rounded-lg p-2.5 mb-3 text-xs bg-slate-50">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Mijoz</div>
+              <div className="font-bold text-sm">{order.customer.name}</div>
+              {order.customer.phones?.filter(Boolean).length > 0 && (
+                <div className="text-slate-600">{order.customer.phones.filter(Boolean).join(', ')}</div>
+              )}
+              {order.customer.address && <div className="text-slate-600">{order.customer.address}</div>}
+              {order.customer.orientir && <div className="text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3 flex-shrink-0" /> {order.customer.orientir}</div>}
+            </div>
+
+            <table className="w-full text-xs mb-3">
+              <thead>
+                <tr className="text-left bg-slate-100">
+                  <th className="py-1.5 px-2 font-semibold rounded-l-md">Nomi</th>
+                  <th className="py-1.5 px-1 font-semibold">Rang</th>
+                  <th className="py-1.5 px-1 font-semibold text-right">O'lchov</th>
+                  {!narxsiz && <th className="py-1.5 px-1 font-semibold text-right">Narxi</th>}
+                  {!narxsiz && <th className="py-1.5 px-2 font-semibold text-right rounded-r-md">Jami</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {order.items.map((it) => {
+                  const d = itemDisp(it);
+                  return (
+                    <tr key={it.id} className="border-b border-slate-200 align-top">
+                      <td className="py-1.5 px-2">
+                        <div className="font-medium flex items-center flex-wrap gap-1">{d.nomi}<KanyokImg item={it} size="w-14 h-8" /><TeskariBadge item={it} /></div>
+                        <div className="text-slate-500">{d.tafsilot}</div>
+                      </td>
+                      <td className="py-1.5 px-1"><RangChip rang={it.rang} /></td>
+                      <td className="py-1.5 px-1 text-right tabular-nums">{d.olchov}</td>
+                      {!narxsiz && <td className="py-1.5 px-1 text-right tabular-nums">{fmt(it.birBirlikNarxi)} so'm</td>}
+                      {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(d.jami)}</td>}
+                    </tr>
+                  );
+                })}
+                {(order.aksessuarlar || []).map((a) => (
+                  <tr key={a.id} className="border-b border-slate-200 align-top">
+                    <td className="py-1.5 px-2"><div className="font-medium">{a.nomi}</div><div className="text-slate-500">Aksessuar</div></td>
+                    <td className="py-1.5 px-1"><RangChip rang={a.rang} /></td>
+                    <td className="py-1.5 px-1 text-right tabular-nums">{a.soni} {a.birlik || 'dona'}</td>
+                    {!narxsiz && <td className="py-1.5 px-1 text-right tabular-nums">{fmt(a.narx)} so'm</td>}
+                    {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(a.jami)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {!narxsiz && order.dastafka && (order.dastafka.ichida || order.dastafka.summa > 0) && (
+              <div className="flex justify-between items-center text-xs mb-3 px-1 border border-slate-200 rounded-lg p-2 bg-slate-50">
+                <span className="text-slate-600 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> Dastafka xizmati</span>
+                <span className="font-semibold text-slate-800">{order.dastafka.ichida ? 'Ichida (narxga kiritilgan)' : `${fmt(order.dastafka.summa)} so'm`}</span>
+              </div>
+            )}
+
+            {!narxsiz && statBadge && (
+              <div className="flex justify-center mb-3">
+                <span className={`px-4 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${statBadge.c}`}><statBadge.Icon className="w-3.5 h-3.5" />{statBadge.t}</span>
+              </div>
+            )}
+
+            {!narxsiz && (
+            <div className="rounded-xl border-2 border-slate-900 overflow-hidden">
+              <div className="flex justify-between items-center bg-slate-900 text-white px-3 py-2.5">
+                <span className="text-sm font-semibold">Umumiy summa</span>
+                <b className="text-lg tabular-nums">{fmt(order.totalSum)} so'm</b>
+              </div>
+              <div className="p-3 space-y-1.5">
+                <div className="flex justify-between text-sm text-emerald-800"><span>To'landi</span><b className="tabular-nums">{fmt(order.totalPaid)} so'm</b></div>
+                <div className="flex justify-between items-center text-base pt-2 border-t-2 border-slate-200">
+                  <span className="font-bold">Qoldiq qarz</span>
+                  <div className="text-right">
+                    <b className="tabular-nums text-amber-800 block">{fmt(order.debt)} so'm</b>
+                    {olishUsd > 0 && <span className="text-[11px] text-slate-500 tabular-nums block">Olish: ≈ {olishUsd.toFixed(1)} $</span>}
+                    {sotishUsd > 0 && <span className="text-[11px] text-slate-500 tabular-nums block">Sotish: ≈ {sotishUsd.toFixed(1)} $</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+            )}
+
+            {!narxsiz && order.payments && order.payments.length > 0 && (
+              <div className="mt-3 text-[11px] text-slate-600">
+                <div className="font-semibold mb-0.5">To'lovlar:</div>
+                {order.payments.map((p) => (
+                  <div key={p.id} className="flex justify-between border-b border-slate-100 py-0.5 last:border-0">
+                    <span>{formatDate(p.createdAt)} · {p.method}</span>
+                    <span className="tabular-nums">{p.method === 'Dollorda' ? `${p.amount} $` : `${fmt(p.amount)} so'm`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {order.notes && (
+              <div className="mt-3 text-xs border border-slate-300 rounded-lg p-2 bg-slate-50">
+                <b>Izoh:</b> {order.notes}
+              </div>
+            )}
+
+            <div className="mt-4 pt-3 border-t border-dashed border-slate-300 text-center">
+              <div className="text-slate-300 tracking-[0.5em] text-xs mb-1">• • • • •</div>
+              <p className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">Xaridingiz uchun rahmat! <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /></p>
+              <div className="text-[11px] text-slate-400 mt-1">{shopName}</div>
+              {shopPhone && <div className="text-sm font-bold text-slate-700 mt-0.5 flex items-center justify-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {shopPhone}</div>}
+            </div>
+          </div>
+        </div>
+
+        {/* ===== TUGMALAR (chop etishda ko'rinmaydi) ===== */}
+        <div className="no-print p-4 border-t border-slate-100 space-y-2">
+          {/* NARXSIZ — chop/yuborishdan OLDIN yoqiladi; yoqilsa barcha narxlar yashirinadi */}
+          <button onClick={() => setNarxsiz((v) => !v)} aria-label="Narxsiz rejim"
+            className={`w-full py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 border-2 transition ${
+              narxsiz ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+            }`}>
+            <EyeOff className="w-4 h-4" /> Narxsiz rejim {narxsiz && <><span>— yoqilgan</span><Check className="w-4 h-4" /></>}
+          </button>
+          <p className="text-[11px] text-slate-400 text-center">
+            Chek RASMI sifatida yuboriladi{narxsiz ? ' · narxlarsiz' : ''}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={sendWhatsApp} disabled={busy} aria-label="WhatsApp orqali rasm yuborish"
+              className="flex-1 py-3 rounded-lg bg-emerald-500 text-white font-medium hover:bg-emerald-600 disabled:opacity-50 flex items-center justify-center gap-2">
+              <MessageCircle className="w-4 h-4" /> {busy ? 'Tayyorlanmoqda…' : 'WhatsApp'}
+            </button>
+            <button onClick={sendTelegram} disabled={busy} aria-label="Telegram orqali rasm yuborish"
+              className="flex-1 py-3 rounded-lg bg-sky-500 text-white font-medium hover:bg-sky-600 disabled:opacity-50 flex items-center justify-center gap-2">
+              <Send className="w-4 h-4" /> {busy ? 'Tayyorlanmoqda…' : 'Telegram'}
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => window.print()} aria-label="Chop etish yoki PDF saqlash"
+              className="flex-1 py-3 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-800 flex items-center justify-center gap-2">
+              <Printer className="w-4 h-4" /> Chop / PDF
+            </button>
+            <button onClick={onClose}
+              className="flex-1 py-3 rounded-lg border-2 border-slate-200 font-medium text-slate-700 hover:bg-slate-50">
+              Yopish
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,442 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Chop etish (print) qoidalari ===== */
+@media print {
+  body * { visibility: hidden !important; }
+  .receipt-print, .receipt-print * { visibility: visible !important; }
+  .receipt-print {
+    position: absolute !important;
+    left: 0 !important; top: 0 !important;
+    width: 100% !important; max-width: 100% !important; padding: 16px !important;
+    margin: 0 !important; transform: none !important;
+  }
+  /* MUHIM: modal kartasi (.shadow-2xl) animatsiyadan keyin transform:scale(1) bilan
+     "containing block" bo'lib + overflow-hidden chekni kesib tashlaydi → oq varoq.
+     Print'da transform/animatsiya/overflow'ni bekor qilamiz. */
+  .shadow-2xl {
+    transform: none !important; animation: none !important;
+    overflow: visible !important; box-shadow: none !important;
+    max-width: 100% !important; margin: 0 !important;
+  }
+  .fixed { position: static !important; overflow: visible !important; background: #fff !important; }
+  .no-print { display: none !important; }
+  /* Chek har doim oq fon, qora yozuv (mavzu/accentdan qat'i nazar) */
+  .receipt-print,
+  .receipt-print * { background: #fff !important; color: #000 !important; box-shadow: none !important; }
+}
+
+/* ===== Raqamli inputlardagi strelkalarni yashirish ===== */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type='number'] { -moz-appearance: textfield; }
+
+/* ============================================================
+   MAVZULAR (themes)
+   Light = standart (override yo'q). Qolganlari `html.themed`
+   + har biri o'z CSS o'zgaruvchilarini beradi.
+   ============================================================ */
+.bg-app { background: var(--c-bg, #faf6f0); }
+
+/* Asosiy shrift (mavzu o'zgartirishi mumkin) */
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif; }
+
+/* Har mavzuga xos shrift — dizayn his qilinishi uchun */
+html[data-theme='matrix'] body { font-family: 'Courier New', ui-monospace, monospace; }
+html[data-theme='gold'] body,
+html[data-theme='dracula'] body { font-family: Georgia, 'Times New Roman', serif; }
+html[data-theme='synthwave'] body,
+html[data-theme='neon'] body { letter-spacing: 0.2px; }
+
+/* Gradient fonlar (jonli mavzular) */
+html[data-theme='galaxy'] .bg-app    { background: radial-gradient(circle at 30% 15%, #1a1450, #0a0820 70%) !important; }
+html[data-theme='synthwave'] .bg-app { background: linear-gradient(160deg, #2a1248, #1a0b2e) !important; }
+html[data-theme='neon'] .bg-app      { background: radial-gradient(circle at 80% 0%, #15172a, #07070d 60%) !important; }
+html[data-theme='amethyst'] .bg-app  { background: linear-gradient(160deg, #241546, #120a1f) !important; }
+html[data-theme='volcano'] .bg-app   { background: radial-gradient(circle at 50% 110%, #3a1106, #1a0a05 70%) !important; }
+html[data-theme='ocean'] .bg-app     { background: linear-gradient(160deg, #0e2730, #07171c) !important; }
+html[data-theme='cyber'] .bg-app     { background: radial-gradient(circle at 85% 5%, #0d1f2e, #060910 60%) !important; }
+html[data-theme='sunset'] .bg-app    { background: radial-gradient(circle at 50% 120%, #4a1e22, #160a12 70%) !important; }
+html[data-theme='aurora'] .bg-app    { background: linear-gradient(160deg, #0a2018, #0b1430 85%) !important; }
+html[data-theme='crimson'] .bg-app   { background: radial-gradient(circle at 50% 0%, #2a0a12, #110407 65%) !important; }
+html[data-theme='indigo'] .bg-app    { background: linear-gradient(165deg, #141233, #0a0918) !important; }
+
+/* "Glow" — tugmalar va sarlavhalar (neon/synthwave/matrix/galaxy) */
+html[data-theme='neon'] .bg-slate-900,
+html[data-theme='synthwave'] .bg-slate-900,
+html[data-theme='matrix'] .bg-slate-900,
+html[data-theme='galaxy'] .bg-slate-900,
+html[data-theme='cyber'] .bg-slate-900,
+html[data-theme='aurora'] .bg-slate-900 { box-shadow: 0 0 14px var(--c-btn); }
+html[data-theme='neon'] h1,
+html[data-theme='synthwave'] h1,
+html[data-theme='matrix'] h1,
+html[data-theme='cyber'] h1 { text-shadow: 0 0 10px var(--c-btn); }
+
+html[data-theme="dark"]     { --c-bg:#0f172a; --c-surface:#1e293b; --c-surface2:#172033; --c-chip:#334155; --c-line:#334155; --c-t1:#f1f5f9; --c-t2:#cbd5e1; --c-t3:#94a3b8; --c-t4:#64748b; --c-btn:#334155; --c-btnh:#475569; }
+html[data-theme="midnight"] { --c-bg:#0a0f24; --c-surface:#121a3a; --c-surface2:#0e1530; --c-chip:#1e2a55; --c-line:#26336b; --c-t1:#e6ecff; --c-t2:#c2cdf2; --c-t3:#8b96c9; --c-t4:#5d6794; --c-btn:#3b4ea0; --c-btnh:#4a5fc0; }
+html[data-theme="forest"]   { --c-bg:#0c1a12; --c-surface:#11271b; --c-surface2:#0e2016; --c-chip:#1c3a28; --c-line:#1f4530; --c-t1:#e7f5ec; --c-t2:#c2dccb; --c-t3:#86a892; --c-t4:#5d7a67; --c-btn:#1f6b43; --c-btnh:#268152; }
+html[data-theme="plum"]     { --c-bg:#160e22; --c-surface:#231634; --c-surface2:#1c1129; --c-chip:#39245a; --c-line:#3c2a5e; --c-t1:#f1e9ff; --c-t2:#d6c8ee; --c-t3:#a895c9; --c-t4:#7a6794; --c-btn:#6d3bd0; --c-btnh:#7e4ee0; }
+html[data-theme="coffee"]   { --c-bg:#1c1410; --c-surface:#2b211a; --c-surface2:#241a14; --c-chip:#473628; --c-line:#4a392b; --c-t1:#f5ece2; --c-t2:#ddcbbb; --c-t3:#a8907a; --c-t4:#7a6553; --c-btn:#8a5a33; --c-btnh:#a36c3e; }
+html[data-theme="ocean"]    { --c-bg:#07171c; --c-surface:#0e2730; --c-surface2:#0a2028; --c-chip:#1a3e4a; --c-line:#1f4d5e; --c-t1:#e4f6fb; --c-t2:#c0e0e8; --c-t3:#82a8b2; --c-t4:#5a7a82; --c-btn:#1f7a8a; --c-btnh:#2792a6; }
+html[data-theme="neon"]     { --c-bg:#07070d; --c-surface:#11121c; --c-surface2:#0c0d16; --c-chip:#1e2030; --c-line:#2a2d44; --c-t1:#eafaff; --c-t2:#b9c2e0; --c-t3:#7a85a8; --c-t4:#525c7a; --c-btn:#ff2d95; --c-btnh:#ff5cae; }
+html[data-theme="synthwave"]{ --c-bg:#1a0b2e; --c-surface:#271146; --c-surface2:#200d3a; --c-chip:#3a1d63; --c-line:#46237a; --c-t1:#ffe6ff; --c-t2:#d9b8f0; --c-t3:#a07cc9; --c-t4:#6f5494; --c-btn:#ff4ecd; --c-btnh:#ff74d8; }
+html[data-theme="matrix"]   { --c-bg:#00130a; --c-surface:#04220f; --c-surface2:#031b0c; --c-chip:#0a3a1d; --c-line:#0e4a26; --c-t1:#c8f7d4; --c-t2:#8fe6a8; --c-t3:#5ba877; --c-t4:#3d7351; --c-btn:#00b341; --c-btnh:#00d44e; }
+html[data-theme="dracula"]  { --c-bg:#282a36; --c-surface:#343746; --c-surface2:#2d2f3d; --c-chip:#44475a; --c-line:#4a4d63; --c-t1:#f8f8f2; --c-t2:#d6d6cf; --c-t3:#9a9aa5; --c-t4:#6c6f85; --c-btn:#bd93f9; --c-btnh:#caa6fb; }
+html[data-theme="nord"]     { --c-bg:#2e3440; --c-surface:#3b4252; --c-surface2:#353b49; --c-chip:#434c5e; --c-line:#4c566a; --c-t1:#eceff4; --c-t2:#d8dee9; --c-t3:#a7b0c0; --c-t4:#788090; --c-btn:#88c0d0; --c-btnh:#9ccddb; }
+html[data-theme="gold"]     { --c-bg:#0c0b07; --c-surface:#1a160d; --c-surface2:#14110a; --c-chip:#2e2611; --c-line:#3a3016; --c-t1:#f7eccb; --c-t2:#ddca97; --c-t3:#a8966a; --c-t4:#76683f; --c-btn:#d4af37; --c-btnh:#e3c14e; }
+html[data-theme="volcano"]  { --c-bg:#1a0a05; --c-surface:#2a1009; --c-surface2:#220c06; --c-chip:#43180c; --c-line:#54200f; --c-t1:#ffe2d6; --c-t2:#f0b6a0; --c-t3:#b3806c; --c-t4:#7d5648; --c-btn:#ff5722; --c-btnh:#ff7044; }
+html[data-theme="galaxy"]   { --c-bg:#0a0820; --c-surface:#151235; --c-surface2:#100d2b; --c-chip:#251f55; --c-line:#2e2768; --c-t1:#e9e4ff; --c-t2:#c3baf0; --c-t3:#8d84c2; --c-t4:#615a8e; --c-btn:#7c5cff; --c-btnh:#9477ff; }
+html[data-theme="rose"]     { --c-bg:#1f0a14; --c-surface:#311022; --c-surface2:#280d1b; --c-chip:#4a1733; --c-line:#5c1d40; --c-t1:#ffe0ee; --c-t2:#f0b6d0; --c-t3:#b87f9c; --c-t4:#80576c; --c-btn:#ff4d8d; --c-btnh:#ff70a4; }
+html[data-theme="amethyst"] { --c-bg:#120a1f; --c-surface:#1f1235; --c-surface2:#190e2b; --c-chip:#321d57; --c-line:#3d2468; --c-t1:#efe6ff; --c-t2:#cdbaf0; --c-t3:#9784c2; --c-t4:#685a8e; --c-btn:#9d5bff; --c-btnh:#b07bff; }
+html[data-theme="cyber"]    { --c-bg:#070a12; --c-surface:#0f1622; --c-surface2:#0b111b; --c-chip:#16273a; --c-line:#1d3450; --c-t1:#e6fbff; --c-t2:#a9d8e8; --c-t3:#6f9bb0; --c-t4:#4c6b80; --c-btn:#00bcd4; --c-btnh:#1ad0e6; }
+html[data-theme="sunset"]   { --c-bg:#1a0e16; --c-surface:#2a1620; --c-surface2:#22121a; --c-chip:#43233a; --c-line:#54293f; --c-t1:#ffe9dc; --c-t2:#f4c0aa; --c-t3:#bd8a78; --c-t4:#825d50; --c-btn:#ff6a3d; --c-btnh:#ff855e; }
+html[data-theme="coral"]    { --c-bg:#04201f; --c-surface:#082e2c; --c-surface2:#062523; --c-chip:#0e4541; --c-line:#125450; --c-t1:#e9fffa; --c-t2:#aee4da; --c-t3:#72a8a0; --c-t4:#4f7770; --c-btn:#ff7a6b; --c-btnh:#ff9486; }
+html[data-theme="crimson"]  { --c-bg:#16060a; --c-surface:#260a11; --c-surface2:#1e070d; --c-chip:#42121f; --c-line:#531624; --c-t1:#ffe1e6; --c-t2:#f0adb9; --c-t3:#b87482; --c-t4:#7d4f59; --c-btn:#e11d48; --c-btnh:#f43f5e; }
+html[data-theme="aurora"]   { --c-bg:#04130f; --c-surface:#0a2018; --c-surface2:#071a13; --c-chip:#10362a; --c-line:#154536; --c-t1:#e6fff4; --c-t2:#b3ecd6; --c-t3:#79b89c; --c-t4:#54836f; --c-btn:#22d3a6; --c-btnh:#3ee6bb; }
+html[data-theme="mono"]     { --c-bg:#0a0a0a; --c-surface:#171717; --c-surface2:#121212; --c-chip:#262626; --c-line:#383838; --c-t1:#fafafa; --c-t2:#d4d4d4; --c-t3:#a3a3a3; --c-t4:#737373; --c-btn:#3f3f46; --c-btnh:#52525b; }
+html[data-theme="indigo"]   { --c-bg:#0b0a1f; --c-surface:#141233; --c-surface2:#0f0d28; --c-chip:#221f55; --c-line:#2c2868; --c-t1:#e7e6ff; --c-t2:#bcb8f0; --c-t3:#8884c2; --c-t4:#5d5a8e; --c-btn:#4f46e5; --c-btnh:#6366f1; }
+
+/* ===== Yangi 21 mavzu ===== */
+html[data-theme="emerald"]   { --c-bg:hsl(160 30% 6%); --c-surface:hsl(160 28% 11%); --c-surface2:hsl(160 30% 8%); --c-chip:hsl(160 25% 20%); --c-line:hsl(160 25% 25%); --c-t1:hsl(160 25% 94%); --c-t2:hsl(160 20% 83%); --c-t3:hsl(160 15% 62%); --c-t4:hsl(160 14% 45%); --c-btn:#10b981; --c-btnh:#34d399; }
+html[data-theme="ruby"]      { --c-bg:hsl(345 32% 7%); --c-surface:hsl(345 30% 12%); --c-surface2:hsl(345 32% 9%); --c-chip:hsl(345 28% 22%); --c-line:hsl(345 28% 27%); --c-t1:hsl(345 25% 95%); --c-t2:hsl(345 20% 84%); --c-t3:hsl(345 15% 63%); --c-t4:hsl(345 14% 46%); --c-btn:#fb2c5a; --c-btnh:#ff5277; }
+html[data-theme="sapphire"]  { --c-bg:hsl(217 34% 7%); --c-surface:hsl(217 32% 12%); --c-surface2:hsl(217 34% 9%); --c-chip:hsl(217 30% 22%); --c-line:hsl(217 30% 27%); --c-t1:hsl(217 25% 95%); --c-t2:hsl(217 20% 84%); --c-t3:hsl(217 15% 63%); --c-t4:hsl(217 14% 46%); --c-btn:#3b82f6; --c-btnh:#60a5fa; }
+html[data-theme="jade"]      { --c-bg:hsl(172 28% 6%); --c-surface:hsl(172 26% 11%); --c-surface2:hsl(172 28% 8%); --c-chip:hsl(172 24% 20%); --c-line:hsl(172 24% 25%); --c-t1:hsl(172 22% 94%); --c-t2:hsl(172 18% 83%); --c-t3:hsl(172 14% 62%); --c-t4:hsl(172 12% 45%); --c-btn:#2dd4bf; --c-btnh:#5eead4; }
+html[data-theme="bronze"]    { --c-bg:hsl(30 30% 7%); --c-surface:hsl(30 28% 12%); --c-surface2:hsl(30 30% 9%); --c-chip:hsl(30 26% 22%); --c-line:hsl(30 26% 27%); --c-t1:hsl(30 25% 94%); --c-t2:hsl(30 20% 83%); --c-t3:hsl(30 15% 62%); --c-t4:hsl(30 14% 45%); --c-btn:#cd7f32; --c-btnh:#e0954a; }
+html[data-theme="steel"]     { --c-bg:hsl(215 14% 8%); --c-surface:hsl(215 13% 13%); --c-surface2:hsl(215 14% 10%); --c-chip:hsl(215 12% 23%); --c-line:hsl(215 12% 28%); --c-t1:hsl(215 12% 94%); --c-t2:hsl(215 10% 83%); --c-t3:hsl(215 8% 62%); --c-t4:hsl(215 7% 46%); --c-btn:#94a3b8; --c-btnh:#cbd5e1; }
+html[data-theme="magma"]     { --c-bg:hsl(22 40% 6%); --c-surface:hsl(22 36% 11%); --c-surface2:hsl(22 40% 8%); --c-chip:hsl(22 34% 20%); --c-line:hsl(22 34% 25%); --c-t1:hsl(22 28% 95%); --c-t2:hsl(22 22% 84%); --c-t3:hsl(22 16% 63%); --c-t4:hsl(22 14% 46%); --c-btn:#ff6a00; --c-btnh:#ff8a33; }
+html[data-theme="arctic"]    { --c-bg:hsl(200 30% 8%); --c-surface:hsl(200 28% 13%); --c-surface2:hsl(200 30% 10%); --c-chip:hsl(200 26% 23%); --c-line:hsl(200 26% 28%); --c-t1:hsl(200 24% 95%); --c-t2:hsl(200 20% 85%); --c-t3:hsl(200 15% 64%); --c-t4:hsl(200 13% 47%); --c-btn:#38bdf8; --c-btnh:#7dd3fc; }
+html[data-theme="jungle"]    { --c-bg:hsl(84 32% 6%); --c-surface:hsl(84 28% 11%); --c-surface2:hsl(84 32% 8%); --c-chip:hsl(84 26% 20%); --c-line:hsl(84 26% 24%); --c-t1:hsl(84 22% 94%); --c-t2:hsl(84 18% 82%); --c-t3:hsl(84 14% 61%); --c-t4:hsl(84 12% 44%); --c-btn:#84cc16; --c-btnh:#a3e635; }
+html[data-theme="desert"]    { --c-bg:hsl(36 30% 7%); --c-surface:hsl(36 28% 12%); --c-surface2:hsl(36 30% 9%); --c-chip:hsl(36 26% 22%); --c-line:hsl(36 26% 27%); --c-t1:hsl(36 25% 94%); --c-t2:hsl(36 20% 83%); --c-t3:hsl(36 15% 62%); --c-t4:hsl(36 14% 45%); --c-btn:#e0a458; --c-btnh:#eab676; }
+html[data-theme="wine"]      { --c-bg:hsl(336 34% 7%); --c-surface:hsl(336 30% 12%); --c-surface2:hsl(336 34% 9%); --c-chip:hsl(336 28% 22%); --c-line:hsl(336 28% 27%); --c-t1:hsl(336 24% 95%); --c-t2:hsl(336 20% 84%); --c-t3:hsl(336 15% 63%); --c-t4:hsl(336 14% 46%); --c-btn:#d6336c; --c-btnh:#e64980; }
+html[data-theme="cobalt"]    { --c-bg:hsl(222 40% 7%); --c-surface:hsl(222 36% 12%); --c-surface2:hsl(222 40% 9%); --c-chip:hsl(222 34% 23%); --c-line:hsl(222 34% 28%); --c-t1:hsl(222 26% 95%); --c-t2:hsl(222 22% 84%); --c-t3:hsl(222 16% 63%); --c-t4:hsl(222 14% 46%); --c-btn:#2563eb; --c-btnh:#3b82f6; }
+html[data-theme="magenta"]   { --c-bg:hsl(327 34% 7%); --c-surface:hsl(327 30% 12%); --c-surface2:hsl(327 34% 9%); --c-chip:hsl(327 28% 22%); --c-line:hsl(327 28% 27%); --c-t1:hsl(327 24% 95%); --c-t2:hsl(327 20% 84%); --c-t3:hsl(327 15% 63%); --c-t4:hsl(327 14% 46%); --c-btn:#ec4899; --c-btnh:#f472b6; }
+html[data-theme="lime"]      { --c-bg:hsl(70 30% 6%); --c-surface:hsl(70 28% 11%); --c-surface2:hsl(70 30% 8%); --c-chip:hsl(70 26% 20%); --c-line:hsl(70 26% 24%); --c-t1:hsl(70 22% 94%); --c-t2:hsl(70 18% 82%); --c-t3:hsl(70 14% 61%); --c-t4:hsl(70 12% 44%); --c-btn:#c5e836; --c-btnh:#d6f04f; }
+html[data-theme="turquoise"] { --c-bg:hsl(188 34% 6%); --c-surface:hsl(188 30% 11%); --c-surface2:hsl(188 34% 8%); --c-chip:hsl(188 28% 21%); --c-line:hsl(188 28% 26%); --c-t1:hsl(188 24% 94%); --c-t2:hsl(188 20% 84%); --c-t3:hsl(188 15% 63%); --c-t4:hsl(188 13% 46%); --c-btn:#06b6d4; --c-btnh:#22d3ee; }
+html[data-theme="sakura"]    { --c-bg:hsl(340 30% 8%); --c-surface:hsl(340 28% 13%); --c-surface2:hsl(340 30% 10%); --c-chip:hsl(340 26% 23%); --c-line:hsl(340 26% 28%); --c-t1:hsl(340 24% 96%); --c-t2:hsl(340 22% 86%); --c-t3:hsl(340 16% 65%); --c-t4:hsl(340 14% 48%); --c-btn:#fb7faf; --c-btnh:#fda4c4; }
+html[data-theme="storm"]     { --c-bg:hsl(210 16% 8%); --c-surface:hsl(210 15% 13%); --c-surface2:hsl(210 16% 10%); --c-chip:hsl(210 14% 23%); --c-line:hsl(210 14% 28%); --c-t1:hsl(210 14% 94%); --c-t2:hsl(210 12% 83%); --c-t3:hsl(210 9% 62%); --c-t4:hsl(210 8% 46%); --c-btn:#64b5f6; --c-btnh:#90caf9; }
+html[data-theme="pirate"]    { --c-bg:hsl(42 24% 6%); --c-surface:hsl(42 22% 11%); --c-surface2:hsl(42 24% 8%); --c-chip:hsl(42 20% 20%); --c-line:hsl(42 20% 25%); --c-t1:hsl(42 20% 93%); --c-t2:hsl(42 16% 82%); --c-t3:hsl(42 12% 61%); --c-t4:hsl(42 10% 44%); --c-btn:#d4a017; --c-btnh:#e8b923; }
+html[data-theme="wizard"]    { --c-bg:hsl(275 36% 7%); --c-surface:hsl(275 32% 12%); --c-surface2:hsl(275 36% 9%); --c-chip:hsl(275 30% 23%); --c-line:hsl(275 30% 28%); --c-t1:hsl(275 26% 95%); --c-t2:hsl(275 22% 85%); --c-t3:hsl(275 16% 64%); --c-t4:hsl(275 14% 47%); --c-btn:#a855f7; --c-btnh:#c084fc; }
+html[data-theme="robot"]     { --c-bg:hsl(190 18% 7%); --c-surface:hsl(190 16% 12%); --c-surface2:hsl(190 18% 9%); --c-chip:hsl(190 15% 22%); --c-line:hsl(190 15% 27%); --c-t1:hsl(190 16% 94%); --c-t2:hsl(190 13% 84%); --c-t3:hsl(190 10% 63%); --c-t4:hsl(190 8% 46%); --c-btn:#22d3ee; --c-btnh:#67e8f9; }
+html[data-theme="comet"]     { --c-bg:hsl(232 34% 7%); --c-surface:hsl(232 30% 12%); --c-surface2:hsl(232 34% 9%); --c-chip:hsl(232 28% 23%); --c-line:hsl(232 28% 28%); --c-t1:hsl(232 26% 95%); --c-t2:hsl(232 22% 85%); --c-t3:hsl(232 16% 64%); --c-t4:hsl(232 14% 47%); --c-btn:#a5b4fc; --c-btnh:#c7d2fe; }
+
+/* Yangi mavzular uchun jonli gradient fonlar */
+html[data-theme='magma'] .bg-app     { background: radial-gradient(circle at 50% 115%, #3a1605, #160a05 72%) !important; }
+html[data-theme='arctic'] .bg-app    { background: linear-gradient(165deg, #0c2733, #07151c) !important; }
+html[data-theme='wizard'] .bg-app    { background: radial-gradient(circle at 25% 10%, #2a1550, #120a22 70%) !important; }
+html[data-theme='comet'] .bg-app     { background: radial-gradient(circle at 80% 5%, #1a1d3e, #07081a 62%) !important; }
+html[data-theme='sapphire'] .bg-app  { background: linear-gradient(160deg, #0d1d3a, #07111f) !important; }
+html[data-theme='jungle'] .bg-app    { background: linear-gradient(165deg, #14250a, #0a1505) !important; }
+
+/* ===== Yana 20 mavzu ===== */
+html[data-theme="obsidian"]  { --c-bg:hsl(265 20% 6%); --c-surface:hsl(265 18% 11%); --c-surface2:hsl(265 20% 8%); --c-chip:hsl(265 16% 20%); --c-line:hsl(265 16% 25%); --c-t1:hsl(265 20% 94%); --c-t2:hsl(265 16% 83%); --c-t3:hsl(265 12% 62%); --c-t4:hsl(265 10% 45%); --c-btn:#a78bfa; --c-btnh:#c4b5fd; }
+html[data-theme="sunflower"] { --c-bg:hsl(46 36% 7%); --c-surface:hsl(46 32% 12%); --c-surface2:hsl(46 36% 9%); --c-chip:hsl(46 30% 22%); --c-line:hsl(46 30% 27%); --c-t1:hsl(46 26% 95%); --c-t2:hsl(46 22% 84%); --c-t3:hsl(46 16% 63%); --c-t4:hsl(46 14% 46%); --c-btn:#f5b800; --c-btnh:#ffd23f; }
+html[data-theme="flamingo"]  { --c-bg:hsl(342 32% 7%); --c-surface:hsl(342 28% 12%); --c-surface2:hsl(342 32% 9%); --c-chip:hsl(342 26% 22%); --c-line:hsl(342 26% 27%); --c-t1:hsl(342 24% 95%); --c-t2:hsl(342 20% 84%); --c-t3:hsl(342 15% 63%); --c-t4:hsl(342 13% 46%); --c-btn:#fb6f92; --c-btnh:#ff97b0; }
+html[data-theme="mint"]      { --c-bg:hsl(156 32% 6%); --c-surface:hsl(156 28% 11%); --c-surface2:hsl(156 32% 8%); --c-chip:hsl(156 26% 20%); --c-line:hsl(156 26% 25%); --c-t1:hsl(156 22% 94%); --c-t2:hsl(156 18% 83%); --c-t3:hsl(156 14% 62%); --c-t4:hsl(156 12% 45%); --c-btn:#34e0a1; --c-btnh:#6eedbb; }
+html[data-theme="blood"]     { --c-bg:hsl(350 38% 6%); --c-surface:hsl(350 32% 11%); --c-surface2:hsl(350 38% 8%); --c-chip:hsl(350 30% 21%); --c-line:hsl(350 30% 26%); --c-t1:hsl(350 24% 95%); --c-t2:hsl(350 20% 84%); --c-t3:hsl(350 15% 63%); --c-t4:hsl(350 13% 46%); --c-btn:#c81e3a; --c-btnh:#e63950; }
+html[data-theme="ice"]       { --c-bg:hsl(198 24% 8%); --c-surface:hsl(198 22% 13%); --c-surface2:hsl(198 24% 10%); --c-chip:hsl(198 20% 23%); --c-line:hsl(198 20% 28%); --c-t1:hsl(198 22% 95%); --c-t2:hsl(198 18% 85%); --c-t3:hsl(198 14% 64%); --c-t4:hsl(198 12% 47%); --c-btn:#5cc8f5; --c-btnh:#9bdcfb; }
+html[data-theme="honey"]     { --c-bg:hsl(40 36% 7%); --c-surface:hsl(40 32% 12%); --c-surface2:hsl(40 36% 9%); --c-chip:hsl(40 30% 22%); --c-line:hsl(40 30% 27%); --c-t1:hsl(40 26% 95%); --c-t2:hsl(40 22% 84%); --c-t3:hsl(40 16% 63%); --c-t4:hsl(40 14% 46%); --c-btn:#f0a500; --c-btnh:#ffbe2e; }
+html[data-theme="orchid"]    { --c-bg:hsl(292 34% 7%); --c-surface:hsl(292 30% 12%); --c-surface2:hsl(292 34% 9%); --c-chip:hsl(292 28% 22%); --c-line:hsl(292 28% 27%); --c-t1:hsl(292 24% 95%); --c-t2:hsl(292 20% 84%); --c-t3:hsl(292 15% 63%); --c-t4:hsl(292 13% 46%); --c-btn:#c026d3; --c-btnh:#d946ef; }
+html[data-theme="denim"]     { --c-bg:hsl(215 26% 8%); --c-surface:hsl(215 24% 13%); --c-surface2:hsl(215 26% 10%); --c-chip:hsl(215 22% 23%); --c-line:hsl(215 22% 28%); --c-t1:hsl(215 22% 94%); --c-t2:hsl(215 18% 83%); --c-t3:hsl(215 14% 62%); --c-t4:hsl(215 12% 46%); --c-btn:#4f7bbf; --c-btnh:#6f9bd8; }
+html[data-theme="caramel"]   { --c-bg:hsl(34 30% 7%); --c-surface:hsl(34 28% 12%); --c-surface2:hsl(34 30% 9%); --c-chip:hsl(34 26% 22%); --c-line:hsl(34 26% 27%); --c-t1:hsl(34 25% 94%); --c-t2:hsl(34 20% 83%); --c-t3:hsl(34 15% 62%); --c-t4:hsl(34 14% 45%); --c-btn:#c08038; --c-btnh:#d49a52; }
+html[data-theme="seafoam"]   { --c-bg:hsl(170 30% 6%); --c-surface:hsl(170 28% 11%); --c-surface2:hsl(170 30% 8%); --c-chip:hsl(170 26% 21%); --c-line:hsl(170 26% 26%); --c-t1:hsl(170 22% 94%); --c-t2:hsl(170 18% 84%); --c-t3:hsl(170 14% 63%); --c-t4:hsl(170 12% 46%); --c-btn:#2ee6c0; --c-btnh:#5cf0d2; }
+html[data-theme="plasma"]    { --c-bg:hsl(290 38% 7%); --c-surface:hsl(290 32% 12%); --c-surface2:hsl(290 38% 9%); --c-chip:hsl(290 30% 23%); --c-line:hsl(290 30% 28%); --c-t1:hsl(290 26% 95%); --c-t2:hsl(290 22% 85%); --c-t3:hsl(290 16% 64%); --c-t4:hsl(290 14% 47%); --c-btn:#e23bff; --c-btnh:#ec70ff; }
+html[data-theme="autumn"]    { --c-bg:hsl(22 34% 7%); --c-surface:hsl(22 30% 12%); --c-surface2:hsl(22 34% 9%); --c-chip:hsl(22 28% 22%); --c-line:hsl(22 28% 27%); --c-t1:hsl(22 25% 95%); --c-t2:hsl(22 20% 84%); --c-t3:hsl(22 15% 63%); --c-t4:hsl(22 14% 46%); --c-btn:#e8702e; --c-btnh:#ff8c4d; }
+html[data-theme="spring"]    { --c-bg:hsl(145 30% 6%); --c-surface:hsl(145 28% 11%); --c-surface2:hsl(145 30% 8%); --c-chip:hsl(145 26% 20%); --c-line:hsl(145 26% 25%); --c-t1:hsl(145 22% 94%); --c-t2:hsl(145 18% 83%); --c-t3:hsl(145 14% 62%); --c-t4:hsl(145 12% 45%); --c-btn:#57d98e; --c-btnh:#86e8af; }
+html[data-theme="mocha"]     { --c-bg:hsl(25 24% 7%); --c-surface:hsl(25 22% 12%); --c-surface2:hsl(25 24% 9%); --c-chip:hsl(25 20% 22%); --c-line:hsl(25 20% 27%); --c-t1:hsl(25 22% 94%); --c-t2:hsl(25 18% 83%); --c-t3:hsl(25 14% 62%); --c-t4:hsl(25 12% 45%); --c-btn:#8a6240; --c-btnh:#a67d57; }
+html[data-theme="nebula"]    { --c-bg:hsl(250 34% 7%); --c-surface:hsl(250 30% 12%); --c-surface2:hsl(250 34% 9%); --c-chip:hsl(250 28% 23%); --c-line:hsl(250 28% 28%); --c-t1:hsl(250 26% 95%); --c-t2:hsl(250 22% 85%); --c-t3:hsl(250 16% 64%); --c-t4:hsl(250 14% 47%); --c-btn:#8b7dff; --c-btnh:#aa9eff; }
+html[data-theme="toxic"]     { --c-bg:hsl(78 38% 6%); --c-surface:hsl(78 30% 11%); --c-surface2:hsl(78 38% 8%); --c-chip:hsl(78 28% 20%); --c-line:hsl(78 28% 24%); --c-t1:hsl(78 22% 94%); --c-t2:hsl(78 18% 82%); --c-t3:hsl(78 14% 61%); --c-t4:hsl(78 12% 44%); --c-btn:#aef205; --c-btnh:#c6f63f; }
+html[data-theme="royal"]     { --c-bg:hsl(265 34% 7%); --c-surface:hsl(265 30% 12%); --c-surface2:hsl(265 34% 9%); --c-chip:hsl(265 28% 23%); --c-line:hsl(265 28% 28%); --c-t1:hsl(265 26% 95%); --c-t2:hsl(265 22% 85%); --c-t3:hsl(265 16% 64%); --c-t4:hsl(265 14% 47%); --c-btn:#7c3aed; --c-btnh:#9333ea; }
+html[data-theme="peach"]     { --c-bg:hsl(20 30% 7%); --c-surface:hsl(20 28% 12%); --c-surface2:hsl(20 30% 9%); --c-chip:hsl(20 26% 22%); --c-line:hsl(20 26% 27%); --c-t1:hsl(20 25% 95%); --c-t2:hsl(20 20% 84%); --c-t3:hsl(20 15% 63%); --c-t4:hsl(20 14% 46%); --c-btn:#ff9e7a; --c-btnh:#ffb89a; }
+html[data-theme="lagoon"]    { --c-bg:hsl(186 30% 6%); --c-surface:hsl(186 28% 11%); --c-surface2:hsl(186 30% 8%); --c-chip:hsl(186 26% 21%); --c-line:hsl(186 26% 26%); --c-t1:hsl(186 22% 94%); --c-t2:hsl(186 18% 84%); --c-t3:hsl(186 14% 63%); --c-t4:hsl(186 12% 46%); --c-btn:#1fb6c4; --c-btnh:#34d0de; }
+
+html[data-theme='nebula'] .bg-app    { background: radial-gradient(circle at 30% 12%, #211b4d, #0c0a22 70%) !important; }
+html[data-theme='plasma'] .bg-app    { background: radial-gradient(circle at 80% 8%, #2e1140, #140820 62%) !important; }
+html[data-theme='royal'] .bg-app     { background: linear-gradient(160deg, #241248, #110a22) !important; }
+html[data-theme='obsidian'] .bg-app  { background: radial-gradient(circle at 50% 0%, #161226, #08070f 65%) !important; }
+html[data-theme='lagoon'] .bg-app    { background: linear-gradient(165deg, #08272e, #05161b) !important; }
+
+/* ===== Yana 20 mavzu ===== */
+html[data-theme="lavender"]  { --c-bg:hsl(270 22% 8%); --c-surface:hsl(270 20% 13%); --c-surface2:hsl(270 22% 10%); --c-chip:hsl(270 18% 23%); --c-line:hsl(270 18% 28%); --c-t1:hsl(270 20% 95%); --c-t2:hsl(270 16% 84%); --c-t3:hsl(270 12% 63%); --c-t4:hsl(270 11% 46%); --c-btn:#b39ddb; --c-btnh:#c9b8e8; }
+html[data-theme="tangerine"] { --c-bg:hsl(26 36% 7%); --c-surface:hsl(26 32% 12%); --c-surface2:hsl(26 36% 9%); --c-chip:hsl(26 30% 22%); --c-line:hsl(26 30% 27%); --c-t1:hsl(26 24% 95%); --c-t2:hsl(26 20% 84%); --c-t3:hsl(26 14% 63%); --c-t4:hsl(26 12% 46%); --c-btn:#ff7518; --c-btnh:#ff944d; }
+html[data-theme="moss"]      { --c-bg:hsl(80 26% 6%); --c-surface:hsl(80 24% 11%); --c-surface2:hsl(80 26% 8%); --c-chip:hsl(80 22% 20%); --c-line:hsl(80 22% 24%); --c-t1:hsl(80 20% 94%); --c-t2:hsl(80 16% 82%); --c-t3:hsl(80 12% 61%); --c-t4:hsl(80 10% 44%); --c-btn:#6b8e23; --c-btnh:#8aab3e; }
+html[data-theme="berry"]     { --c-bg:hsl(312 34% 7%); --c-surface:hsl(312 30% 12%); --c-surface2:hsl(312 34% 9%); --c-chip:hsl(312 28% 22%); --c-line:hsl(312 28% 27%); --c-t1:hsl(312 24% 95%); --c-t2:hsl(312 20% 84%); --c-t3:hsl(312 15% 63%); --c-t4:hsl(312 13% 46%); --c-btn:#b5179e; --c-btnh:#d63bbf; }
+html[data-theme="slate"]     { --c-bg:hsl(215 12% 8%); --c-surface:hsl(215 11% 13%); --c-surface2:hsl(215 12% 10%); --c-chip:hsl(215 10% 23%); --c-line:hsl(215 10% 28%); --c-t1:hsl(215 10% 94%); --c-t2:hsl(215 8% 83%); --c-t3:hsl(215 7% 62%); --c-t4:hsl(215 6% 46%); --c-btn:#64748b; --c-btnh:#94a3b8; }
+html[data-theme="raspberry"] { --c-bg:hsl(328 34% 7%); --c-surface:hsl(328 30% 12%); --c-surface2:hsl(328 34% 9%); --c-chip:hsl(328 28% 22%); --c-line:hsl(328 28% 27%); --c-t1:hsl(328 24% 95%); --c-t2:hsl(328 20% 84%); --c-t3:hsl(328 15% 63%); --c-t4:hsl(328 13% 46%); --c-btn:#e0218a; --c-btnh:#f24aa6; }
+html[data-theme="olive"]     { --c-bg:hsl(60 24% 6%); --c-surface:hsl(60 22% 11%); --c-surface2:hsl(60 24% 8%); --c-chip:hsl(60 20% 20%); --c-line:hsl(60 20% 24%); --c-t1:hsl(60 18% 94%); --c-t2:hsl(60 14% 82%); --c-t3:hsl(60 11% 61%); --c-t4:hsl(60 9% 44%); --c-btn:#808000; --c-btnh:#a0a020; }
+html[data-theme="cinnamon"]  { --c-bg:hsl(30 30% 7%); --c-surface:hsl(30 28% 12%); --c-surface2:hsl(30 30% 9%); --c-chip:hsl(30 26% 22%); --c-line:hsl(30 26% 27%); --c-t1:hsl(30 22% 94%); --c-t2:hsl(30 18% 83%); --c-t3:hsl(30 14% 62%); --c-t4:hsl(30 12% 45%); --c-btn:#b5651d; --c-btnh:#cd7f33; }
+html[data-theme="azure"]     { --c-bg:hsl(210 36% 7%); --c-surface:hsl(210 32% 12%); --c-surface2:hsl(210 36% 9%); --c-chip:hsl(210 30% 23%); --c-line:hsl(210 30% 28%); --c-t1:hsl(210 24% 95%); --c-t2:hsl(210 20% 85%); --c-t3:hsl(210 15% 64%); --c-t4:hsl(210 13% 47%); --c-btn:#1e90ff; --c-btnh:#4da6ff; }
+html[data-theme="grape"]     { --c-bg:hsl(275 32% 7%); --c-surface:hsl(275 28% 12%); --c-surface2:hsl(275 32% 9%); --c-chip:hsl(275 26% 23%); --c-line:hsl(275 26% 28%); --c-t1:hsl(275 24% 95%); --c-t2:hsl(275 20% 85%); --c-t3:hsl(275 15% 64%); --c-t4:hsl(275 13% 47%); --c-btn:#7b2cbf; --c-btnh:#9b4ddb; }
+html[data-theme="pistachio"] { --c-bg:hsl(95 26% 6%); --c-surface:hsl(95 24% 11%); --c-surface2:hsl(95 26% 8%); --c-chip:hsl(95 22% 20%); --c-line:hsl(95 22% 24%); --c-t1:hsl(95 20% 94%); --c-t2:hsl(95 16% 82%); --c-t3:hsl(95 12% 61%); --c-t4:hsl(95 10% 44%); --c-btn:#93c572; --c-btnh:#acd492; }
+html[data-theme="cherryred"] { --c-bg:hsl(350 36% 6%); --c-surface:hsl(350 30% 11%); --c-surface2:hsl(350 36% 8%); --c-chip:hsl(350 28% 21%); --c-line:hsl(350 28% 26%); --c-t1:hsl(350 24% 95%); --c-t2:hsl(350 20% 84%); --c-t3:hsl(350 15% 63%); --c-t4:hsl(350 13% 46%); --c-btn:#d2042d; --c-btnh:#f0223f; }
+html[data-theme="marina"]    { --c-bg:hsl(195 30% 7%); --c-surface:hsl(195 28% 12%); --c-surface2:hsl(195 30% 9%); --c-chip:hsl(195 26% 22%); --c-line:hsl(195 26% 27%); --c-t1:hsl(195 22% 94%); --c-t2:hsl(195 18% 84%); --c-t3:hsl(195 14% 63%); --c-t4:hsl(195 12% 46%); --c-btn:#1f6f8b; --c-btnh:#2f8fad; }
+html[data-theme="blush"]     { --c-bg:hsl(345 28% 8%); --c-surface:hsl(345 26% 13%); --c-surface2:hsl(345 28% 10%); --c-chip:hsl(345 24% 23%); --c-line:hsl(345 24% 28%); --c-t1:hsl(345 22% 96%); --c-t2:hsl(345 20% 86%); --c-t3:hsl(345 16% 65%); --c-t4:hsl(345 14% 48%); --c-btn:#ff8fab; --c-btnh:#ffb3c6; }
+html[data-theme="charcoal"]  { --c-bg:hsl(240 8% 7%); --c-surface:hsl(240 7% 12%); --c-surface2:hsl(240 8% 9%); --c-chip:hsl(240 6% 22%); --c-line:hsl(240 6% 27%); --c-t1:hsl(240 6% 94%); --c-t2:hsl(240 5% 83%); --c-t3:hsl(240 4% 62%); --c-t4:hsl(240 4% 46%); --c-btn:#6b7280; --c-btnh:#9ca3af; }
+html[data-theme="starlight"] { --c-bg:hsl(50 30% 7%); --c-surface:hsl(50 26% 12%); --c-surface2:hsl(50 30% 9%); --c-chip:hsl(50 24% 22%); --c-line:hsl(50 24% 27%); --c-t1:hsl(50 22% 95%); --c-t2:hsl(50 20% 84%); --c-t3:hsl(50 15% 63%); --c-t4:hsl(50 13% 46%); --c-btn:#fce570; --c-btnh:#fff0a0; }
+html[data-theme="mango"]     { --c-bg:hsl(42 36% 7%); --c-surface:hsl(42 32% 12%); --c-surface2:hsl(42 36% 9%); --c-chip:hsl(42 30% 22%); --c-line:hsl(42 30% 27%); --c-t1:hsl(42 24% 95%); --c-t2:hsl(42 20% 84%); --c-t3:hsl(42 15% 63%); --c-t4:hsl(42 13% 46%); --c-btn:#ffb627; --c-btnh:#ffc94d; }
+html[data-theme="lilac"]     { --c-bg:hsl(300 24% 8%); --c-surface:hsl(300 22% 13%); --c-surface2:hsl(300 24% 10%); --c-chip:hsl(300 20% 23%); --c-line:hsl(300 20% 28%); --c-t1:hsl(300 20% 95%); --c-t2:hsl(300 16% 84%); --c-t3:hsl(300 12% 63%); --c-t4:hsl(300 11% 46%); --c-btn:#c8a2c8; --c-btnh:#d9b9d9; }
+html[data-theme="carbon"]    { --c-bg:hsl(220 12% 7%); --c-surface:hsl(220 11% 12%); --c-surface2:hsl(220 12% 9%); --c-chip:hsl(220 10% 22%); --c-line:hsl(220 10% 27%); --c-t1:hsl(220 10% 94%); --c-t2:hsl(220 8% 83%); --c-t3:hsl(220 7% 62%); --c-t4:hsl(220 6% 46%); --c-btn:#5c7c9e; --c-btnh:#7d9bc0; }
+html[data-theme="glacier"]   { --c-bg:hsl(200 26% 8%); --c-surface:hsl(200 24% 13%); --c-surface2:hsl(200 26% 10%); --c-chip:hsl(200 22% 23%); --c-line:hsl(200 22% 28%); --c-t1:hsl(200 22% 95%); --c-t2:hsl(200 18% 85%); --c-t3:hsl(200 14% 64%); --c-t4:hsl(200 12% 47%); --c-btn:#7fdbff; --c-btnh:#b3ecff; }
+
+html[data-theme='berry'] .bg-app     { background: radial-gradient(circle at 75% 8%, #2c0d28, #150612 65%) !important; }
+html[data-theme='grape'] .bg-app     { background: linear-gradient(160deg, #1f0f33, #100820) !important; }
+html[data-theme='azure'] .bg-app     { background: radial-gradient(circle at 30% 5%, #0c2740, #06121f 62%) !important; }
+html[data-theme='starlight'] .bg-app { background: radial-gradient(circle at 50% 0%, #20200c, #0c0c06 65%) !important; }
+
+/* Umumiy override — light'dan tashqari barcha mavzular */
+html.themed { color-scheme: dark; }
+html.themed body { background: var(--c-bg); }
+html.themed .bg-white { background-color: var(--c-surface) !important; }
+html.themed .bg-slate-50,
+html.themed .bg-slate-50\/50,
+html.themed .bg-slate-50\/30 { background-color: var(--c-surface2) !important; }
+html.themed .bg-slate-100 { background-color: var(--c-chip) !important; }
+html.themed .text-slate-900 { color: var(--c-t1) !important; }
+html.themed .text-slate-800,
+html.themed .text-slate-700,
+html.themed .text-slate-600 { color: var(--c-t2) !important; }
+html.themed .text-slate-500 { color: var(--c-t3) !important; }
+html.themed .text-slate-400 { color: var(--c-t4) !important; }
+html.themed .border-slate-100,
+html.themed .border-slate-200,
+html.themed .border-slate-300 { border-color: var(--c-line) !important; }
+/* border-slate-900 = accent (sarlavha tagi, faol tab, ajratilgan karta, fokus) */
+html.themed .border-slate-900 { border-color: var(--c-btn) !important; }
+html.themed .bg-slate-900 { background-color: var(--c-btn) !important; }
+html.themed .hover\:bg-slate-800:hover { background-color: var(--c-btnh) !important; }
+html.themed .hover\:bg-slate-50:hover { background-color: var(--c-surface2) !important; }
+html.themed input,
+html.themed select,
+html.themed textarea { background-color: var(--c-bg); color: var(--c-t1); }
+html.themed input::placeholder,
+html.themed textarea::placeholder { color: var(--c-t4); }
+
+/* Accent (barcha to'q mavzularda yorqin) */
+html.themed .text-amber-700,
+html.themed .text-amber-800 { color: #fbbf24 !important; }
+html.themed .text-emerald-700,
+html.themed .text-emerald-800 { color: #34d399 !important; }
+html.themed .text-red-600,
+html.themed .text-red-700,
+html.themed .text-red-800 { color: #f87171 !important; }
+html.themed .bg-amber-50 { background-color: rgba(251, 191, 36, .12) !important; }
+html.themed .bg-emerald-50 { background-color: rgba(52, 211, 153, .12) !important; }
+html.themed .bg-red-50 { background-color: rgba(248, 113, 113, .12) !important; }
+html.themed .bg-amber-100 { background-color: rgba(251, 191, 36, .2) !important; }
+html.themed .bg-emerald-100 { background-color: rgba(52, 211, 153, .2) !important; }
+html.themed .bg-red-100 { background-color: rgba(248, 113, 113, .2) !important; }
+html.themed .border-amber-200 { border-color: rgba(251, 191, 36, .35) !important; }
+html.themed .border-emerald-200 { border-color: rgba(52, 211, 153, .35) !important; }
+html.themed .border-red-200 { border-color: rgba(248, 113, 113, .35) !important; }
+
+/* ============================================================
+   INTERFEYS DIZAYNI — mavzu ranglari bilan uyg'un (polish)
+   Light uchun ham accent o'zgaruvchilar (themed bo'lmaganlar uchun).
+   ============================================================ */
+:root { --c-btn: #0f172a; --c-btnh: #1e293b; }
+
+/* Silliq o'tish — mavzu almashganda jonli ko'rinadi */
+.bg-app, .bg-white, button, input, select, textarea {
+  transition: background-color .25s ease, border-color .2s ease, color .2s ease, box-shadow .25s ease, transform .1s ease, filter .2s ease;
+}
+
+/* Kartalar — yumshoq, hajmli soya */
+.bg-white.rounded-xl {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 6px 18px rgba(15, 23, 42, .06);
+}
+html.themed .bg-white.rounded-xl {
+  box-shadow: 0 2px 18px rgba(0, 0, 0, .30);
+}
+/* Kartalar — hover'da ozgina ko'tariladi + soya kuchayadi */
+.bg-white.rounded-xl:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(15, 23, 42, .06), 0 12px 28px rgba(15, 23, 42, .10);
+}
+html.themed .bg-white.rounded-xl:hover {
+  box-shadow: 0 6px 26px rgba(0, 0, 0, .42);
+}
+
+/* Asosiy tugmalar / ikonka-nishonlar — gradient + chuqurlik */
+.bg-slate-900 {
+  background-image: linear-gradient(180deg, var(--c-btnh), var(--c-btn));
+  box-shadow: 0 2px 10px rgba(15, 23, 42, .18);
+}
+button.bg-slate-900:hover, label.bg-slate-900:hover { filter: brightness(1.1); }
+/* Barcha tugmalar bosilganda "press" effekti */
+button { transition: transform .12s ease, filter .18s ease, box-shadow .2s ease, background-color .2s ease, border-color .2s ease; }
+button:active:not(:disabled) { transform: scale(.95); }
+
+/* Inputlar — fokusda mavzu (accent) rangida yumshoq yorug' halqa */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--c-btn) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-btn) 22%, transparent);
+}
+
+/* Header pastki chizig'i ham mavzu rangida */
+html.themed header.bg-white { box-shadow: 0 1px 12px rgba(0, 0, 0, .25); }
+
+/* ============================================================
+   ANIMATSIYALAR
+   ============================================================ */
+@keyframes firmaShine { to { background-position: 200% center; } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes popIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes floatY { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+/* Firma nomi — mavzu rangli, jonli "shimmer" gradient */
+/* Firma nomi — faqat soya + havoda yumshoq suzish (ortiqcha effekt yo'q) */
+.firma-nomi {
+  letter-spacing: -0.01em;
+  filter: drop-shadow(0 5px 7px rgba(0, 0, 0, .45));
+  animation: firmaFloat 4s ease-in-out infinite;
+}
+@keyframes firmaFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* ===== Mavzuga xos sarlavha animatsiyalari ===== */
+.hdr-fx { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.hdr-fx .fx { position: absolute; top: -8px; border-radius: 50%; will-change: transform, opacity; }
+.hdr-fx .fx-fire, .hdr-fx .fx-leaf { border-radius: 0; line-height: 1; }
+
+.fx-snow, .fx-rain { animation: fxFall linear infinite; }
+.fx-rain    { border-radius: 1px; }
+.fx-sparkle { animation: fxTwinkle ease-in-out infinite; }
+.fx-stars   { animation: fxStar linear infinite; }
+.fx-ember   { top: auto; bottom: -8px; animation: fxRise ease-out infinite; }
+.fx-steam   { background: rgba(228,214,190,.5) !important; box-shadow: none !important; filter: blur(1px); top: auto; bottom: -10px; animation: fxSteam ease-in infinite; }
+.fx-bubble  { top: auto; bottom: -10px; background: transparent !important; box-shadow: none !important; border: 1.5px solid; animation: fxBubble ease-in infinite; }
+.fx-fire    { top: auto; bottom: -12px; animation: fxFire ease-out infinite; }
+.fx-leaf    { top: -12px; animation: fxLeaf ease-in-out infinite; }
+
+@keyframes fxFall { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: .95; } 90% { opacity: .95; } 100% { transform: translateY(96px); opacity: 0; } }
+@keyframes fxTwinkle { 0%, 100% { opacity: 0; transform: scale(.3); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes fxRise { 0% { transform: translateY(0) scale(1); opacity: 0; } 18% { opacity: .9; } 100% { transform: translateY(-84px) scale(.3); opacity: 0; } }
+@keyframes fxSteam { 0% { transform: translateY(0) scale(.5); opacity: 0; } 25% { opacity: .55; } 100% { transform: translateY(-78px) scale(1.7); opacity: 0; } }
+@keyframes fxStar { 0% { transform: translate(-8px, -8px); opacity: 0; } 25% { opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(22px, 22px); opacity: 0; } }
+@keyframes fxBubble { 0% { transform: translateY(0) translateX(0) scale(.6); opacity: 0; } 20% { opacity: .8; } 55% { transform: translateY(-42px) translateX(6px) scale(1); } 100% { transform: translateY(-90px) translateX(-4px) scale(1.15); opacity: 0; } }
+@keyframes fxFire { 0% { transform: translateY(0) scale(1) rotate(-4deg); opacity: 0; } 15% { opacity: 1; } 60% { transform: translateY(-48px) scale(.8) rotate(5deg); } 100% { transform: translateY(-86px) scale(.4) rotate(-2deg); opacity: 0; } }
+@keyframes fxLeaf { 0% { transform: translateY(-10px) translateX(0) rotate(0); opacity: 0; } 12% { opacity: 1; } 50% { transform: translateY(46px) translateX(14px) rotate(150deg); } 90% { opacity: 1; } 100% { transform: translateY(100px) translateX(-6px) rotate(300deg); opacity: 0; } }
+
+/* Vulqon — sarlavhaning hamma joyi yonib turadi */
+.hdr-glow-fire { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 125%, rgba(255,90,0,.5), rgba(255,140,0,.14) 45%, transparent 72%); animation: fireGlow 1.8s ease-in-out infinite; }
+@keyframes fireGlow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* Kartalar — paydo bo'lganda yumshoq ko'tarilib chiqadi.
+   `backwards` (not `both`): stagger uchun boshlang'ich holat saqlanadi,
+   lekin tugagach asl holatga qaytadi — shunda :hover transform ishlaydi. */
+.bg-white.rounded-xl { animation: fadeInUp .35s ease backwards; }
+
+/* Modallar (panel) — pop effekti */
+.shadow-2xl { animation: popIn .22s ease-out both; }
+
+/* Toast — burchakdan (o'ngdan) suzib chiqadi */
+@keyframes toastInCorner { from { opacity: 0; transform: translateX(24px) translateY(6px); } to { opacity: 1; transform: none; } }
+.anim-toast { animation: toastInCorner .3s ease-out both; }
+
+/* ===== Tugma "ripple" (bosilganda yengil to'lqin) ===== */
+/* JS bosilgan nuqtaga joylashtiradi; body ustida fixed, layoutni buzmaydi. */
+.ripple-blob {
+  position: fixed;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+  z-index: 9999;
+  opacity: .55;
+  animation: rippleExpand .55s cubic-bezier(.25,.6,.3,1) forwards;
+}
+@keyframes rippleExpand {
+  to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+
+/* ===== Skeleton (ma'lumot yuklanayotganda) ===== */
+@keyframes skShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c-line, #e2e8f0) 35%, var(--c-surface, #f1f5f9)) 25%,
+    var(--c-chip, #e2e8f0) 37%,
+    color-mix(in srgb, var(--c-line, #e2e8f0) 35%, var(--c-surface, #f1f5f9)) 63%
+  );
+  background-size: 200% 100%;
+  animation: skShimmer 1.3s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* SectionTitle ikonka-nishon — biroz jonli */
+.bg-slate-900 svg { transition: transform .2s ease; }
+
+/* Chek jadvali — zebra qatorlar (ekranda; chop etishda oq) */
+.receipt-print tbody tr:nth-child(even) td { background: rgba(0, 0, 0, .03); }
+
+/* Zakas saqlanganda — ✓ muvaffaqiyat animatsiyasi */
+@keyframes sucPop { 0% { opacity: 0; transform: scale(.8); } 12% { opacity: 1; transform: scale(1.06); } 26% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: scale(.96); } }
+@keyframes sucDraw { to { stroke-dashoffset: 0; } }
+.suc-box { animation: sucPop 1.5s ease forwards; }
+.suc-circle { stroke-dasharray: 151; stroke-dashoffset: 151; animation: sucDraw .5s ease-out .05s forwards; }
+.suc-check { stroke-dasharray: 40; stroke-dashoffset: 40; animation: sucDraw .35s ease-out .45s forwards; }
+
+/* ===== Yangi interfeys animatsiyalari (yumshoq, tez 150-350ms) ===== */
+/* Tovar qatori — qo'shilganda yuqoridan siljib + fade-in */
+@keyframes itemIn  { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+/* o'chirilganda kichrayib + fade-out */
+@keyframes itemOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(.85); } }
+.anim-item-in  { animation: itemIn 240ms ease both; }
+.anim-item-out { animation: itemOut 240ms ease forwards; pointer-events: none; overflow: hidden; }
+
+/* Raqam o'zgarganda puls */
+@keyframes numPulse { 0% { transform: scale(1); } 35% { transform: scale(1.13); } 100% { transform: scale(1); } }
+.anim-num-pulse { animation: numPulse 320ms ease; }
+
+/* Tugma tanlanganda "sakrash" + tasdiq belgisi */
+@keyframes popBtn   { 0% { transform: scale(1); } 40% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@keyframes checkPop { 0% { opacity: 0; transform: scale(.3); } 45% { opacity: 1; transform: scale(1.15); } 100% { opacity: 0; transform: scale(1); } }
+.anim-pop   { animation: popBtn 240ms ease; }
+.anim-check { animation: checkPop 700ms ease both; }
+
+/* Saqlash tugmasi spinneri */
+@keyframes spin360 { to { transform: rotate(360deg); } }
+.anim-spin { animation: spin360 .7s linear infinite; }
+
+/* Random "zar" bosilganda aylanib sakraydi */
+@keyframes diceRoll { 0% { transform: rotate(0) scale(1); } 50% { transform: rotate(190deg) scale(1.3); } 100% { transform: rotate(360deg) scale(1); } }
+.anim-dice { animation: diceRoll .5s ease; }
+
+/* Hisobot grafiklari — donut paydo bo'lishi + chiziq chizilishi */
+@keyframes donutIn { from { opacity: 0; transform: rotate(-12deg) scale(.85); } to { opacity: 1; transform: none; } }
+.anim-donut { animation: donutIn .5s ease-out both; transform-origin: 50% 50%; }
+.anim-donut circle { transition: stroke-dasharray .5s ease, stroke-dashoffset .5s ease; }
+@keyframes drawLine { from { stroke-dashoffset: 1000; } to { stroke-dashoffset: 0; } }
+.anim-draw { stroke-dasharray: 1000; animation: drawLine 1.1s ease-out forwards; }
+
+/* Noto'g'ri kiritishda yengil silkinish + qizil chegara */
+@keyframes shakeX { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+.anim-shake { animation: shakeX 320ms ease; }
+.input-error { border-color: #f87171 !important; box-shadow: 0 0 0 3px rgba(248, 113, 113, .14) !important; }
+
+/* Sahifa ochilganda bo'limlar ketma-ket (stagger ~50ms) */
+main .space-y-4 > .bg-white:nth-child(1) { animation-delay: 0ms; }
+main .space-y-4 > .bg-white:nth-child(2) { animation-delay: 50ms; }
+main .space-y-4 > .bg-white:nth-child(3) { animation-delay: 100ms; }
+main .space-y-4 > .bg-white:nth-child(4) { animation-delay: 150ms; }
+main .space-y-4 > .bg-white:nth-child(5) { animation-delay: 200ms; }
+main .space-y-4 > .bg-white:nth-child(6) { animation-delay: 250ms; }
+main .space-y-4 > .bg-white:nth-child(7) { animation-delay: 300ms; }
+main .space-y-4 > .bg-white:nth-child(8) { animation-delay: 350ms; }
+main .space-y-4 > .bg-white:nth-child(n+9) { animation-delay: 400ms; }
+
+/* Harakatni kamaytirish rejimida — animatsiyalarni o'chirish */
+@media (prefers-reduced-motion: reduce) {
+  .firma-nomi, .bg-white.rounded-xl, .shadow-2xl, .anim-toast, .suc-box,
+  .anim-item-in, .anim-item-out, .anim-num-pulse, .anim-pop, .anim-check, .anim-shake { animation: none !important; }
+  .anim-spin { animation: spin360 1.2s linear infinite; } /* spinner funksional — qoldiramiz, sekinroq */
+  .ripple-blob { display: none !important; }
+  .skeleton { animation: none !important; }
+  .anim-donut { animation: none !important; }
+  .anim-draw { stroke-dasharray: none !important; animation: none !important; }
+  .bg-white.rounded-xl:hover { transform: none !important; }
+  .anim-item-out { opacity: 0; }
+  main .space-y-4 > .bg-white { animation-delay: 0ms !important; }
+  .suc-circle, .suc-check { stroke-dashoffset: 0 !important; animation: none !important; }
+  .hdr-fx { display: none !important; }
+}
