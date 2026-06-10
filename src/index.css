@@ -449,7 +449,7 @@ main .space-y-4 > .bg-white:nth-child(n+9) { animation-delay: 400ms; }
    mavzu o'zgaruvchilariga (--c-*) bog'lanadi — mavzu almashsa
    chizma ham o'z-o'zidan moslashadi.
    ============================================================ */
-.chz { display: flex; flex-direction: column; height: 520px; user-select: none; font-size: 13px; }
+.chz { display: flex; flex-direction: column; height: 700px; user-select: none; font-size: 13px; }
 .chz-full-wrap { position: fixed; inset: 0; z-index: 70; background: #fff; display: flex; flex-direction: column; }
 html.themed .chz-full-wrap { background: var(--c-surface); }
 .chz-full-wrap .chz { flex: 1; height: auto; min-height: 0; padding: 10px; }
@@ -518,7 +518,7 @@ html.themed .chz-inputbox { background: var(--c-surface); box-shadow: 0 2px 10px
 }
 
 /* ---- Yon hisoblash paneli ---- */
-.chz-panel { width: 248px; flex-shrink: 0; background: #f8fafc; border-left: 1px solid #e2e8f0; padding: 12px; overflow-y: auto; font-size: 12px; color: #334155; }
+.chz-panel { width: 218px; flex-shrink: 0; background: #f8fafc; border-left: 1px solid #e2e8f0; padding: 10px; overflow-y: auto; font-size: 12px; color: #334155; }
 html.themed .chz-panel { background: var(--c-surface2); border-color: var(--c-line); color: var(--c-t2); }
 .chz-panel h3 { margin: 0 0 8px; font-size: 13px; color: #0f172a; }
 html.themed .chz-panel h3 { color: var(--c-t1); }
@@ -589,8 +589,8 @@ html.themed .chz-hint { color: var(--c-t3); }
 
 /* Tor ekranda hisoblash paneli chizma ostiga tushadi */
 @media (max-width: 700px) {
-  .chz { height: 640px; }
+  .chz { height: 780px; }
   .chz-main { flex-direction: column; }
-  .chz-panel { width: auto; border-left: 0; border-top: 1px solid #e2e8f0; max-height: 240px; }
+  .chz-panel { width: auto; border-left: 0; border-top: 1px solid #e2e8f0; max-height: 250px; }
   html.themed .chz-panel { border-top-color: var(--c-line); }
 }

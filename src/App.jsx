@@ -388,6 +388,14 @@ export default function App() {
     return () => clearInterval(id);
   }, [authReady]);
 
+  // Sichqoncha O'RTA tugmasi — brauzerning avto-aylantirish (autoscroll)
+  // belgisi chiqmasin (chizmada pan uchun ishlatiladi, boshqa joyda ham kerak emas)
+  useEffect(() => {
+    function onMid(e) { if (e.button === 1) e.preventDefault(); }
+    document.addEventListener('mousedown', onMid);
+    return () => document.removeEventListener('mousedown', onMid);
+  }, []);
+
   // Tugmalar bosilganda yengil "ripple" to'lqini — global, layoutni buzmaydi
   useEffect(() => {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;

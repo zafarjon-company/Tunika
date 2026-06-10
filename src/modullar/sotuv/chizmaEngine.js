@@ -101,7 +101,7 @@ const TEMPLATE = `
     <button type="button" class="tool" data-chz="btnDelete" title="Delete">&#128465; O'chirish</button>
     <button type="button" class="tool" data-chz="btnClear">&#10005; Tozalash</button>
     <span class="sep"></span>
-    <button type="button" class="tool" data-chz="btnFit">&#10530; Markazga</button>
+    <button type="button" class="tool" data-chz="btnFit" title="Chiziqlar chegarasigacha avtozoom — Z va E tugmalarini birga bosing">&#10530; Markazga (Z+E)</button>
     <span class="chz-scale" data-chz="scaleInfo"></span>
     <span class="chz-tglbl">Belgilar (+):</span>
     <button type="button" class="tool tg" data-chz="tgDevor" title="Devor + belgilari — razmer ko'rinaveradi">Devor +</button>
@@ -164,7 +164,7 @@ const TEMPLATE = `
           <span style="color:var(--chz-accent)">o'ngdan-chapga</span> = kesib o'tganlar ham.<br>
         &bull; <b>Surish (pan)</b>: o'rta yoki o'ng tugmani bosib torting. G'ildirak — zoom.<br>
         &bull; Birlik: chizish — <b>default m</b>, offset — <b>default cm</b>. Panelda har detal o'z birligi.<br>
-        &bull; <b>Ctrl+Z/Ctrl+Y</b>, <b>Markazga</b> — auto-zoom.
+        &bull; <b>Ctrl+Z/Ctrl+Y</b> — orqaga/oldinga; <b>Markazga (Z+E)</b> — chiziqlar chegarasigacha avtozoom.
       </div>
     </div>
   </div>
@@ -1251,6 +1251,7 @@ export function mountChizma(root) {
   });
 
   // Klaviatura qisqartmalari.
+  const heldKeys = new Set();   // Z+E (zoom extents, AutoCAD uslubi) uchun
   on(window, 'keydown', (e) => {
     // Kiritish/chizish rejimi FAQAT Esc bilan yopiladi — fokus qayerda
     // bo'lishidan qat'i nazar (input ichidagi Esc o'zi to'xtatadi).
@@ -1266,8 +1267,14 @@ export function mountChizma(root) {
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedLines.size > 0) {
       e.preventDefault(); deleteSelected();
+    } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Z+E birga bosilsa — Markazga (zoom extents, AutoCAD'dagi kabi).
+      heldKeys.add(k);
+      if (heldKeys.has('z') && heldKeys.has('e')) { e.preventDefault(); centerView(); }
     }
   });
+  on(window, 'keyup', (e) => heldKeys.delete(e.key.toLowerCase()));
+  on(window, 'blur', () => heldKeys.clear());
 
   // Toolbar hodisalari.
   on(q('btnRed'), 'click', () => setColor('red'));
@@ -1294,18 +1301,24 @@ export function mountChizma(root) {
     updateScaleInfo();
   }
 
-  // Markazga — barcha detallar ko'rinadigan auto-zoom.
+  // Markazga (Z+E) — FAQAT chiziqlar chegarasigacha avtozoom
+  // ("+" belgilari va yolg'iz boshlang'ich nuqta hisobga olinmaydi).
   function centerView() {
     const rect = svg.getBoundingClientRect();
-    if (state.points.length === 0) return;
+    // Chiziqlarga ulangan nuqtalargina chegarani belgilaydi;
+    // chiziq bo'lmasa — mavjud nuqtalar (boshlang'ich) olinadi.
+    const ids = new Set();
+    for (const l of state.lines) { ids.add(l.a); ids.add(l.b); }
+    const pts = ids.size ? state.points.filter((p) => ids.has(p.id)) : state.points;
+    if (pts.length === 0) return;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const p of state.points) {
+    for (const p of pts) {
       minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
       minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
     }
     const w = maxX - minX, h = maxY - minY;
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    const pad = 70;
+    const pad = 45;
 
     if (!(w < 1 && h < 1)) {
       const sx = (rect.width  - 2 * pad) / Math.max(w, 1);
