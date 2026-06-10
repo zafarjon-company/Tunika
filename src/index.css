@@ -440,3 +440,157 @@ main .space-y-4 > .bg-white:nth-child(n+9) { animation-delay: 400ms; }
   .suc-circle, .suc-check { stroke-dashoffset: 0 !important; animation: none !important; }
   .hdr-fx { display: none !important; }
 }
+
+/* ============================================================
+   CHIZMA (xona konturi) — Savdo bo'limidagi yordamchi oyna
+   ------------------------------------------------------------
+   Chiziq ranglari (--chz-*) JS'da mavzuning asosiy rangidan
+   hosil qilinadi (chizmaEngine.js). Bu yerda esa ramka/panel
+   mavzu o'zgaruvchilariga (--c-*) bog'lanadi — mavzu almashsa
+   chizma ham o'z-o'zidan moslashadi.
+   ============================================================ */
+.chz { display: flex; flex-direction: column; height: 520px; user-select: none; font-size: 13px; }
+.chz-full-wrap { position: fixed; inset: 0; z-index: 70; background: #fff; display: flex; flex-direction: column; }
+html.themed .chz-full-wrap { background: var(--c-surface); }
+.chz-full-wrap .chz { flex: 1; height: auto; min-height: 0; padding: 10px; }
+
+/* ---- Tepa asboblar paneli ---- */
+.chz-toolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 10px; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-bottom: 0; border-radius: 10px 10px 0 0;
+}
+html.themed .chz-toolbar { background: var(--c-surface2); border-color: var(--c-line); }
+.chz-toolbar .sep { width: 1px; height: 24px; background: #e2e8f0; margin: 0 2px; }
+html.themed .chz-toolbar .sep { background: var(--c-line); }
+.chz-tglbl { font-size: 11px; color: #64748b; margin-left: 6px; }
+html.themed .chz-tglbl { color: var(--c-t3); }
+.chz-scale { font-size: 11px; color: #64748b; margin-left: auto; white-space: nowrap; }
+html.themed .chz-scale { color: var(--c-t3); }
+
+.chz button.tool {
+  background: #fff; color: #334155;
+  border: 1px solid #cbd5e1; border-radius: 6px;
+  padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+html.themed .chz button.tool { background: var(--c-chip); color: var(--c-t2); border-color: var(--c-line); }
+.chz button.tool:hover { border-color: #94a3b8; }
+html.themed .chz button.tool:hover { border-color: var(--c-t4); }
+.chz button.tool:active { transform: translateY(1px); }
+.chz button.tool:disabled { opacity: .4; cursor: default; transform: none; }
+
+/* Devor / Qosh rang tugmalari — mavzudan hosil bo'lgan ranglarda */
+.chz button.tool.color-devor { border-color: var(--chz-devor); color: var(--chz-devor); }
+.chz button.tool.color-qosh  { border-color: var(--chz-qosh);  color: var(--chz-qosh); }
+.chz button.tool.color-devor.active { background: color-mix(in srgb, var(--chz-devor) 15%, transparent); box-shadow: 0 0 0 1.5px var(--chz-devor) inset; }
+.chz button.tool.color-qosh.active  { background: color-mix(in srgb, var(--chz-qosh) 15%, transparent);  box-shadow: 0 0 0 1.5px var(--chz-qosh) inset; }
+
+/* Belgilar (+) toggle tugmalari */
+.chz button.tool.tg { border-color: var(--chz-accent); color: var(--chz-accent); }
+.chz button.tool.tg.off { opacity: .45; text-decoration: line-through; border-color: #cbd5e1; color: #94a3b8; }
+html.themed .chz button.tool.tg.off { border-color: var(--c-line); color: var(--c-t4); }
+
+/* ---- O'rta qism: chizma maydoni + hisoblash paneli ---- */
+.chz-main { display: flex; flex: 1; min-height: 0; border: 1px solid #e2e8f0; border-radius: 0 0 10px 10px; overflow: hidden; }
+html.themed .chz-main { border-color: var(--c-line); }
+
+.chz-canvas { position: relative; flex: 1; min-width: 0; overflow: hidden; cursor: crosshair; background: #eef2f7; }
+html.themed .chz-canvas { background: color-mix(in srgb, var(--c-bg) 78%, #000 22%); }
+.chz-canvas svg { width: 100%; height: 100%; display: block; }
+
+.chz-selbox { position: absolute; display: none; pointer-events: none; z-index: 6; box-sizing: border-box; }
+
+.chz-inputbox {
+  position: absolute; display: none; align-items: center; gap: 4px;
+  background: #fff; padding: 4px;
+  border: 1.5px solid var(--chz-accent); border-radius: 6px;
+  z-index: 10; box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
+}
+html.themed .chz-inputbox { background: var(--c-surface); box-shadow: 0 2px 10px rgba(0, 0, 0, .6); }
+.chz-inputbox.show { display: inline-flex; }
+.chz-inputbox input {
+  width: 86px; padding: 4px 6px; font-size: 13px; text-align: center;
+  background: #fff; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 4px; outline: none;
+}
+.chz-inputbox select {
+  background: #fff; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 4px;
+  padding: 4px; font-size: 12px; outline: none;
+}
+
+/* ---- Yon hisoblash paneli ---- */
+.chz-panel { width: 248px; flex-shrink: 0; background: #f8fafc; border-left: 1px solid #e2e8f0; padding: 12px; overflow-y: auto; font-size: 12px; color: #334155; }
+html.themed .chz-panel { background: var(--c-surface2); border-color: var(--c-line); color: var(--c-t2); }
+.chz-panel h3 { margin: 0 0 8px; font-size: 13px; color: #0f172a; }
+html.themed .chz-panel h3 { color: var(--c-t1); }
+
+.chz-stat {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  padding: 7px 9px; margin-bottom: 6px; border-radius: 6px;
+  background: #fff; border: 1px solid #e2e8f0; border-left-width: 4px;
+}
+html.themed .chz-stat { background: var(--c-surface); border-color: var(--c-line); border-left-width: 4px; }
+.chz-stat .lbl { flex: 1; }
+.chz-stat .val { font-weight: 700; }
+.chz-stat.kazirok, html.themed .chz-stat.kazirok { border-left-color: var(--chz-kazirok); }
+.chz-stat.devor,   html.themed .chz-stat.devor   { border-left-color: var(--chz-devor); }
+.chz-stat.qosh,    html.themed .chz-stat.qosh    { border-left-color: var(--chz-qosh); }
+.chz-stat.qozon,   html.themed .chz-stat.qozon   { border-left-color: var(--chz-qozon); }
+.chz-stat.lines,   html.themed .chz-stat.lines   { border-left-color: var(--chz-accent); }
+.chz-stat.kazirok .val { color: var(--chz-kazirok); }
+.chz-stat.devor .val   { color: var(--chz-devor); }
+.chz-stat.qosh .val    { color: var(--chz-qosh); }
+.chz-stat.qozon .val   { color: var(--chz-qozon); }
+.chz-stat.lines .val   { color: var(--chz-accent); }
+
+.chz .rowUnit {
+  background: #fff; color: #334155; border: 1px solid #cbd5e1;
+  border-radius: 4px; padding: 1px 2px; font-size: 11px;
+}
+html.themed .chz .rowUnit { background: var(--c-bg); color: var(--c-t2); border-color: var(--c-line); }
+
+.chz-listhead { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 14px; }
+.chz-listhead h3 { margin: 0; }
+.chz-listhead label { font-size: 11px; color: #64748b; }
+html.themed .chz-listhead label { color: var(--c-t3); }
+
+.chz-list { margin-top: 8px; }
+.chz-list .item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; margin-bottom: 4px; border-radius: 5px;
+  background: #fff; border: 1px solid #e2e8f0; font-size: 11.5px; cursor: pointer;
+}
+html.themed .chz-list .item { background: var(--c-surface); border-color: var(--c-line); }
+.chz-list .item:hover { border-color: #94a3b8; }
+html.themed .chz-list .item:hover { border-color: var(--c-t4); }
+.chz-list .item.selected { outline: 1.5px solid var(--chz-accent); }
+.chz-list .item.info { cursor: default; }
+.chz-list .item.info:hover { border-color: #e2e8f0; }
+html.themed .chz-list .item.info:hover { border-color: var(--c-line); }
+.chz-list .swatch { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.chz-list .len { margin-left: auto; }
+.chz-list .editBtn { color: var(--chz-qozon); padding: 0 4px; }
+.chz-list .empty { color: #94a3b8; font-style: italic; }
+html.themed .chz-list .empty { color: var(--c-t4); }
+
+.chz-hint { margin-top: 12px; font-size: 10.5px; color: #64748b; line-height: 1.65; }
+html.themed .chz-hint { color: var(--c-t3); }
+
+/* SVG ichidagi interaktiv elementlar */
+.chz .plus-hit, .chz .offset-hit { cursor: pointer; fill: transparent; }
+.chz .offset-plus { transition: opacity .12s; }
+.chz .offset-plus:hover { opacity: 1 !important; }
+.chz .seg-hit { cursor: pointer; stroke: transparent; stroke-width: 12; fill: none; }
+.chz text { user-select: none; }
+
+/* To'liq ekran rejimida karta transform'i fixed oynani buzmasin
+   (transform'li ota element position:fixed ni o'ziga bog'lab oladi) */
+.bg-white.rounded-xl:has(.chz-full-wrap),
+.bg-white.rounded-xl:has(.chz-full-wrap):hover { transform: none !important; animation: none !important; }
+
+/* Tor ekranda hisoblash paneli chizma ostiga tushadi */
+@media (max-width: 700px) {
+  .chz { height: 640px; }
+  .chz-main { flex-direction: column; }
+  .chz-panel { width: auto; border-left: 0; border-top: 1px solid #e2e8f0; max-height: 240px; }
+  html.themed .chz-panel { border-top-color: var(--c-line); }
+}

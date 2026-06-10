@@ -54,6 +54,7 @@ function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan kat
   );
 }
 import { DynamicPaymentsSection } from './Tolovlar.jsx';
+import { ChizmaCard } from './Chizma.jsx';
 
 // O'lchov ustuni: latok(metrli) → faqat metr; list/profnastil → metr × dona; aksessuar → dona/kg
 export function olchovDisp(it) {
@@ -168,6 +169,9 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
               <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
             </button>
           </Card>
+
+          {/* CHIZMA — xona konturi (zakas olishda hisob-kitob yordamchisi) */}
+          <ChizmaCard />
 
           {/* TOVARLAR */}
           <Card>
