@@ -549,9 +549,19 @@ html.themed .chz-stat { background: var(--c-surface); border-color: var(--c-line
 html.themed .chz .rowUnit { background: var(--c-bg); color: var(--c-t2); border-color: var(--c-line); }
 
 .chz-listhead { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 14px; }
-.chz-listhead h3 { margin: 0; }
 .chz-listhead label { font-size: 11px; color: #64748b; }
 html.themed .chz-listhead label { color: var(--c-t3); }
+
+/* Chiziqlar ro'yxati tugmasi — ro'yxat default yashirin, bosilsa ochiladi */
+.chz-listbtn {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  font-size: 13px; font-weight: 700; color: #0f172a;
+}
+html.themed .chz-listbtn { color: var(--c-t1); }
+.chz-listbtn:hover { color: var(--chz-accent); }
+.chz-listbtn .chev { display: inline-block; transition: transform .15s; color: var(--chz-accent); }
+.chz-listbtn.open .chev { transform: rotate(90deg); }
 
 .chz-list { margin-top: 8px; }
 .chz-list .item {

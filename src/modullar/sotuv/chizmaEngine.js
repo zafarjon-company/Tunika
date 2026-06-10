@@ -145,12 +145,14 @@ const TEMPLATE = `
         <span class="val" data-chz="lineCount">0</span>
       </div>
       <div class="chz-listhead">
-        <h3>Chiziqlar ro'yxati</h3>
+        <button type="button" class="chz-listbtn" data-chz="tgList" title="Chiziqlar ro'yxatini ko'rsatish / yashirish">
+          <span class="chev">&#9656;</span> Chiziqlar ro'yxati
+        </button>
         <label>Qozon birligi:
           <select class="rowUnit" data-chz="unitCorner"><option>mm</option><option selected>cm</option><option>m</option></select>
         </label>
       </div>
-      <div class="chz-list" data-chz="lineList"></div>
+      <div class="chz-list" data-chz="lineList" style="display:none"></div>
       <div class="chz-hint">
         &bull; <span style="color:var(--chz-accent)"><b>+</b></span> &rarr; yangi chiziq (uzunlik &rarr; Enter).<br>
         &bull; <span style="color:var(--chz-offset)"><b>Offset +</b></span> &rarr; <b>faqat o'sha chiziq</b> shu tomonga offset bo'ladi (masofa kiriting).
@@ -1295,6 +1297,14 @@ export function mountChizma(root) {
   on(q('tgDevor'), 'click', () => { state.showDevorPlus = !state.showDevorPlus; syncToggleButtons(); render(); });
   on(q('tgQosh'), 'click',  () => { state.showQoshPlus  = !state.showQoshPlus;  syncToggleButtons(); render(); });
   on(q('tgQozon'), 'click', () => { state.showQozon     = !state.showQozon;     syncToggleButtons(); render(); });
+
+  // Chiziqlar ro'yxati — DOIM yashirin boshlanadi, tugma bosilsa ochiladi.
+  let showList = false;
+  on(q('tgList'), 'click', () => {
+    showList = !showList;
+    q('lineList').style.display = showList ? '' : 'none';
+    q('tgList').classList.toggle('open', showList);
+  });
 
   function setColor(c) {
     state.color = c;
