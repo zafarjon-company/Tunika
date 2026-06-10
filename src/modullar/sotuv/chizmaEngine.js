@@ -78,7 +78,7 @@ export function computePalette() {
     themed,
     devor:   mk(0),         // asosiy (ichki kontur) — mavzu rangining o'zi
     qosh:    mk(55, 6),     // tashqi kontur (latok)
-    accent:  mk(120),       // chizish "+", magnit, snap, tanlov
+    accent:  mk(120),       // chizish "+", snap, tanlov
     qozon:   mk(185),       // burchak bo'laklari
     kazirok: mk(250),       // kazirok (karniz) ko'rsatkichi
     offset:  mk(305),       // offset "+" va masofa o'lchovi
@@ -156,8 +156,7 @@ const TEMPLATE = `
         &bull; <span style="color:var(--chz-offset)"><b>Offset +</b></span> &rarr; <b>faqat o'sha chiziq</b> shu tomonga offset bo'ladi (masofa kiriting).
           Yonidagi chiziq ham offset qilinsa — burchak avtomatik tutashadi (fillet).<br>
         &bull; <span style="color:var(--chz-qozon)"><b>Qozon bo'laklari</b></span> — har burchakda devor&harr;qoshni bog'lab <b>avtomatik</b> chiziladi (eni&times;bo'yi).<br>
-        &bull; <span style="color:var(--chz-accent)"><b>MAGNIT</b></span>: nuqta ustida kursorni ~0.6s ushlab tursangiz — tekislash chiziqlari chiqadi (yana ushlab tursangiz — yo'qoladi).<br>
-        &bull; Chizishda (+ bosgach): razmer yozing <b>yoki</b> kursorni surib bosing; <b>boshqa nuqtaga tekislab</b> ham bosib chizsa bo'ladi.<br>
+        &bull; Chizishda (+ bosgach): razmer yozing <b>yoki</b> kursorni surib bosing; <b>boshqa nuqtaga tekislab</b> ham bosib chizsa bo'ladi. Bekor qilish — faqat <b>Esc</b>.<br>
         &bull; Chiziqqa <b>2 marta bosing</b> — razmerni tahrirlash.<br>
         &bull; Chiziqni bosib <b>belgilang</b> (Shift — bir nechta), so'ng <b>Delete</b> / "O'chirish".<br>
         &bull; <b>Ramka bilan belgilash</b>: bo'sh joydan chap tugmani bosib torting —
@@ -206,8 +205,6 @@ export function mountChizma(root) {
     showDevorPlus: true,
     showQoshPlus: false,
     showQozon: true,
-    magnets: new Set(),
-    hoverPid: null,
   };
 
   const svg         = q('svg');
@@ -379,7 +376,6 @@ export function mountChizma(root) {
     l1.length = Math.hypot(B.x - A.x, B.y - A.y);
     state.lines = state.lines.filter((l) => l !== l2);
     state.points = state.points.filter((p) => p.id !== pid);
-    state.magnets.delete(pid);
     return true;
   }
   function mergeCollinear() {
@@ -500,8 +496,6 @@ export function mountChizma(root) {
     state.points = [{ id: 0, x: 0, y: 0 }];
     state.lines = [];
     state.selectedLines.clear();
-    state.magnets.clear();
-    state.hoverPid = null;
     closeInput();
     render();
   }
@@ -693,25 +687,6 @@ export function mountChizma(root) {
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-    // 0) MAGNIT tekislash chiziqlari (punktir).
-    const vb = svg.getBoundingClientRect();
-    const magPts = [];
-    for (const pid of [...state.magnets]) {
-      const p = getPoint(pid);
-      if (!p) { state.magnets.delete(pid); continue; }
-      const s = worldToScreen(p.x, p.y);
-      magPts.push(s);
-      svg.appendChild(svgEl('line', { x1: 0, y1: s.y, x2: vb.width, y2: s.y, stroke: P.accent, 'stroke-width': 1, 'stroke-dasharray': '5 5', opacity: 0.45 }));
-      svg.appendChild(svgEl('line', { x1: s.x, y1: 0, x2: s.x, y2: vb.height, stroke: P.accent, 'stroke-width': 1, 'stroke-dasharray': '5 5', opacity: 0.45 }));
-    }
-    for (let i = 0; i < magPts.length; i++) {
-      for (let j = 0; j < magPts.length; j++) {
-        if (i === j) continue;
-        const ix = magPts[i].x, iy = magPts[j].y;
-        svg.appendChild(svgEl('rect', { x: ix - 3, y: iy - 3, width: 6, height: 6, fill: 'none', stroke: P.accent, 'stroke-width': 1.2, opacity: 0.85 }));
-      }
-    }
-
     const labels = [];
 
     // Markaziy nuqta — yozuvni tashqi/ichki tomonga joylash uchun.
@@ -867,16 +842,7 @@ export function mountChizma(root) {
       svg.appendChild(label);
     }
 
-    // 6) MAGNIT/HOVER belgilari (eng ustda).
-    for (const pid of state.magnets) {
-      const p = getPoint(pid); if (p) { const s = worldToScreen(p.x, p.y); svg.appendChild(greenCross(s.x, s.y)); }
-    }
-    if (state.hoverPid != null && !state.magnets.has(state.hoverPid)) {
-      const p = getPoint(state.hoverPid);
-      if (p) { const s = worldToScreen(p.x, p.y); svg.appendChild(greenCross(s.x, s.y)); }
-    }
-
-    // 7) CHIZISH PREVIEW (punktir + jonli uzunlik + snap).
+    // 6) CHIZISH PREVIEW (punktir + jonli uzunlik + snap).
     const ai = state.activeInput;
     if (ai && ai.mode === 'draw') {
       const A = getPoint(ai.pointId);
@@ -907,27 +873,53 @@ export function mountChizma(root) {
       }
     }
 
+    repositionInput();   // pan/zoom paytida kiritish qutisi chizma bilan birga ko'chadi
     updatePanel();
     updateScaleInfo();
     syncHistoryButtons();
     saveStateLS();
   }
 
-  // Kichik "+" (magnit/hover/tekislash indikatori) — accent rangda.
+  // Kiritish qutisini joriy activeInput langariga qarab qayta joylaydi
+  // (pan/zoom'da quti chizmaga "yopishib" yuradi, yopilmaydi).
+  function repositionInput() {
+    const ai = state.activeInput;
+    if (!ai) return;
+    if (ai.mode === 'draw') {
+      const p = getPoint(ai.pointId); if (!p) return;
+      const s = worldToScreen(p.x, p.y);
+      const v = DIRS[ai.dir];
+      positionBox(s.x + v.dx * (PLUS_OFFSET + 8), s.y + v.dy * (PLUS_OFFSET + 8));
+    } else if (ai.mode === 'edit') {
+      const ln = getLine(ai.lineId); if (!ln) return;
+      const a = getPoint(ln.a), b = getPoint(ln.b);
+      if (!a || !b) return;
+      const s1 = worldToScreen(a.x, a.y), s2 = worldToScreen(b.x, b.y);
+      positionBox((s1.x + s2.x) / 2, (s1.y + s2.y) / 2);
+    } else if (ai.mode === 'offset') {
+      const ln = getLine(ai.lineId); if (!ln) return;
+      const a = getPoint(ln.a), b = getPoint(ln.b);
+      if (!a || !b) return;
+      const s1 = worldToScreen(a.x, a.y), s2 = worldToScreen(b.x, b.y);
+      positionBox((s1.x + s2.x) / 2 + ai.side.x * (OFFSET_BTN + 12), (s1.y + s2.y) / 2 + ai.side.y * (OFFSET_BTN + 12));
+    }
+  }
+
+  // Kichik "+" (tekislash/snap indikatori) — accent rangda.
   function greenCross(cx, cy) {
     const g = svgEl('g', {});
-    g.appendChild(svgEl('circle', { cx, cy, r: 7, fill: P.accentSoft, stroke: P.accent, 'stroke-width': 1.3 }));
-    g.appendChild(svgEl('line', { x1: cx - 4, y1: cy, x2: cx + 4, y2: cy, stroke: P.accent, 'stroke-width': 1.7 }));
-    g.appendChild(svgEl('line', { x1: cx, y1: cy - 4, x2: cx, y2: cy + 4, stroke: P.accent, 'stroke-width': 1.7 }));
+    g.appendChild(svgEl('circle', { cx, cy, r: 4, fill: P.accentSoft, stroke: P.accent, 'stroke-width': 1 }));
+    g.appendChild(svgEl('line', { x1: cx - 2, y1: cy, x2: cx + 2, y2: cy, stroke: P.accent, 'stroke-width': 1.2 }));
+    g.appendChild(svgEl('line', { x1: cx, y1: cy - 2, x2: cx, y2: cy + 2, stroke: P.accent, 'stroke-width': 1.2 }));
     return g;
   }
 
   function makePlus(cx, cy, pointId, dir) {
     const g = svgEl('g', {});
-    g.appendChild(svgEl('circle', { cx, cy, r: 9, fill: P.accentSoft, stroke: P.accent, 'stroke-width': 1 }));
-    g.appendChild(svgEl('line', { x1: cx - 4, y1: cy, x2: cx + 4, y2: cy, stroke: P.accent, 'stroke-width': 1.6 }));
-    g.appendChild(svgEl('line', { x1: cx, y1: cy - 4, x2: cx, y2: cy + 4, stroke: P.accent, 'stroke-width': 1.6 }));
-    const hit = svgEl('circle', { cx, cy, r: 12, class: 'plus-hit' });
+    g.appendChild(svgEl('circle', { cx, cy, r: 4.5, fill: P.accentSoft, stroke: P.accent, 'stroke-width': 1 }));
+    g.appendChild(svgEl('line', { x1: cx - 2, y1: cy, x2: cx + 2, y2: cy, stroke: P.accent, 'stroke-width': 1.2 }));
+    g.appendChild(svgEl('line', { x1: cx, y1: cy - 2, x2: cx, y2: cy + 2, stroke: P.accent, 'stroke-width': 1.2 }));
+    const hit = svgEl('circle', { cx, cy, r: 8, class: 'plus-hit' });
     hit.addEventListener('click', (e) => { e.stopPropagation(); openInputDraw(pointId, dir); });
     g.appendChild(hit);
     return g;
@@ -937,12 +929,12 @@ export function mountChizma(root) {
   function makeOffsetPlus(cx, cy, lineId, side) {
     const g = svgEl('g', { class: 'offset-plus', opacity: 0.7 });
     g.appendChild(svgEl('circle', {
-      cx, cy, r: 8.5, fill: P.offset, 'fill-opacity': 0.16,
-      stroke: P.offset, 'stroke-width': 1.3, 'stroke-opacity': 0.9,
+      cx, cy, r: 4.2, fill: P.offset, 'fill-opacity': 0.16,
+      stroke: P.offset, 'stroke-width': 1, 'stroke-opacity': 0.9,
     }));
-    g.appendChild(svgEl('line', { x1: cx - 4, y1: cy, x2: cx + 4, y2: cy, stroke: P.offset, 'stroke-width': 1.7 }));
-    g.appendChild(svgEl('line', { x1: cx, y1: cy - 4, x2: cx, y2: cy + 4, stroke: P.offset, 'stroke-width': 1.7 }));
-    const hit = svgEl('circle', { cx, cy, r: 11, class: 'offset-hit' });
+    g.appendChild(svgEl('line', { x1: cx - 2, y1: cy, x2: cx + 2, y2: cy, stroke: P.offset, 'stroke-width': 1.2 }));
+    g.appendChild(svgEl('line', { x1: cx, y1: cy - 2, x2: cx, y2: cy + 2, stroke: P.offset, 'stroke-width': 1.2 }));
+    const hit = svgEl('circle', { cx, cy, r: 8, class: 'offset-hit' });
     hit.addEventListener('click', (e) => { e.stopPropagation(); openInputOffset(lineId, side); });
     g.appendChild(hit);
     return g;
@@ -958,7 +950,6 @@ export function mountChizma(root) {
       state.selectedLines.clear();
       if (!only) state.selectedLines.add(lineId);
     }
-    closeInput();
     render();
   }
 
@@ -1033,7 +1024,7 @@ export function mountChizma(root) {
     q('tgQozon').classList.toggle('off', !state.showQozon);
   }
 
-  /* ---------------- MAGNIT / TEKISLASH ---------------- */
+  /* ---------------- TEKISLASH (snap) ---------------- */
   function nearestPointId(sx, sy, thr, excludeId) {
     let best = null, bd = thr;
     for (const p of state.points) {
@@ -1043,31 +1034,6 @@ export function mountChizma(root) {
       if (d <= bd) { bd = d; best = p.id; }
     }
     return best;
-  }
-
-  function toggleMagnet(pid) {
-    if (!getPoint(pid)) return;
-    if (state.magnets.has(pid)) state.magnets.delete(pid);
-    else state.magnets.add(pid);
-    render();
-  }
-
-  let hoverTimerPid = null, hoverTimer = null;
-  function handleHover(e) {
-    const rect = svg.getBoundingClientRect();
-    const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
-    let pid = null;
-    if (sx >= 0 && sy >= 0 && sx <= rect.width && sy <= rect.height) {
-      pid = nearestPointId(sx, sy, 14, null);
-    }
-    if (pid !== state.hoverPid) { state.hoverPid = pid; render(); }
-    if (pid !== hoverTimerPid) {
-      hoverTimerPid = pid;
-      clearTimeout(hoverTimer);
-      if (pid != null) {
-        hoverTimer = setTimeout(() => { if (state.hoverPid === pid) toggleMagnet(pid); }, 600);
-      }
-    }
   }
 
   function updateDrawPreview(e) {
@@ -1086,25 +1052,12 @@ export function mountChizma(root) {
     if (len < 0) len = 0;
     let snapPid = null, snapType = null;
 
-    // 1) Boshqa nuqtaga TEKISLASH (eng yuqori ustuvorlik).
+    // Boshqa nuqtaga TEKISLASH (snap).
     const bId = nearestPointId(sx, sy, 14, ai.pointId);
     if (bId != null) {
       const B = getPoint(bId);
       const signed = horiz ? (B.x - A.x) * sign : (B.y - A.y) * sign;
       if (signed > 0) { len = signed; snapPid = bId; snapType = 'point'; }
-    }
-    // 2) MAGNIT chizig'iga yopishish.
-    if (snapType !== 'point') {
-      const endX = A.x + v.dx * len, endY = A.y + v.dy * len;
-      let bestSnap = null, bestPx = 9 / state.scale;
-      for (const mpid of state.magnets) {
-        const M = getPoint(mpid); if (!M) continue;
-        const cand = horiz ? (M.x - A.x) * sign : (M.y - A.y) * sign;
-        if (cand <= 0) continue;
-        const dd = horiz ? Math.abs(A.x + v.dx * cand - endX) : Math.abs(A.y + v.dy * cand - endY);
-        if (dd < bestPx) { bestPx = dd; bestSnap = cand; }
-      }
-      if (bestSnap != null) { len = bestSnap; snapType = 'magnet'; }
     }
 
     ai.previewLen = len;
@@ -1197,16 +1150,8 @@ export function mountChizma(root) {
     render();
     lengthInput.focus();
   });
-  // Qutidan tashqariga bosilsa yopiladi (interaktiv elementlar bundan mustasno).
-  on(document, 'mousedown', (e) => {
-    if (!state.activeInput) return;
-    if (inputBox.contains(e.target)) return;
-    const cl = e.target.classList;
-    if (cl && (cl.contains('plus-hit') || cl.contains('seg-hit') || cl.contains('offset-hit') || cl.contains('editBtn'))) return;
-    closeInput(); render();
-  });
-
-  // ZOOM (g'ildirak).
+  // ZOOM (g'ildirak) — kiritish qutisi ochiq bo'lsa ham yopilmaydi,
+  // render ichida repositionInput() uni yangi joyga ko'chiradi.
   on(canvasWrap, 'wheel', (e) => {
     e.preventDefault();
     const rect = svg.getBoundingClientRect();
@@ -1216,7 +1161,6 @@ export function mountChizma(root) {
     state.scale *= factor;
     state.panX = mx - w.x * state.scale;
     state.panY = my - w.y * state.scale;
-    closeInput();
     render();
   }, { passive: false });
 
@@ -1233,17 +1177,20 @@ export function mountChizma(root) {
       finalizeDraw();
       return;
     }
+    // O'rta/o'ng tugma (pan) — chizish/kiritish rejimida ham ishlaydi,
+    // kiritish qutisi YOPILMAYDI (faqat Esc yopadi).
+    if (e.button === 1 || e.button === 2) {
+      e.preventDefault();
+      panning = true;
+      panStart = { x: e.clientX, y: e.clientY, panX: state.panX, panY: state.panY };
+      return;
+    }
     if (e.target !== svg) return;
     const rect = svg.getBoundingClientRect();
     if (e.button === 0) {
       selecting = true; selMoved = false; selShift = e.shiftKey;
       selStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       selCur = { ...selStart };
-      closeInput();
-    } else if (e.button === 1 || e.button === 2) {
-      panning = true;
-      panStart = { x: e.clientX, y: e.clientY, panX: state.panX, panY: state.panY };
-      closeInput();
     }
   });
 
@@ -1273,11 +1220,7 @@ export function mountChizma(root) {
       }
       return;
     }
-    if (state.activeInput) {
-      if (state.activeInput.mode === 'draw') updateDrawPreview(e);
-      return;
-    }
-    handleHover(e);
+    if (state.activeInput && state.activeInput.mode === 'draw') updateDrawPreview(e);
   });
 
   on(window, 'mouseup', () => {
@@ -1309,7 +1252,12 @@ export function mountChizma(root) {
 
   // Klaviatura qisqartmalari.
   on(window, 'keydown', (e) => {
-    if (state.activeInput) return;
+    // Kiritish/chizish rejimi FAQAT Esc bilan yopiladi — fokus qayerda
+    // bo'lishidan qat'i nazar (input ichidagi Esc o'zi to'xtatadi).
+    if (state.activeInput) {
+      if (e.key === 'Escape') { closeInput(); render(); }
+      return;
+    }
     // Boshqa input/textarea fokusta bo'lsa aralashmaymiz (zakas formasi).
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
@@ -1335,8 +1283,8 @@ export function mountChizma(root) {
   on(q('unitQosh'), 'change',    (e) => { state.unitQosh    = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitCorner'), 'change',  (e) => { state.unitCorner  = e.target.value; updatePanel(); saveStateLS(); });
 
-  on(q('tgDevor'), 'click', () => { state.showDevorPlus = !state.showDevorPlus; syncToggleButtons(); closeInput(); render(); });
-  on(q('tgQosh'), 'click',  () => { state.showQoshPlus  = !state.showQoshPlus;  syncToggleButtons(); closeInput(); render(); });
+  on(q('tgDevor'), 'click', () => { state.showDevorPlus = !state.showDevorPlus; syncToggleButtons(); render(); });
+  on(q('tgQosh'), 'click',  () => { state.showQoshPlus  = !state.showQoshPlus;  syncToggleButtons(); render(); });
   on(q('tgQozon'), 'click', () => { state.showQozon     = !state.showQozon;     syncToggleButtons(); render(); });
 
   function setColor(c) {
@@ -1407,7 +1355,6 @@ export function mountChizma(root) {
   return {
     centerView,
     destroy() {
-      clearTimeout(hoverTimer);
       if (_saveT) { clearTimeout(_saveT); _saveT = null; }
       themeObs.disconnect();
       resizeObs.disconnect();
