@@ -784,33 +784,8 @@ export function mountChizma(root) {
       svg.appendChild(dtext);
     }
 
-    // 4) "+" BELGILARI (chiziq rangiga qarab guruhlangan).
-    for (const p of state.points) {
-      if (!pointPlusVisible(p.id)) continue;
-      const s = worldToScreen(p.x, p.y);
-      const occ = occupiedDirs(p.id);
-      for (const dir in DIRS) {
-        if (occ.has(dir)) continue;
-        const v = DIRS[dir];
-        svg.appendChild(makePlus(s.x + v.dx * PLUS_OFFSET, s.y + v.dy * PLUS_OFFSET, p.id, dir));
-      }
-    }
-    for (const ln of state.lines) {
-      const grpVisible = ln.color === 'yellow' ? state.showQoshPlus : state.showDevorPlus;
-      if (!grpVisible) continue;
-      const a = getPoint(ln.a), b = getPoint(ln.b);
-      if (!a || !b) continue;
-      const s1 = worldToScreen(a.x, a.y), s2 = worldToScreen(b.x, b.y);
-      const mx = (s1.x + s2.x) / 2, my = (s1.y + s2.y) / 2;
-      let tx = b.x - a.x, ty = b.y - a.y;
-      const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
-      const perps = [{ x: -ty, y: tx }, { x: ty, y: -tx }];
-      for (const pv of perps) {
-        svg.appendChild(makeOffsetPlus(mx + pv.x * OFFSET_BTN, my + pv.y * OFFSET_BTN, ln.id, pv));
-      }
-    }
-
-    // 5) O'LCHOV YOZUVLARI (eng ustda — fon bilan).
+    // 4) O'LCHOV YOZUVLARI (fon bilan) — "+" belgilardan OLDIN chiziladi,
+    //    aks holda yozuv foni offset "+" ni bekitib, bosib bo'lmay qolardi.
     const LABEL_OFF = 13;
     for (const L of labels) {
       let x, y, anchor, baseline, ry;
@@ -840,6 +815,33 @@ export function mountChizma(root) {
       });
       label.textContent = L.text;
       svg.appendChild(label);
+    }
+
+    // 5) "+" BELGILARI (chiziq rangiga qarab guruhlangan) — eng ustda,
+    //    razmer yozuvi ustiga tushsa ham ko'rinadi va bosiladi.
+    for (const p of state.points) {
+      if (!pointPlusVisible(p.id)) continue;
+      const s = worldToScreen(p.x, p.y);
+      const occ = occupiedDirs(p.id);
+      for (const dir in DIRS) {
+        if (occ.has(dir)) continue;
+        const v = DIRS[dir];
+        svg.appendChild(makePlus(s.x + v.dx * PLUS_OFFSET, s.y + v.dy * PLUS_OFFSET, p.id, dir));
+      }
+    }
+    for (const ln of state.lines) {
+      const grpVisible = ln.color === 'yellow' ? state.showQoshPlus : state.showDevorPlus;
+      if (!grpVisible) continue;
+      const a = getPoint(ln.a), b = getPoint(ln.b);
+      if (!a || !b) continue;
+      const s1 = worldToScreen(a.x, a.y), s2 = worldToScreen(b.x, b.y);
+      const mx = (s1.x + s2.x) / 2, my = (s1.y + s2.y) / 2;
+      let tx = b.x - a.x, ty = b.y - a.y;
+      const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+      const perps = [{ x: -ty, y: tx }, { x: ty, y: -tx }];
+      for (const pv of perps) {
+        svg.appendChild(makeOffsetPlus(mx + pv.x * OFFSET_BTN, my + pv.y * OFFSET_BTN, ln.id, pv));
+      }
     }
 
     // 6) CHIZISH PREVIEW (punktir + jonli uzunlik + snap).
