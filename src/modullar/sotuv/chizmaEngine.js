@@ -101,12 +101,13 @@ const TEMPLATE = `
     <button type="button" class="tool" data-chz="btnDelete" title="Delete">&#128465; O'chirish</button>
     <button type="button" class="tool" data-chz="btnClear">&#10005; Tozalash</button>
     <span class="sep"></span>
-    <button type="button" class="tool" data-chz="btnFit" title="Chiziqlar chegarasigacha avtozoom — Z va E tugmalarini birga bosing">&#10530; Markazga (Z+E)</button>
+    <button type="button" class="tool" data-chz="btnFit" title="Chiziqlar chegarasigacha avtozoom — Ctrl+E">&#10530; Markazga (Ctrl+E)</button>
     <span class="chz-scale" data-chz="scaleInfo"></span>
     <span class="chz-tglbl">Belgilar (+):</span>
     <button type="button" class="tool tg" data-chz="tgDevor" title="Devor + belgilari — razmer ko'rinaveradi">Devor +</button>
     <button type="button" class="tool tg" data-chz="tgQosh" title="Qosh + belgilari — razmer ko'rinaveradi">Qosh +</button>
     <button type="button" class="tool tg" data-chz="tgQozon" title="Qozonlar ko'rinishi — hisobga ta'sir qilmaydi">Qozon</button>
+    <button type="button" class="tool tg" data-chz="tgRazmer" title="Chiziq ustidagi razmer yozuvlari (raqam + o'lchov birligi)">Razmerlar</button>
   </div>
   <div class="chz-main">
     <div class="chz-canvas" data-chz="canvasWrap">
@@ -166,7 +167,7 @@ const TEMPLATE = `
           <span style="color:var(--chz-accent)">o'ngdan-chapga</span> = kesib o'tganlar ham.<br>
         &bull; <b>Surish (pan)</b>: o'rta yoki o'ng tugmani bosib torting. G'ildirak — zoom.<br>
         &bull; Birlik: chizish — <b>default m</b>, offset — <b>default cm</b>. Panelda har detal o'z birligi.<br>
-        &bull; <b>Ctrl+Z/Ctrl+Y</b> — orqaga/oldinga; <b>Markazga (Z+E)</b> — chiziqlar chegarasigacha avtozoom.
+        &bull; <b>Ctrl+Z/Ctrl+Y</b> — orqaga/oldinga; <b>Markazga (Ctrl+E)</b> — chiziqlar chegarasigacha avtozoom.
       </div>
     </div>
   </div>
@@ -207,6 +208,7 @@ export function mountChizma(root) {
     showDevorPlus: true,
     showQoshPlus: false,
     showQozon: true,
+    showRazmer: true,
   };
 
   const svg         = q('svg');
@@ -777,19 +779,21 @@ export function mountChizma(root) {
       for (const p of [p1, p2]) {
         svg.appendChild(svgEl('line', { x1: p.x - dx * tk, y1: p.y - dy * tk, x2: p.x + dx * tk, y2: p.y + dy * tk, stroke: P.offset, 'stroke-width': 1 }));
       }
-      const tposx = (p1.x + p2.x) / 2 + dx * 10, tposy = (p1.y + p2.y) / 2 + dy * 10;
-      const dt = fmt(dist, L.offUnit || 'cm');
-      const wdt = dt.length * 6.0 + 6;
-      svg.appendChild(svgEl('rect', { x: tposx - wdt / 2, y: tposy - 8, width: wdt, height: 13, rx: 2, fill: P.labelBg }));
-      const dtext = svgEl('text', { x: tposx, y: tposy + 2.5, fill: P.offset, 'font-size': 10, 'text-anchor': 'middle' });
-      dtext.textContent = dt;
-      svg.appendChild(dtext);
+      if (state.showRazmer) {
+        const tposx = (p1.x + p2.x) / 2 + dx * 10, tposy = (p1.y + p2.y) / 2 + dy * 10;
+        const dt = fmt(dist, L.offUnit || 'cm');
+        const wdt = dt.length * 6.0 + 6;
+        svg.appendChild(svgEl('rect', { x: tposx - wdt / 2, y: tposy - 8, width: wdt, height: 13, rx: 2, fill: P.labelBg }));
+        const dtext = svgEl('text', { x: tposx, y: tposy + 2.5, fill: P.offset, 'font-size': 10, 'text-anchor': 'middle' });
+        dtext.textContent = dt;
+        svg.appendChild(dtext);
+      }
     }
 
     // 4) O'LCHOV YOZUVLARI (fon bilan) — "+" belgilardan OLDIN chiziladi,
     //    aks holda yozuv foni offset "+" ni bekitib, bosib bo'lmay qolardi.
     const LABEL_OFF = 13;
-    for (const L of labels) {
+    if (state.showRazmer) for (const L of labels) {
       let x, y, anchor, baseline, ry;
       if (L.blue) {
         x = L.mx; y = L.my; anchor = 'middle'; baseline = 'middle'; ry = y - 7;
@@ -1026,6 +1030,7 @@ export function mountChizma(root) {
     q('tgDevor').classList.toggle('off', !state.showDevorPlus);
     q('tgQosh').classList.toggle('off', !state.showQoshPlus);
     q('tgQozon').classList.toggle('off', !state.showQozon);
+    q('tgRazmer').classList.toggle('off', !state.showRazmer);
   }
 
   /* ---------------- TEKISLASH (snap) ---------------- */
@@ -1097,6 +1102,7 @@ export function mountChizma(root) {
           unitDevor: state.unitDevor, unitQosh: state.unitQosh,
           unitKazirok: state.unitKazirok, unitCorner: state.unitCorner,
           showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showQozon: state.showQozon,
+          showRazmer: state.showRazmer,
           scale: state.scale, panX: state.panX, panY: state.panY,
         }));
       } catch (e) { /* noop */ }
@@ -1122,6 +1128,7 @@ export function mountChizma(root) {
       state.showDevorPlus = o.showDevorPlus !== false;
       state.showQoshPlus = o.showQoshPlus === true;
       state.showQozon = o.showQozon !== false;
+      state.showRazmer = o.showRazmer !== false;
       if (o.scale) state.scale = o.scale;
       if (typeof o.panX === 'number') state.panX = o.panX;
       if (typeof o.panY === 'number') state.panY = o.panY;
@@ -1255,7 +1262,6 @@ export function mountChizma(root) {
   });
 
   // Klaviatura qisqartmalari.
-  const heldKeys = new Set();   // Z+E (zoom extents, AutoCAD uslubi) uchun
   on(window, 'keydown', (e) => {
     // Kiritish/chizish rejimi FAQAT Esc bilan yopiladi — fokus qayerda
     // bo'lishidan qat'i nazar (input ichidagi Esc o'zi to'xtatadi).
@@ -1269,16 +1275,11 @@ export function mountChizma(root) {
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    else if ((e.ctrlKey || e.metaKey) && k === 'e') { e.preventDefault(); centerView(); }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedLines.size > 0) {
       e.preventDefault(); deleteSelected();
-    } else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Z+E birga bosilsa — Markazga (zoom extents, AutoCAD'dagi kabi).
-      heldKeys.add(k);
-      if (heldKeys.has('z') && heldKeys.has('e')) { e.preventDefault(); centerView(); }
     }
   });
-  on(window, 'keyup', (e) => heldKeys.delete(e.key.toLowerCase()));
-  on(window, 'blur', () => heldKeys.clear());
 
   // Toolbar hodisalari.
   on(q('btnRed'), 'click', () => setColor('red'));
@@ -1297,6 +1298,7 @@ export function mountChizma(root) {
   on(q('tgDevor'), 'click', () => { state.showDevorPlus = !state.showDevorPlus; syncToggleButtons(); render(); });
   on(q('tgQosh'), 'click',  () => { state.showQoshPlus  = !state.showQoshPlus;  syncToggleButtons(); render(); });
   on(q('tgQozon'), 'click', () => { state.showQozon     = !state.showQozon;     syncToggleButtons(); render(); });
+  on(q('tgRazmer'), 'click', () => { state.showRazmer   = !state.showRazmer;    syncToggleButtons(); saveStateLS(); render(); });
 
   // Chiziqlar ro'yxati — DOIM yashirin boshlanadi, tugma bosilsa ochiladi.
   let showList = false;
@@ -1313,7 +1315,7 @@ export function mountChizma(root) {
     updateScaleInfo();
   }
 
-  // Markazga (Z+E) — FAQAT chiziqlar chegarasigacha avtozoom
+  // Markazga (Ctrl+E) — FAQAT chiziqlar chegarasigacha avtozoom
   // ("+" belgilari va yolg'iz boshlang'ich nuqta hisobga olinmaydi).
   function centerView() {
     const rect = svg.getBoundingClientRect();
