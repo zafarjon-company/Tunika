@@ -266,17 +266,18 @@ export function makeBlankItem(desc, tunikaBaza = [], lastTunikaId = '') {
     return {
       id, kind: desc.kind, productId: desc.kind,
       tunikaId: desc.tunikaId || oxirgi,
-      uzunlik: '', soni: '1', priceType: 'chakana', stanok: 'Chaprost',
+      uzunlik: '', soni: '0', priceType: 'chakana', stanok: 'Chaprost',
     };
   }
   if (desc.kind === 'metrli') {
+    // soni — latok uchun ichki ko'paytuvchi (UI'da ko'rsatilmaydi), 1 bo'lib qoladi.
     return {
       id, kind: 'metrli', metrliId: desc.metrliId,
       tunikaId: oxirgi, priceType: 'chakana', variantIndex: 0,
       uzunlik: '', soni: '1', zapas: '',
     };
   }
-  return { id, kind: 'aksessuar', aksId: desc.aksId, soni: '1' };
+  return { id, kind: 'aksessuar', aksId: desc.aksId, soni: '0' };
 }
 
 // Ikki satr orasidagi tahrir masofasi (Levenshtein) — imlo farqlarini topish uchun.

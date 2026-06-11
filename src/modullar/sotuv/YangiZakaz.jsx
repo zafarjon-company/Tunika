@@ -88,20 +88,31 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
   }, []);
 
   // Latok (metrli) uzunligi = kazirok umumiy, birlik xonasigacha tepaga yaxlitlangan.
-  // Zapasga tegmaymiz. Kazirok 0 bo'lsa (chizma bo'sh) — qo'lda kiritishga tegmaymiz.
+  // - Metri TAHRIRLANADI (qo'lda o'zgartirsa bo'ladi).
+  // - Kazirok umumiyda raqam o'zgarsa — qo'lda kiritilgan bo'lsa ham qayta avtomatik o'zgaradi.
+  // - Yangi (bo'sh) latok qo'shilsa — joriy qiymat bilan to'ladi.
+  // - Kanyoklar uchun avtomatik to'ldirish ISHLAMAYDI. Zapasga hech qachon tegilmaydi.
   const autoUzunlik = kazirokM > 0 ? String(Math.ceil(kazirokM)) : null;
+  const prevAutoRef = useRef(autoUzunlik);
   useEffect(() => {
+    const prev = prevAutoRef.current;
+    const kazirokChanged = autoUzunlik !== prev;
+    prevAutoRef.current = autoUzunlik;
     if (autoUzunlik == null) return;
     let changed = false;
     const items = draft.items.map((it) => {
-      if (it.kind === 'metrli' && String(it.uzunlik ?? '') !== autoUzunlik) {
+      if (it.kind !== 'metrli') return it;
+      const m = metrlilar.find((x) => x.id === it.metrliId);
+      if (m && isKanyokAny({ nomi: m.nomi })) return it; // kanyokka avtomatik tegmaymiz
+      const cur = String(it.uzunlik ?? '');
+      if ((kazirokChanged || cur === '') && cur !== autoUzunlik) {
         changed = true;
         return { ...it, uzunlik: autoUzunlik };
       }
       return it;
     });
     if (changed) setDraft({ ...draft, items });
-  }, [autoUzunlik, draft.items]);
+  }, [autoUzunlik, draft.items, metrlilar]);
 
   function updateItem(idx, patch) {
     setDraft({ ...draft, items: draft.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)) });
@@ -232,7 +243,6 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                 {draftCalc.items.map((item, idx) => (
                   <ItemRow key={item.id} idx={idx} item={item} removing={removingIds.has(item.id)}
                     tunikaBaza={tunikaBaza} metrlilar={metrlilar} colorOptions={colorOptions}
-                    autoUzunlik={autoUzunlik}
                     onUpdate={(patch) => updateItem(idx, patch)}
                     onDuplicate={() => duplicateItem(idx)}
                     onRemove={() => removeItem(idx)} />
@@ -416,11 +426,17 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
 }
 
 // ----- Bitta zakas qatori (kind bo'yicha) — accordion (yopiladigan) -----
-function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOptions = [], autoUzunlik = null, onUpdate, onDuplicate, onRemove }) {
+function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOptions = [], onUpdate, onDuplicate, onRemove }) {
   const rangOpts = item.rang && !colorOptions.includes(item.rang) ? [item.rang, ...colorOptions] : colorOptions;
   const isFilled = item.jamiSumma > 0;
-  const [open, setOpen] = useState(!isFilled); // to'ldirilgan bo'lsa — yopiq, yangi bo'lsa — ochiq
+  const [open, setOpen] = useState(false); // har doim yopiq qo'shiladi — faqat foydalanuvchi ochsa ochiladi
   const [confirmDel, setConfirmDel] = useState(false); // o'chirishdan oldin kichik tasdiq
+
+  // Metrli (latok/kanyok) uchun "necha bo'lak" — yopiq turganda ham ko'rinadi.
+  const metDef = item.kind === 'metrli' ? metrlilar.find((x) => x.id === item.metrliId) : null;
+  const metVariants = metDef ? metrliVariantlar(metDef) : [];
+  const metVar = metVariants[item.variantIndex || 0] || metVariants[0];
+  const bolakLabel = metVar ? `${metVar.son} bo'lak` : '—';
 
   return (
     <div className={`border rounded-xl bg-slate-50/50 overflow-hidden transition-colors ${removing ? 'anim-item-out' : 'anim-item-in'} ${open ? 'border-slate-900' : 'border-slate-200'}`}>
@@ -473,6 +489,22 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
           </button>
         </div>
       </div>
+
+      {/* ----- YOPIQ STRIP (metrli) — bo'lak ko'rinadi, metri va zapas tahrirlanadi ----- */}
+      {!open && item.kind === 'metrli' && (
+        <div className="flex items-end gap-2 px-2.5 pb-2.5 -mt-1">
+          <div className="flex-shrink-0">
+            <label className="block text-[11px] text-slate-500 mb-1">Bo'lak</label>
+            <div className="px-2.5 py-2 rounded-lg bg-slate-100 border-2 border-slate-200 text-xs font-semibold text-slate-600 whitespace-nowrap">{bolakLabel}</div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <NumField label="Uzunlik (m)" value={item.uzunlik} onChange={(v) => onUpdate({ uzunlik: v })} placeholder="0.00" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <NumField label="Zapas (m)" value={item.zapas} onChange={(v) => onUpdate({ zapas: v })} placeholder="0.00" optional />
+          </div>
+        </div>
+      )}
 
       {/* ----- TANA (tahrirlash maydonlari) ----- */}
       {open && (
@@ -547,17 +579,7 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
             </div>
           ) : item.kind === 'metrli' ? (
             <div className="grid grid-cols-2 gap-2">
-              {autoUzunlik != null ? (
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Uzunlik (m)</label>
-                  <div className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-slate-100 text-slate-700 tabular-nums text-sm flex items-center justify-between gap-2">
-                    <span className="font-semibold">{autoUzunlik}</span>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500 whitespace-nowrap">Chizmadan</span>
-                  </div>
-                </div>
-              ) : (
-                <NumField label="Uzunlik (m)" value={item.uzunlik} onChange={(v) => onUpdate({ uzunlik: v })} placeholder="0.00" />
-              )}
+              <NumField label="Uzunlik (m)" value={item.uzunlik} onChange={(v) => onUpdate({ uzunlik: v })} placeholder="0.00" />
               <NumField label="Zapas (m)" value={item.zapas} onChange={(v) => onUpdate({ zapas: v })} placeholder="0.00" optional />
             </div>
           ) : (
