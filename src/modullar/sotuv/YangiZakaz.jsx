@@ -25,9 +25,10 @@ function focusNextNav(e) {
 }
 
 // Raqamli maydon — inline tekshiruv (qizil chegara + silkinish + izoh)
-function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan katta son kiriting" }) {
+function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan katta son kiriting", optional = false }) {
   const num = parseFloat(value);
-  const invalid = value !== '' && (Number.isNaN(num) || num <= 0);
+  // optional maydon (masalan Zapas) — bo'sh ham, 0 ham, xohlagan son ham bo'laveradi.
+  const invalid = !optional && value !== '' && (Number.isNaN(num) || num <= 0);
   const [shake, setShake] = useState(false);
   const prev = useRef(false);
   useEffect(() => {
@@ -519,7 +520,7 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
           ) : item.kind === 'metrli' ? (
             <div className="grid grid-cols-2 gap-2">
               <NumField label="Uzunlik (m)" value={item.uzunlik} onChange={(v) => onUpdate({ uzunlik: v })} placeholder="0.00" />
-              <NumField label="Zapas (m)" value={item.zapas} onChange={(v) => onUpdate({ zapas: v })} placeholder="0.00" />
+              <NumField label="Zapas (m)" value={item.zapas} onChange={(v) => onUpdate({ zapas: v })} placeholder="0.00" optional />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
