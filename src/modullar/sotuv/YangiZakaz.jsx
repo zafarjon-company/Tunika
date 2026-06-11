@@ -506,6 +506,13 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
         </div>
       )}
 
+      {/* ----- YOPIQ STRIP (aksessuar) — dona/kg sonini yopiq turganda ham tahrirlash ----- */}
+      {!open && item.kind === 'aksessuar' && (
+        <div className="px-2.5 pb-2.5 -mt-1">
+          <NumField label={`Soni (${item.birlik || 'dona'})`} value={item.soni} onChange={(v) => onUpdate({ soni: v })} placeholder="0" />
+        </div>
+      )}
+
       {/* ----- TANA (tahrirlash maydonlari) ----- */}
       {open && (
         <div className="px-3 pb-3 space-y-2.5 border-t border-slate-200/70 pt-2.5">
