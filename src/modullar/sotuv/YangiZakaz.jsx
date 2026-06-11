@@ -56,7 +56,7 @@ function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan kat
 }
 import { DynamicPaymentsSection } from './Tolovlar.jsx';
 import { ChizmaCard } from './Chizma.jsx';
-import { readChizmaKazirokMeters } from './chizmaEngine.js';
+import { readChizmaLatokMeters, readChizmaQozon } from './chizmaEngine.js';
 
 // O'lchov ustuni: latok(metrli) → faqat metr; list/profnastil → metr × dona; aksessuar → dona/kg
 export function olchovDisp(it) {
@@ -77,26 +77,34 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved
   const [removingIds, setRemovingIds] = useState(() => new Set());
 
-  // Chizmadagi "Kazirok umumiy" (metr) — latok uzunligini avtomatik to'ldiradi.
-  const [kazirokM, setKazirokM] = useState(() => readChizmaKazirokMeters());
+  // Chizmadagi "Qosh (Latok) umumiy" (metr) — latok uzunligini avtomatik to'ldiradi.
+  const [latokM, setLatokM] = useState(() => readChizmaLatokMeters());
   useEffect(() => {
-    const onKazirok = (e) => setKazirokM(e?.detail?.meters || 0);
-    window.addEventListener('chizma:kazirok', onKazirok);
-    // Mount paytida joriy qiymatni ham olamiz (boshqa joyda o'zgargan bo'lsa).
-    setKazirokM(readChizmaKazirokMeters());
-    return () => window.removeEventListener('chizma:kazirok', onKazirok);
+    const onLatok = (e) => setLatokM(e?.detail?.meters || 0);
+    window.addEventListener('chizma:latok', onLatok);
+    setLatokM(readChizmaLatokMeters()); // mount paytida joriy qiymat
+    return () => window.removeEventListener('chizma:latok', onLatok);
   }, []);
 
-  // Latok (metrli) uzunligi = kazirok umumiy, birlik xonasigacha tepaga yaxlitlangan.
+  // Chizmadagi qozon soni { inner, outer } — Varyonka (Ichki/Tashqi) sonini to'ldiradi.
+  const [qozon, setQozon] = useState(() => readChizmaQozon());
+  useEffect(() => {
+    const onQozon = (e) => setQozon({ inner: e?.detail?.inner || 0, outer: e?.detail?.outer || 0 });
+    window.addEventListener('chizma:qozon', onQozon);
+    setQozon(readChizmaQozon());
+    return () => window.removeEventListener('chizma:qozon', onQozon);
+  }, []);
+
+  // Latok (metrli) uzunligi = Qosh (Latok) umumiy, birlik xonasigacha tepaga yaxlitlangan.
   // - Metri TAHRIRLANADI (qo'lda o'zgartirsa bo'ladi).
-  // - Kazirok umumiyda raqam o'zgarsa — qo'lda kiritilgan bo'lsa ham qayta avtomatik o'zgaradi.
+  // - Qosh umumiyda raqam o'zgarsa — qo'lda kiritilgan bo'lsa ham qayta avtomatik o'zgaradi.
   // - Yangi (bo'sh) latok qo'shilsa — joriy qiymat bilan to'ladi.
   // - Kanyoklar uchun avtomatik to'ldirish ISHLAMAYDI. Zapasga hech qachon tegilmaydi.
-  const autoUzunlik = kazirokM > 0 ? String(Math.ceil(kazirokM)) : null;
+  const autoUzunlik = latokM > 0 ? String(Math.ceil(latokM)) : null;
   const prevAutoRef = useRef(autoUzunlik);
   useEffect(() => {
     const prev = prevAutoRef.current;
-    const kazirokChanged = autoUzunlik !== prev;
+    const latokChanged = autoUzunlik !== prev;
     prevAutoRef.current = autoUzunlik;
     if (autoUzunlik == null) return;
     let changed = false;
@@ -105,7 +113,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
       const m = metrlilar.find((x) => x.id === it.metrliId);
       if (m && isKanyokAny({ nomi: m.nomi })) return it; // kanyokka avtomatik tegmaymiz
       const cur = String(it.uzunlik ?? '');
-      if ((kazirokChanged || cur === '') && cur !== autoUzunlik) {
+      if ((latokChanged || cur === '') && cur !== autoUzunlik) {
         changed = true;
         return { ...it, uzunlik: autoUzunlik };
       }
@@ -113,6 +121,33 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
     });
     if (changed) setDraft({ ...draft, items });
   }, [autoUzunlik, draft.items, metrlilar]);
+
+  // Varyonka (Ichki) soni = ichki qozon; Varyonka (Tashqi) soni = oddiy (tashqi) qozon.
+  // Nomi bo'yicha aniqlanadi (draftCalc.items'da nomi bor). Tashqi ichkilarni sanamaydi.
+  const prevQozonRef = useRef(qozon);
+  useEffect(() => {
+    const prev = prevQozonRef.current;
+    const qozonChanged = prev.inner !== qozon.inner || prev.outer !== qozon.outer;
+    prevQozonRef.current = qozon;
+    let changed = false;
+    const items = draft.items.map((it) => {
+      if (it.kind !== 'aksessuar') return it;
+      const calc = draftCalc.items.find((c) => c.id === it.id);
+      const nom = (calc?.nomi || '').toLowerCase();
+      if (!/varyonka/.test(nom)) return it;
+      const target = /ichki/.test(nom) ? qozon.inner : (/tashqi/.test(nom) ? qozon.outer : null);
+      if (target == null) return it;
+      const cur = String(it.soni ?? '');
+      const tStr = String(target);
+      // Qozon o'zgarsa yoki yangi/bo'sh (0) varyonka bo'lsa — qozon soniga tenglashtiramiz.
+      if ((qozonChanged || cur === '' || cur === '0') && cur !== tStr) {
+        changed = true;
+        return { ...it, soni: tStr };
+      }
+      return it;
+    });
+    if (changed) setDraft({ ...draft, items });
+  }, [qozon, draft.items, draftCalc.items]);
 
   function updateItem(idx, patch) {
     setDraft({ ...draft, items: draft.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)) });
