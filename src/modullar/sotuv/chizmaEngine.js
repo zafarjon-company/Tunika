@@ -19,6 +19,14 @@ const SNAP_PX     = 14;   // yopishish (snap) chegarasi, pikselda
 
 /* O'lcham birliklari — 1 birlik necha millimetrga teng */
 const UNITS = { mm: 1, cm: 10, m: 1000 };
+const KAZIROK_M_KEY = 'xona-chizma-kazirok-m'; // kazirok umumiy (metr) — React shu yerdan o'qiydi
+
+// Chizma "Kazirok umumiy" qiymatini (metrda) o'qish. Latok uzunligini
+// avtomatik to'ldirish uchun (chizma yopiq bo'lsa ham localStorage'dan).
+export function readChizmaKazirokMeters() {
+  try { return parseFloat(localStorage.getItem(KAZIROK_M_KEY)) || 0; }
+  catch (e) { return 0; }
+}
 
 const STORAGE_KEY = 'xona-chizma-v1';
 
@@ -677,12 +685,24 @@ export function mountChizma(root) {
     const lenEl = q('kazirokLen');
     let totRed = 0;
     for (const l of state.lines) if (l.color === 'red') totRed += l.length;
-    if (totRed <= 0) { lenEl.textContent = '—'; return; }
+    if (totRed <= 0) { lenEl.textContent = '—'; publishKazirok(0); return; }
 
     let sub = 0;
     for (const c of computeBlueCorners()) if (c.concave) sub += c.w + c.h;
 
-    lenEl.textContent = fmt(totRed - sub, state.unitKazirok);
+    const mm = totRed - sub;
+    lenEl.textContent = fmt(mm, state.unitKazirok);
+    publishKazirok(mm / UNITS.m); // metrda — latok uzunligi shu bo'yicha to'ladi
+  }
+
+  // Kazirok umumiy (metr) qiymatini saqlab, tashqariga (React) xabar beramiz.
+  let lastKazirokM = null;
+  function publishKazirok(meters) {
+    const m = Math.max(0, meters || 0);
+    if (m === lastKazirokM) return;
+    lastKazirokM = m;
+    try { localStorage.setItem(KAZIROK_M_KEY, String(m)); } catch (e) { /* noop */ }
+    try { window.dispatchEvent(new CustomEvent('chizma:kazirok', { detail: { meters: m } })); } catch (e) { /* noop */ }
   }
 
   /* ---------------- RENDER ---------------- */
