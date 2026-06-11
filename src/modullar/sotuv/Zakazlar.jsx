@@ -20,10 +20,11 @@ const stripNarxTuri = (s) => (s || '').replace(/\s*\((Optom|Chakana)\)/g, '').tr
 
 export function itemDisp(it) {
   if (it.nomi !== undefined) {
+    const zapas = parseFloat(it.zapas) || 0;
     const olchov = it.kind === 'aksessuar'
       ? `${it.soni} ${it.birlik || 'dona'}`
       : it.kind === 'metrli'
-        ? `${it.uzunlik || 0} metr`
+        ? (zapas > 0 ? `${it.uzunlik || 0} + ${zapas} zapas metr` : `${it.uzunlik || 0} metr`)
         : `${it.uzunlik || 0} metr × ${it.soni} dona`;
     return { nomi: it.nomi, tafsilot: stripNarxTuri(it.tafsilot), olchov, jami: it.jamiSumma };
   }

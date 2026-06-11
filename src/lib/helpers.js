@@ -226,11 +226,12 @@ export function calcItem(item, ctx = {}) {
     const base = item.priceType === 'optom' ? Number(tunika.optom) : Number(tunika.chakana);
     const birBirlikNarxi = base / (v.son || 1) + metrliAddon(m);
     const tanNarxBirlik = Number(tunika.optom) / (v.son || 1) + metrliAddon(m); // tan narx = optom asosida
-    const jamiMeyor = uzunlik * soni;
+    const zapas = parseFloat(item.zapas) || 0; // qo'shimcha (zapas) metr — umumiy metrga qo'shiladi
+    const jamiMeyor = uzunlik * soni + zapas;
     return applyOverride({
       nomi: m.nomi,
       tafsilot: `${tunika.nomi} · ${v.son} bo'lak (${v.razmer})`,
-      birlik: 'metr', soni, uzunlik, birBirlikNarxi, jamiMeyor,
+      birlik: 'metr', soni, uzunlik, zapas, birBirlikNarxi, jamiMeyor,
       jamiSumma: jamiMeyor * birBirlikNarxi,
       bolishLabel: `${v.son} bo'lakka (${v.razmer})`,
       rang: rangTozala(tunika.nomi),
@@ -272,7 +273,7 @@ export function makeBlankItem(desc, tunikaBaza = [], lastTunikaId = '') {
     return {
       id, kind: 'metrli', metrliId: desc.metrliId,
       tunikaId: oxirgi, priceType: 'chakana', variantIndex: 0,
-      uzunlik: '', soni: '1',
+      uzunlik: '', soni: '1', zapas: '',
     };
   }
   return { id, kind: 'aksessuar', aksId: desc.aksId, soni: '1' };

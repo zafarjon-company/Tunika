@@ -59,7 +59,10 @@ import { ChizmaCard } from './Chizma.jsx';
 // O'lchov ustuni: latok(metrli) → faqat metr; list/profnastil → metr × dona; aksessuar → dona/kg
 export function olchovDisp(it) {
   if (it.kind === 'aksessuar') return `${it.soni} ${it.birlik || 'dona'}`;
-  if (it.kind === 'metrli') return `${it.uzunlik || 0} metr`;
+  if (it.kind === 'metrli') {
+    const z = parseFloat(it.zapas) || 0;
+    return z > 0 ? `${it.uzunlik || 0} + ${z} zapas metr` : `${it.uzunlik || 0} metr`;
+  }
   return `${it.uzunlik || 0} metr × ${it.soni} dona`;
 }
 
@@ -514,7 +517,10 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
               )}
             </div>
           ) : item.kind === 'metrli' ? (
-            <NumField label="Uzunlik (m)" value={item.uzunlik} onChange={(v) => onUpdate({ uzunlik: v })} placeholder="0.00" />
+            <div className="grid grid-cols-2 gap-2">
+              <NumField label="Uzunlik (m)" value={item.uzunlik} onChange={(v) => onUpdate({ uzunlik: v })} placeholder="0.00" />
+              <NumField label="Zapas (m)" value={item.zapas} onChange={(v) => onUpdate({ zapas: v })} placeholder="0.00" />
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <NumField label="Uzunlik (m)" value={item.uzunlik} onChange={(v) => onUpdate({ uzunlik: v })} placeholder="0.00" />
