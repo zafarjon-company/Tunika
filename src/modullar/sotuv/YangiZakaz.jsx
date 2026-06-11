@@ -181,10 +181,6 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                 <Package className="w-12 h-12 mx-auto mb-2 text-slate-300" />
                 <p className="text-sm text-slate-400 mb-3">Hali tovar qo'shilmagan</p>
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <button onClick={onOpenProductPicker}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800">
-                    <Plus className="w-4 h-4" /> Birinchi tovarni qo'shing
-                  </button>
                   {canCopyLast && (
                     <div className="inline-flex rounded-lg border-2 border-slate-300 overflow-hidden">
                       <button onClick={() => onCopyLast('joriy')} title="Tovarlar joriy katalog narxida"

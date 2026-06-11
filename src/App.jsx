@@ -775,18 +775,27 @@ export default function App() {
     showToast(msg || 'Holat o\'zgartirildi');
   }
 
-  function onProductSelected(desc) {
+  function onProductSelected(descs) {
+    // Picker bir nechta tovarni belgilab "Saqlash" qiladi — massiv keladi.
+    // (Eski bitta-tovar chaqiruvlari ham ishlashi uchun yagona obyektni ham qabul qilamiz.)
+    const list = Array.isArray(descs) ? descs : [descs];
+    if (!list.length) { setProductPicker(false); return; }
     // Oxirgi tanlangan List/tunikani eslab qolamiz — keyingi tovarda ham o'sha tursin
-    const lastTunikaId = [...draft.items].reverse().find((it) => it.tunikaId)?.tunikaId || '';
-    const item = makeBlankItem(desc, tunikaBaza, lastTunikaId);
-    // Aksessuarga rang: qoziq lenta/germetika — rangsiz; semichka 3,1 — "xomid"; aks holda — List rangi
-    if (item.kind === 'aksessuar') {
-      const a = aksessuarlar.find((x) => x.id === item.aksId);
-      const nom = (a?.nomi || '');
-      if (!aksRangKerak(nom)) item.rang = '';
-      else { const t = tunikaBaza.find((x) => x.id === lastTunikaId); item.rang = t ? rangTozala(t.nomi) : ''; }
+    let lastTunikaId = [...draft.items].reverse().find((it) => it.tunikaId)?.tunikaId || '';
+    const newItems = [];
+    for (const desc of list) {
+      const item = makeBlankItem(desc, tunikaBaza, lastTunikaId);
+      // Aksessuarga rang: qoziq lenta/germetika — rangsiz; semichka 3,1 — "xomid"; aks holda — List rangi
+      if (item.kind === 'aksessuar') {
+        const a = aksessuarlar.find((x) => x.id === item.aksId);
+        const nom = (a?.nomi || '');
+        if (!aksRangKerak(nom)) item.rang = '';
+        else { const t = tunikaBaza.find((x) => x.id === lastTunikaId); item.rang = t ? rangTozala(t.nomi) : ''; }
+      }
+      if (item.tunikaId) lastTunikaId = item.tunikaId; // keyingi tovarlar shu Listni meros olsin
+      newItems.push(item);
     }
-    setDraft({ ...draft, items: [...draft.items, item] });
+    setDraft({ ...draft, items: [...draft.items, ...newItems] });
     setProductPicker(false);
   }
 

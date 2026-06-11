@@ -3,15 +3,17 @@
 //  ProductPickerModal, ClientPickerModal, MasterPickerModal
 // ============================================================
 import React, { useState } from 'react';
-import { Trash2, ChevronLeft, ChevronRight, Layers, Package, Ruler, Search } from 'lucide-react';
+import { Trash2, ChevronLeft, Layers, Package, Ruler, Search, Check } from 'lucide-react';
 import { FullModal, PhoneInput } from '../../components/ui.jsx';
 import { fmt, genId, metrliVariantlar } from '../../lib/helpers.js';
 import { BOSHQA_USTA } from '../../lib/constants.js';
 
-// 2 bosqichli guruhli tanlov: guruh -> tovar
+// 2 bosqichli guruhli ko'p tanlov: guruh -> tovarlarni belgilash -> Saqlash.
+// Saqlaganda tanlanganlar GURUHLAR ketma-ketligi va har guruhdagi tartib bo'yicha qo'shiladi.
 export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarlar = [], onSelect, onClose }) {
   const [sel, setSel] = useState(null);
   const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState(() => new Set()); // belgilangan tovarlar: `${g.key}-${item.id}`
 
   const groups = [
     { key: 'tunika',     label: 'Listlar',      kind: 'tunika',     icon: Layers,  items: tunikaBaza,
@@ -34,18 +36,45 @@ export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarl
         .map((item) => ({ g, item })))
     : [];
 
-  function pick(g, item) {
-    if (g.kind === 'metrli') onSelect({ kind: 'metrli', metrliId: item.id });
-    else if (g.kind === 'aksessuar') onSelect({ kind: 'aksessuar', aksId: item.id });
-    else onSelect({ kind: g.kind, tunikaId: item.id });
+  const keyOf = (g, item) => `${g.key}-${item.id}`;
+
+  function descOf(g, item) {
+    if (g.kind === 'metrli') return { kind: 'metrli', metrliId: item.id };
+    if (g.kind === 'aksessuar') return { kind: 'aksessuar', aksId: item.id };
+    return { kind: g.kind, tunikaId: item.id };
   }
 
-  // Bitta tovar qatori (ham qidiruvda, ham guruh ichida ishlatiladi)
+  function toggle(g, item) {
+    const k = keyOf(g, item);
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  }
+
+  function save() {
+    // Guruhlar ketma-ketligi, har guruhda esa tovar tartibi bo'yicha yig'amiz.
+    const out = [];
+    for (const g of groups) {
+      for (const item of g.items) {
+        if (picked.has(keyOf(g, item))) out.push(descOf(g, item));
+      }
+    }
+    if (out.length) onSelect(out);
+    onClose();
+  }
+
+  // Bitta tovar qatori — belgilash (checkbox) bilan
   function ItemBtn({ g, item, badge = false }) {
+    const checked = picked.has(keyOf(g, item));
     return (
-      <button onClick={() => pick(g, item)}
-        className="w-full text-left p-3 rounded-xl border-2 border-slate-200 hover:border-slate-900 transition flex items-center justify-between gap-2">
+      <button onClick={() => toggle(g, item)}
+        className={`w-full text-left p-3 rounded-xl border-2 transition flex items-center justify-between gap-2 ${checked ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-900'}`}>
         <div className="min-w-0 flex items-center gap-2.5">
+          <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${checked ? 'bg-slate-900 border-slate-900 text-white' : 'border-slate-300'}`}>
+            {checked && <Check className="w-3.5 h-3.5" />}
+          </span>
           <g.icon className="w-4 h-4 text-slate-500 flex-shrink-0" />
           <div className="min-w-0">
             <div className="font-bold text-sm truncate flex items-center gap-1.5">
@@ -55,10 +84,12 @@ export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarl
             <div className="text-[11px] text-slate-400 tabular-nums">{g.getHint(item)}</div>
           </div>
         </div>
-        <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
       </button>
     );
   }
+
+  // Guruh tugmasida — shu guruhdan nechta belgilanganini ko'rsatamiz
+  const pickedInGroup = (g) => g.items.reduce((n, item) => n + (picked.has(keyOf(g, item)) ? 1 : 0), 0);
 
   return (
     <FullModal onClose={onClose} title={q ? 'Qidiruv natijasi' : group ? group.label : 'Guruhni tanlang'}>
@@ -79,14 +110,20 @@ export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarl
           )
         ) : !group ? (
           <div className="grid grid-cols-2 gap-2">
-            {groups.map((g) => (
-              <button key={g.key} onClick={() => setSel(g.key)}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-slate-200 hover:border-slate-900 transition">
-                <g.icon className="w-6 h-6 text-slate-700" />
-                <span className="font-bold text-sm">{g.label}</span>
-                <span className="text-[11px] text-slate-400">{g.items.length} ta</span>
-              </button>
-            ))}
+            {groups.map((g) => {
+              const n = pickedInGroup(g);
+              return (
+                <button key={g.key} onClick={() => setSel(g.key)}
+                  className="relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-slate-200 hover:border-slate-900 transition">
+                  {n > 0 && (
+                    <span className="absolute top-2 right-2 min-w-5 h-5 px-1.5 rounded-full bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">{n}</span>
+                  )}
+                  <g.icon className="w-6 h-6 text-slate-700" />
+                  <span className="font-bold text-sm">{g.label}</span>
+                  <span className="text-[11px] text-slate-400">{g.items.length} ta</span>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <>
@@ -98,6 +135,22 @@ export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarl
             ) : group.items.map((item) => <ItemBtn key={item.id} g={group} item={item} />)}
           </>
         )}
+      </div>
+
+      {/* Pastki panel — Saqlash / Bekor qilish (modal ichida yopishib turadi) */}
+      <div className="sticky bottom-0 bg-white border-t border-slate-100 p-3 flex items-center gap-2">
+        <span className="text-xs text-slate-500 font-medium flex-shrink-0 pl-1">
+          {picked.size > 0 ? `${picked.size} ta belgilandi` : 'Tovarlarni belgilang'}
+        </span>
+        <div className="flex-1" />
+        <button onClick={onClose}
+          className="px-4 py-2 rounded-lg border-2 border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50">
+          Bekor qilish
+        </button>
+        <button onClick={save} disabled={picked.size === 0}
+          className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed">
+          Saqlash
+        </button>
       </div>
     </FullModal>
   );
