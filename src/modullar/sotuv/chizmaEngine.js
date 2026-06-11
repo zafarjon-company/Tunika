@@ -154,7 +154,12 @@ const TEMPLATE = `
         </label>
       </div>
       <div class="chz-list" data-chz="lineList" style="display:none"></div>
-      <div class="chz-hint">
+      <div class="chz-listhead">
+        <button type="button" class="chz-listbtn" data-chz="tgHint" title="Qo'llanma / yordamni ko'rsatish / yashirish">
+          <span class="chev">&#9656;</span> Qo'llanma
+        </button>
+      </div>
+      <div class="chz-hint" data-chz="hintBox" style="display:none">
         &bull; <span style="color:var(--chz-accent)"><b>+</b></span> &rarr; yangi chiziq (uzunlik &rarr; Enter).<br>
         &bull; <span style="color:var(--chz-offset)"><b>Offset +</b></span> &rarr; <b>faqat o'sha chiziq</b> shu tomonga offset bo'ladi (masofa kiriting).
           Yonidagi chiziq ham offset qilinsa — burchak avtomatik tutashadi (fillet).<br>
@@ -1306,6 +1311,14 @@ export function mountChizma(root) {
     showList = !showList;
     q('lineList').style.display = showList ? '' : 'none';
     q('tgList').classList.toggle('open', showList);
+  });
+
+  // Qo'llanma (yordam matni) — DOIM yashirin boshlanadi, tugma bosilsa ochiladi.
+  let showHint = false;
+  on(q('tgHint'), 'click', () => {
+    showHint = !showHint;
+    q('hintBox').style.display = showHint ? '' : 'none';
+    q('tgHint').classList.toggle('open', showHint);
   });
 
   function setColor(c) {
