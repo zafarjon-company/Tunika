@@ -76,6 +76,12 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
   const hasItems = draft.items.length > 0;
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved
   const [removingIds, setRemovingIds] = useState(() => new Set());
+  const [confirmClearAll, setConfirmClearAll] = useState(false); // "Hammasini o'chirish" tasdig'i
+
+  function clearAllItems() {
+    setDraft({ ...draft, items: [] });
+    setConfirmClearAll(false);
+  }
 
   // Chizmadagi "Qosh (Latok) umumiy" (metr) — latok uzunligini avtomatik to'ldiradi.
   const [latokM, setLatokM] = useState(() => readChizmaLatokMeters());
@@ -246,7 +252,26 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
 
           {/* TOVARLAR */}
           <Card>
-            <SectionTitle icon={ShoppingCart}>Tovarlar ({draft.items.length})</SectionTitle>
+            <div className="flex items-start justify-between gap-2">
+              <SectionTitle icon={ShoppingCart}>Tovarlar ({draft.items.length})</SectionTitle>
+              {hasItems && (
+                confirmClearAll ? (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-[11px] text-slate-500 hidden sm:inline">Haqiqatdan ham hammasini o'chirmoqchimisiz?</span>
+                    <span className="text-[11px] text-slate-500 sm:hidden">O'chirilsinmi?</span>
+                    <button onClick={clearAllItems} aria-label="Hammasini o'chirishni tasdiqlash"
+                      className="px-2.5 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-700">Ha</button>
+                    <button onClick={() => setConfirmClearAll(false)} aria-label="Bekor qilish"
+                      className="px-2.5 py-1 rounded-lg border border-slate-300 text-slate-600 text-[11px] font-semibold hover:bg-slate-50">Yo'q</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmClearAll(true)}
+                    className="flex items-center gap-1 flex-shrink-0 text-[11px] font-semibold text-slate-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50">
+                    <Trash2 className="w-3.5 h-3.5" /> Hammasini o'chirish
+                  </button>
+                )
+              )}
+            </div>
             {!hasItems ? (
               <div className="text-center py-7 border-2 border-dashed border-slate-200 rounded-lg">
                 <Package className="w-12 h-12 mx-auto mb-2 text-slate-300" />
