@@ -95,59 +95,53 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
     return () => window.removeEventListener('chizma:qozon', onQozon);
   }, []);
 
-  // Latok (metrli) uzunligi = Qosh (Latok) umumiy, birlik xonasigacha tepaga yaxlitlangan.
-  // - Metri TAHRIRLANADI (qo'lda o'zgartirsa bo'ladi).
-  // - Qosh umumiyda raqam o'zgarsa — qo'lda kiritilgan bo'lsa ham qayta avtomatik o'zgaradi.
-  // - Yangi (bo'sh) latok qo'shilsa — joriy qiymat bilan to'ladi.
-  // - Kanyoklar uchun avtomatik to'ldirish ISHLAMAYDI. Zapasga hech qachon tegilmaydi.
+  // Chizmaga bog'liq avtomatik to'ldirish — BITTA effekt (aks holda latok va
+  // varyonka effektlari bir-birini bekor qiladi: ikkalasi eski draft'dan setDraft qiladi).
+  //  • Latok (metrli, KANYOK EMAS) uzunligi = Qosh (Latok) umumiy (tepaga yaxlitlangan).
+  //    Tahrirlanadi; Qosh umumiy o'zgarsa qo'lda kiritilgan bo'lsa ham qayta o'zgaradi.
+  //  • Varyonka (aksessuar) soni: Ichki → ichki qozon, Tashqi → oddiy (tashqi) qozon.
+  //  • KANYOKLARGA tegilmaydi. Zapasga hech qachon tegilmaydi.
   const autoUzunlik = latokM > 0 ? String(Math.ceil(latokM)) : null;
   const prevAutoRef = useRef(autoUzunlik);
-  useEffect(() => {
-    const prev = prevAutoRef.current;
-    const latokChanged = autoUzunlik !== prev;
-    prevAutoRef.current = autoUzunlik;
-    if (autoUzunlik == null) return;
-    let changed = false;
-    const items = draft.items.map((it) => {
-      if (it.kind !== 'metrli') return it;
-      const m = metrlilar.find((x) => x.id === it.metrliId);
-      if (m && isKanyokAny({ nomi: m.nomi })) return it; // kanyokka avtomatik tegmaymiz
-      const cur = String(it.uzunlik ?? '');
-      if ((latokChanged || cur === '') && cur !== autoUzunlik) {
-        changed = true;
-        return { ...it, uzunlik: autoUzunlik };
-      }
-      return it;
-    });
-    if (changed) setDraft({ ...draft, items });
-  }, [autoUzunlik, draft.items, metrlilar]);
-
-  // Varyonka (Ichki) soni = ichki qozon; Varyonka (Tashqi) soni = oddiy (tashqi) qozon.
-  // Nomi bo'yicha aniqlanadi (draftCalc.items'da nomi bor). Tashqi ichkilarni sanamaydi.
   const prevQozonRef = useRef(qozon);
   useEffect(() => {
-    const prev = prevQozonRef.current;
-    const qozonChanged = prev.inner !== qozon.inner || prev.outer !== qozon.outer;
+    const latokChanged = autoUzunlik !== prevAutoRef.current;
+    const qozonChanged = prevQozonRef.current.inner !== qozon.inner || prevQozonRef.current.outer !== qozon.outer;
+    prevAutoRef.current = autoUzunlik;
     prevQozonRef.current = qozon;
     let changed = false;
     const items = draft.items.map((it) => {
-      if (it.kind !== 'aksessuar') return it;
-      const calc = draftCalc.items.find((c) => c.id === it.id);
-      const nom = (calc?.nomi || '').toLowerCase();
-      if (!/varyonka/.test(nom)) return it;
-      const target = /ichki/.test(nom) ? qozon.inner : (/tashqi/.test(nom) ? qozon.outer : null);
-      if (target == null) return it;
-      const cur = String(it.soni ?? '');
-      const tStr = String(target);
-      // Qozon o'zgarsa yoki yangi/bo'sh (0) varyonka bo'lsa — qozon soniga tenglashtiramiz.
-      if ((qozonChanged || cur === '' || cur === '0') && cur !== tStr) {
-        changed = true;
-        return { ...it, soni: tStr };
+      // --- Latok (metrli, kanyok emas) uzunligi ---
+      if (it.kind === 'metrli') {
+        const m = metrlilar.find((x) => x.id === it.metrliId);
+        if (m && isKanyokAny({ nomi: m.nomi })) return it; // kanyokka tegmaymiz
+        if (autoUzunlik == null) return it;
+        const cur = String(it.uzunlik ?? '');
+        if ((latokChanged || cur === '') && cur !== autoUzunlik) {
+          changed = true;
+          return { ...it, uzunlik: autoUzunlik };
+        }
+        return it;
+      }
+      // --- Varyonka (aksessuar) soni = qozon ---
+      if (it.kind === 'aksessuar') {
+        const calc = draftCalc.items.find((c) => c.id === it.id);
+        const nom = (calc?.nomi || '').toLowerCase();
+        if (!/varyonka/.test(nom)) return it;
+        const target = /ichki/.test(nom) ? qozon.inner : (/tashqi/.test(nom) ? qozon.outer : null);
+        if (target == null) return it;
+        const cur = String(it.soni ?? '');
+        const tStr = String(target);
+        if ((qozonChanged || cur === '' || cur === '0') && cur !== tStr) {
+          changed = true;
+          return { ...it, soni: tStr };
+        }
+        return it;
       }
       return it;
     });
     if (changed) setDraft({ ...draft, items });
-  }, [qozon, draft.items, draftCalc.items]);
+  }, [autoUzunlik, qozon, draft.items, draftCalc.items, metrlilar]);
 
   function updateItem(idx, patch) {
     setDraft({ ...draft, items: draft.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)) });

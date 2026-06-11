@@ -779,8 +779,8 @@ export function mountChizma(root) {
     for (const p of state.points) {
       const s = worldToScreen(p.x, p.y);
       svg.appendChild(svgEl('circle', {
-        cx: s.x, cy: s.y, r: 3.5,
-        fill: P.point, stroke: P.pointStroke, 'stroke-width': 1,
+        cx: s.x, cy: s.y, r: 1.6,
+        fill: P.point, stroke: P.pointStroke, 'stroke-width': 0.75,
       }));
     }
 
