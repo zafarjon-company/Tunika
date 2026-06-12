@@ -143,6 +143,11 @@ const TEMPLATE = `
         <span class="val" data-chz="kazirokLen">&mdash;</span>
         <select class="rowUnit" data-chz="unitKazirok"><option>mm</option><option>cm</option><option selected>m</option></select>
       </div>
+      <div class="chz-stat kazirok">
+        <span class="lbl">Kazirok yuzasi:</span>
+        <span class="val" data-chz="kazirokArea">&mdash;</span>
+        <select class="rowUnit" data-chz="unitKazirokArea"><option value="mm">mm&sup2;</option><option value="cm">cm&sup2;</option><option value="m" selected>m&sup2;</option></select>
+      </div>
       <div class="chz-stat devor">
         <span class="lbl">Devor umumiy:</span>
         <span class="val" data-chz="totalRed">0</span>
@@ -221,7 +226,7 @@ export function mountChizma(root) {
     nextLineId: 1,
     color: 'red',          // "red" (Devor) | "yellow" (Qosh)
     unit: 'm',
-    unitDevor: 'm', unitQosh: 'm', unitKazirok: 'm', unitCorner: 'cm',
+    unitDevor: 'm', unitQosh: 'm', unitKazirok: 'm', unitKazirokArea: 'm', unitCorner: 'cm',
     selectedLines: new Set(),
     scale: 1 / 50,         // piksel / mm
     panX: 0, panY: 0,
@@ -622,6 +627,13 @@ export function mountChizma(root) {
     const cv = (v) => { const r = Math.round(v / UNITS[unit] * 100) / 100; return Number.isInteger(r) ? r : parseFloat(r.toFixed(2)); };
     return cv(wMm) + '×' + cv(hMm) + ' ' + unit;
   }
+  // Yuza (kvadrat) formatlash — kirish mm², chiqish tanlangan birlik kvadrati.
+  function fmtArea(mm2, unit) {
+    unit = unit || 'm';
+    const v = mm2 / (UNITS[unit] * UNITS[unit]);
+    const r = Math.round(v * 100) / 100;
+    return (Number.isInteger(r) ? r : parseFloat(r.toFixed(2))) + ' ' + unit + '²';
+  }
 
   /* ---------------- QOZON / KAZIROK HISOBI ---------------- */
   // Bir rangdagi chiziqlar uchrashib BURILGAN nuqtalari = burchaklar.
@@ -688,17 +700,72 @@ export function mountChizma(root) {
     return corners;
   }
 
+  // Bir rangdagi chiziqlar hosil qilgan YOPIQ kontur(lar) yuzasi (mm²).
+  // Konturni qirralardan kuzatib (trace), shoelace bilan hisoblaymiz;
+  // bir nechta yopiq halqa bo'lsa, yuzalar qo'shiladi. Yopilmagan
+  // (ochiq) qism hisobga olinmaydi.
+  function contourArea(color) {
+    const lines = state.lines.filter((l) => l.color === color);
+    if (lines.length < 3) return 0;
+    const adj = new Map();
+    for (const l of lines) {
+      if (!adj.has(l.a)) adj.set(l.a, []);
+      if (!adj.has(l.b)) adj.set(l.b, []);
+      adj.get(l.a).push(l.b);
+      adj.get(l.b).push(l.a);
+    }
+    const key = (u, v) => Math.min(u, v) + '-' + Math.max(u, v);
+    const used = new Set();
+    let total = 0;
+    for (const l of lines) {
+      if (used.has(key(l.a, l.b))) continue;
+      const loop = [l.a];
+      let prev = l.a, cur = l.b;
+      used.add(key(l.a, l.b));
+      let guard = 0;
+      while (cur !== l.a && guard++ < lines.length + 2) {
+        loop.push(cur);
+        let next = null;
+        for (const n of (adj.get(cur) || [])) {
+          if (n === prev || used.has(key(cur, n))) continue;
+          next = n; break;
+        }
+        if (next == null) break;             // ochiq yo'l — halqa emas
+        used.add(key(cur, next));
+        prev = cur; cur = next;
+      }
+      if (cur !== l.a) continue;             // yopilmagan — o'tkazib yuboramiz
+      let a2 = 0;
+      for (let i = 0; i < loop.length; i++) {
+        const p = getPoint(loop[i]), qp = getPoint(loop[(i + 1) % loop.length]);
+        if (!p || !qp) { a2 = 0; break; }
+        a2 += p.x * qp.y - qp.x * p.y;
+      }
+      total += Math.abs(a2) / 2;
+    }
+    return total;                            // mm²
+  }
+
   // Kazirok = devor umumiy uzunligi − botiq burchaklardagi qozon ikki o'lchami.
+  // Kazirok yuzasi = qosh (tashqi kontur) yuzasi − devor (ichki kontur) yuzasi
+  // (ya'ni devor bilan qosh chiziqlari orasidagi yuza).
   function updateKazirok() {
     const lenEl = q('kazirokLen');
     let totRed = 0;
     for (const l of state.lines) if (l.color === 'red') totRed += l.length;
-    if (totRed <= 0) { lenEl.textContent = '—'; return; }
+    if (totRed <= 0) { lenEl.textContent = '—'; }
+    else {
+      let sub = 0;
+      for (const c of computeBlueCorners()) if (c.concave) sub += c.w + c.h;
+      lenEl.textContent = fmt(totRed - sub, state.unitKazirok);
+    }
 
-    let sub = 0;
-    for (const c of computeBlueCorners()) if (c.concave) sub += c.w + c.h;
-
-    lenEl.textContent = fmt(totRed - sub, state.unitKazirok);
+    const areaEl = q('kazirokArea');
+    const devorA = contourArea('red');
+    const qoshA  = contourArea('yellow');
+    areaEl.textContent = (devorA > 0 && qoshA > 0)
+      ? fmtArea(Math.abs(qoshA - devorA), state.unitKazirokArea)
+      : '—';
   }
 
   // Qosh (Latok) umumiy (metr) qiymatini saqlab, tashqariga (React) xabar beramiz.
@@ -1144,7 +1211,7 @@ export function mountChizma(root) {
           np: state.nextPointId, nl: state.nextLineId,
           color: state.color, unit: state.unit,
           unitDevor: state.unitDevor, unitQosh: state.unitQosh,
-          unitKazirok: state.unitKazirok, unitCorner: state.unitCorner,
+          unitKazirok: state.unitKazirok, unitKazirokArea: state.unitKazirokArea, unitCorner: state.unitCorner,
           showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showQozon: state.showQozon,
           showRazmer: state.showRazmer,
           scale: state.scale, panX: state.panX, panY: state.panY,
@@ -1168,6 +1235,7 @@ export function mountChizma(root) {
       state.unitDevor = o.unitDevor || 'm';
       state.unitQosh = o.unitQosh || 'm';
       state.unitKazirok = o.unitKazirok || 'm';
+      state.unitKazirokArea = o.unitKazirokArea || 'm';
       state.unitCorner = o.unitCorner || 'cm';
       state.showDevorPlus = o.showDevorPlus !== false;
       state.showQoshPlus = o.showQoshPlus === true;
@@ -1335,6 +1403,7 @@ export function mountChizma(root) {
   on(q('btnFit'), 'click', centerView);
 
   on(q('unitKazirok'), 'change', (e) => { state.unitKazirok = e.target.value; updatePanel(); saveStateLS(); });
+  on(q('unitKazirokArea'), 'change', (e) => { state.unitKazirokArea = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitDevor'), 'change',   (e) => { state.unitDevor   = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitQosh'), 'change',    (e) => { state.unitQosh    = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitCorner'), 'change',  (e) => { state.unitCorner  = e.target.value; updatePanel(); saveStateLS(); });
@@ -1422,6 +1491,7 @@ export function mountChizma(root) {
   }
   setColor(state.color);
   q('unitKazirok').value = state.unitKazirok;
+  q('unitKazirokArea').value = state.unitKazirokArea;
   q('unitDevor').value = state.unitDevor;
   q('unitQosh').value = state.unitQosh;
   q('unitCorner').value = state.unitCorner;
