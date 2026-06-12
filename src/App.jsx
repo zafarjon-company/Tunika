@@ -17,7 +17,7 @@ import { fetchKurslar } from './lib/kurs.js';
 import { LoginScreen } from './components/LoginScreen.jsx';
 import {
   DEFAULT_TUNIKA_BAZA, DEFAULT_LATOK, DEFAULT_SHOP_NAME,
-  DEFAULT_PRODUCTS, DEFAULT_USD_RATE, DEFAULT_AKSESSUARLAR,
+  DEFAULT_PRODUCTS, DEFAULT_USD_RATE, DEFAULT_AKSESSUARLAR, DEFAULT_KAZIROKLAR,
 } from './lib/constants.js';
 import {
   fmt, genId, calcItem, makeBlankItem, makeBlankPayment, makeBlankDraft,
@@ -241,6 +241,7 @@ export default function App() {
   const [usdOlish, setUsdOlish]     = useState(DEFAULT_USD_RATE);
   const [products, setProducts]     = useState(DEFAULT_PRODUCTS);
   const [aksessuarlar, setAksessuarlar] = useState(DEFAULT_AKSESSUARLAR);
+  const [kaziroklar, setKaziroklar]   = useState(DEFAULT_KAZIROKLAR);
   const [metrlilar, setMetrlilar]   = useState([]);
   const [ranglar, setRanglar]       = useState([]);
   const [klentlar, setKlentlar]     = useState([]);
@@ -308,6 +309,7 @@ export default function App() {
       ['aksessuarlar', (v) => setAksessuarlar((v || []).map((a) => ({
         ...a, birlik: a.birlik || (/semichka|tom samarez/i.test(a.nomi) ? 'kg' : 'dona'),
       })))],
+      ['kaziroklar', (v) => setKaziroklar(v || [])],
       ['metrlilar', setMetrlilar],
       ['ranglar', setRanglar],
       ['lavozimlar', setLavozimlar],
@@ -520,6 +522,7 @@ export default function App() {
   function updateUsdOlish(v)   { setUsdOlish(v);   persist('usd-olish', v); }
   function updateProducts(v)   { setProducts(v);   persist('dynamic-products', v); }
   function updateAksessuarlar(v) { setAksessuarlar(v); persist('aksessuarlar', v); }
+  function updateKaziroklar(v)   { setKaziroklar(v);   persist('kaziroklar', v); }
   function updateMetrlilar(v)  { setMetrlilar(v);  persist('metrlilar', v); }
   function updateRanglar(v)    { setRanglar(v);    persist('ranglar', v); }
   function updateUstalar(v)    { setUstalar(v);    persist('ustalar', v); }
@@ -534,7 +537,7 @@ export default function App() {
 
   // ----- Draft buyurtma hisob-kitoblari -----
   const draftCalc = useMemo(() => {
-    const ctx = { tunikaBaza, metrlilar, aksessuarlar, products };
+    const ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products };
     const items = draft.items.map((it) => ({ ...it, ...calcItem(it, ctx) }));
 
     // Semichka 3.1 — har doim "xomid"da turgan rang bilan bir xil
@@ -557,7 +560,7 @@ export default function App() {
 
     const debt = Math.max(0, totalSum - totalPaid);
     return { items, tovarSum, dastafkaIchida, dastafkaSumma, totalSum, totalPaid, debt };
-  }, [draft, tunikaBaza, metrlilar, aksessuarlar, products]);
+  }, [draft, tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products]);
 
   // ----- Zakas saqlash -----
   function saveOrder() {
@@ -637,7 +640,7 @@ export default function App() {
 
   // ----- Saqlangan zakasni tahrirlashga yuklash -----
   function editOrder(order) {
-    const ctx = { tunikaBaza, metrlilar, aksessuarlar };
+    const ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar };
     let items;
     if (order.srcItems?.length) {
       items = order.srcItems.map((it) => ({ ...it, id: genId() }));
@@ -691,7 +694,7 @@ export default function App() {
         return yangi;
       });
     } else {
-      const ctx = { tunikaBaza, metrlilar, aksessuarlar };
+      const ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar };
       items = [];
       (src.items || []).forEach((it) => {
         const d = orderItemToDraft(it, ctx);
@@ -789,6 +792,13 @@ export default function App() {
       if (item.kind === 'aksessuar') {
         const a = aksessuarlar.find((x) => x.id === item.aksId);
         const nom = (a?.nomi || '');
+        if (!aksRangKerak(nom)) item.rang = '';
+        else { const t = tunikaBaza.find((x) => x.id === lastTunikaId); item.rang = t ? rangTozala(t.nomi) : ''; }
+      }
+      // Kazirokga rang: qoziq lenta/germetika — rangsiz; aks holda — List rangi
+      if (item.kind === 'kazirok') {
+        const k = kaziroklar.find((x) => x.id === item.kazId);
+        const nom = (k?.nomi || '');
         if (!aksRangKerak(nom)) item.rang = '';
         else { const t = tunikaBaza.find((x) => x.id === lastTunikaId); item.rang = t ? rangTozala(t.nomi) : ''; }
       }
@@ -1003,6 +1013,7 @@ export default function App() {
             tunikaBaza={tunikaBaza} updateTunikaBaza={updateTunikaBaza}
             metrlilar={metrlilar} updateMetrlilar={updateMetrlilar}
             aksessuarlar={aksessuarlar} updateAksessuarlar={updateAksessuarlar}
+            kaziroklar={kaziroklar} updateKaziroklar={updateKaziroklar}
             showToast={showToast}
           />
         )}
@@ -1032,7 +1043,7 @@ export default function App() {
       {/* Modallar */}
       {productPicker && (
         <ProductPickerModal
-          tunikaBaza={tunikaBaza} metrlilar={metrlilar} aksessuarlar={aksessuarlar}
+          tunikaBaza={tunikaBaza} metrlilar={metrlilar} aksessuarlar={aksessuarlar} kaziroklar={kaziroklar}
           onSelect={onProductSelected} onClose={() => setProductPicker(false)}
         />
       )}

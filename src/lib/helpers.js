@@ -195,11 +195,25 @@ function applyOverride(r, item) {
   return { ...r, birBirlikNarxi: ov, jamiSumma: ov * (r.jamiMeyor || 0), narxOverride: ov };
 }
 
-// Zakas qatori hisob-kitobi. ctx = { tunikaBaza, metrlilar, aksessuarlar, products }
+// Zakas qatori hisob-kitobi. ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products }
 export function calcItem(item, ctx = {}) {
-  const { tunikaBaza = [], metrlilar = [], aksessuarlar = [], products = [] } = ctx;
+  const { tunikaBaza = [], metrlilar = [], aksessuarlar = [], kaziroklar = [], products = [] } = ctx;
   const soni = parseFloat(item.soni) || 0;
   const uzunlik = parseFloat(item.uzunlik) || 0;
+
+  // ----- Kazirok -----
+  if (item.kind === 'kazirok') {
+    const k = kaziroklar.find((x) => x.id === item.kazId);
+    if (!k) return blankCalc("O'chirilgan kazirok");
+    const birBirlikNarxi = Number(k.narx) || 0;
+    return applyOverride({
+      nomi: k.nomi, tafsilot: 'Kazirok', birlik: k.birlik || 'dona',
+      soni, uzunlik: 0, birBirlikNarxi, jamiMeyor: soni,
+      jamiSumma: birBirlikNarxi * soni, bolishLabel: '',
+      rang: aksRangKerak(k.nomi) ? (item.rang || '') : '',
+      tanNarxBirlik: birBirlikNarxi,
+    }, item);
+  }
 
   // ----- Aksessuar -----
   if (item.kind === 'aksessuar') {
@@ -258,7 +272,7 @@ export function calcItem(item, ctx = {}) {
 }
 
 // Guruhli pickerdan kelgan descriptor bo'yicha bo'sh qator yaratish.
-// desc: { kind:'tunika'|'profnastil'|'metrli'|'aksessuar', tunikaId|metrliId|aksId }
+// desc: { kind:'tunika'|'profnastil'|'metrli'|'aksessuar'|'kazirok', tunikaId|metrliId|aksId|kazId }
 export function makeBlankItem(desc, tunikaBaza = [], lastTunikaId = '') {
   const id = genId();
   const oxirgi = lastTunikaId || tunikaBaza[0]?.id || '';
@@ -277,6 +291,7 @@ export function makeBlankItem(desc, tunikaBaza = [], lastTunikaId = '') {
       uzunlik: '', soni: '1', zapas: '',
     };
   }
+  if (desc.kind === 'kazirok') return { id, kind: 'kazirok', kazId: desc.kazId, soni: '0' };
   return { id, kind: 'aksessuar', aksId: desc.aksId, soni: '0' };
 }
 
@@ -329,11 +344,17 @@ function inferPriceType(birBirlikNarxi, tunika, fn) {
 // draft qatoriga aylantirish — katalog id larini nom/tafsilot bo'yicha topib.
 // Katalogda topilmasa null qaytaradi (o'sha tovar nusxada o'tkazib yuboriladi).
 export function orderItemToDraft(it, ctx = {}) {
-  const { tunikaBaza = [], metrlilar = [], aksessuarlar = [] } = ctx;
+  const { tunikaBaza = [], metrlilar = [], aksessuarlar = [], kaziroklar = [] } = ctx;
   if (!it || it.nomi === undefined) return null; // juda eski (tunikaName) format — qo'llab-quvvatlanmaydi
   const id = genId();
   const uzunlik = it.uzunlik != null ? String(it.uzunlik) : '';
   const soni = it.soni != null ? String(it.soni) : '';
+
+  if (it.kind === 'kazirok') {
+    const k = nearestByName(it.nomi, kaziroklar, (x) => x.nomi);
+    if (!k) return null;
+    return { id, kind: 'kazirok', kazId: k.id, soni: soni || '1', rang: it.rang || '' };
+  }
 
   if (it.kind === 'aksessuar') {
     const a = nearestByName(it.nomi, aksessuarlar, (x) => x.nomi);

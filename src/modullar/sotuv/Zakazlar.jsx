@@ -21,7 +21,7 @@ const stripNarxTuri = (s) => (s || '').replace(/\s*\((Optom|Chakana)\)/g, '').tr
 export function itemDisp(it) {
   if (it.nomi !== undefined) {
     const zapas = parseFloat(it.zapas) || 0;
-    const olchov = it.kind === 'aksessuar'
+    const olchov = (it.kind === 'aksessuar' || it.kind === 'kazirok')
       ? `${it.soni} ${it.birlik || 'dona'}`
       : it.kind === 'metrli'
         ? (zapas > 0 ? `${it.uzunlik || 0} + ${zapas} zapas metr` : `${it.uzunlik || 0} metr`)

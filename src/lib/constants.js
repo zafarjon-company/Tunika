@@ -72,3 +72,5 @@ export const HAFTA_KUNLARI = [
 export const PROTECTED_PRODUCT_IDS = ['tunika', 'profnastil'];
 
 export const DEFAULT_USD_RATE = 12600;
+
+export const DEFAULT_KAZIROKLAR = [];

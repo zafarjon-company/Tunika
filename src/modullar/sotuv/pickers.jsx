@@ -3,14 +3,14 @@
 //  ProductPickerModal, ClientPickerModal, MasterPickerModal
 // ============================================================
 import React, { useState } from 'react';
-import { Trash2, ChevronLeft, Layers, Package, Ruler, Search, Check } from 'lucide-react';
+import { Trash2, ChevronLeft, Layers, Package, Ruler, Triangle, Search, Check } from 'lucide-react';
 import { FullModal, PhoneInput } from '../../components/ui.jsx';
 import { fmt, genId, metrliVariantlar } from '../../lib/helpers.js';
 import { BOSHQA_USTA } from '../../lib/constants.js';
 
 // 2 bosqichli guruhli ko'p tanlov: guruh -> tovarlarni belgilash -> Saqlash.
 // Saqlaganda tanlanganlar GURUHLAR ketma-ketligi va har guruhdagi tartib bo'yicha qo'shiladi.
-export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarlar = [], onSelect, onClose }) {
+export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarlar = [], kaziroklar = [], onSelect, onClose }) {
   const [sel, setSel] = useState(null);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState(() => new Set()); // belgilangan tovarlar: `${g.key}-${item.id}`
@@ -20,10 +20,12 @@ export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarl
       getLabel: (t) => `${t.nomi} (${t.qalinlik} mm)`, getHint: (t) => `Ch: ${fmt(t.chakana)} · Op: ${fmt(t.optom)}` },
     { key: 'profnastil', label: 'Profnastil',   kind: 'profnastil', icon: Layers,  items: tunikaBaza,
       getLabel: (t) => `${t.nomi} (${t.qalinlik} mm)`, getHint: (t) => `Ch: ${fmt(t.chakana)} · Op: ${fmt(t.optom)}` },
-    { key: 'metrli',     label: 'Metrli',       kind: 'metrli',     icon: Ruler,   items: metrlilar,
+    { key: 'metrli',     label: 'Metrli',       kind: 'metrli',     icon: Ruler,    items: metrlilar,
       getLabel: (m) => m.nomi, getHint: (m) => `${metrliVariantlar(m).length} variant` },
-    { key: 'aksessuar',  label: 'Aksessuarlar', kind: 'aksessuar',  icon: Package, items: aksessuarlar,
+    { key: 'aksessuar',  label: 'Aksessuarlar', kind: 'aksessuar',  icon: Package,  items: aksessuarlar,
       getLabel: (a) => a.nomi, getHint: (a) => `${fmt(a.narx)} so'm/${a.birlik || 'dona'}` },
+    { key: 'kazirok',    label: 'Kaziroklar',   kind: 'kazirok',    icon: Triangle, items: kaziroklar,
+      getLabel: (k) => k.nomi, getHint: (k) => `${fmt(k.narx)} so'm/${k.birlik || 'dona'}` },
   ];
 
   const group = groups.find((g) => g.key === sel);
@@ -41,6 +43,7 @@ export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarl
   function descOf(g, item) {
     if (g.kind === 'metrli') return { kind: 'metrli', metrliId: item.id };
     if (g.kind === 'aksessuar') return { kind: 'aksessuar', aksId: item.id };
+    if (g.kind === 'kazirok') return { kind: 'kazirok', kazId: item.id };
     return { kind: g.kind, tunikaId: item.id };
   }
 
