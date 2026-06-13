@@ -106,6 +106,7 @@ export function computePalette() {
     themed,
     devor:   mk(0),         // asosiy (ichki kontur) — mavzu rangining o'zi
     qosh:    mk(55, 6),     // tashqi kontur (latok)
+    darvoza: mk(160, 3),    // Darvozaxona (yopiq kontur — uchinchi chizma turi)
     accent:  mk(120),       // chizish "+", snap, tanlov
     qozon:   mk(185),       // burchak bo'laklari
     kazirok: mk(250),       // kazirok (karniz) ko'rsatkichi
@@ -137,6 +138,7 @@ const TEMPLATE = `
     <span class="sep"></span>
     <button type="button" class="tool color-devor active" data-chz="btnRed">&#9679; Devor</button>
     <button type="button" class="tool color-qosh" data-chz="btnYellow">&#9679; Qosh (Latok)</button>
+    <button type="button" class="tool color-darvoza" data-chz="btnDarvoza" title="Darvozaxona — yopiq kontur chiziq. Offset tashlansa, o'sha rangda (qosh emas) tushadi; yopilgan yuzasi alohida hisoblanadi">&#9679; Darvozaxona</button>
     <span class="sep"></span>
     <button type="button" class="tool" data-chz="btnUndo" title="Ctrl+Z">&#8630; Orqaga</button>
     <button type="button" class="tool" data-chz="btnRedo" title="Ctrl+Y">&#8631; Oldinga</button>
@@ -148,6 +150,7 @@ const TEMPLATE = `
     <span class="chz-tglbl">Belgilar (+):</span>
     <button type="button" class="tool tg" data-chz="tgDevor" title="Devor + belgilari — razmer ko'rinaveradi">Devor +</button>
     <button type="button" class="tool tg" data-chz="tgQosh" title="Qosh + belgilari — razmer ko'rinaveradi">Qosh +</button>
+    <button type="button" class="tool tg" data-chz="tgDarvoza" title="Darvozaxona + belgilari (chizish/offset)">Darvoza +</button>
     <button type="button" class="tool tg" data-chz="tgQozon" title="Qozonlar ko'rinishi — hisobga ta'sir qilmaydi">Qozon</button>
     <button type="button" class="tool tg" data-chz="tgKaz" title="Devor↔qosh orasidagi kazirok bo'laklari (35.6 + 6 sm juft-juft) — ko'rinish">Kaz.bo'lak</button>
     <button type="button" class="tool tg" data-chz="tgRazmer" title="Chiziq ustidagi razmer yozuvlari (raqam + o'lchov birligi)">Razmerlar</button>
@@ -211,6 +214,16 @@ const TEMPLATE = `
         <span class="val" data-chz="kazirokArea">&mdash;</span>
         <select class="rowUnit" data-chz="unitKazirokArea"><option value="mm">mm&sup2;</option><option value="cm">cm&sup2;</option><option value="m" selected>m&sup2;</option></select>
       </div>
+      <div class="chz-stat darvoza">
+        <span class="lbl">Darvozaxona yuzasi:</span>
+        <span class="val" data-chz="darvozaArea">&mdash;</span>
+        <select class="rowUnit" data-chz="unitDarvozaArea"><option value="mm">mm&sup2;</option><option value="cm">cm&sup2;</option><option value="m" selected>m&sup2;</option></select>
+      </div>
+      <div class="chz-stat darvoza">
+        <span class="lbl">Darvozaxona yuzasi (Hovuzi):</span>
+        <span class="val" data-chz="darvozaHovuz">&mdash;</span>
+        <select class="rowUnit" data-chz="unitDarvozaHovuz"><option value="mm">mm&sup2;</option><option value="cm">cm&sup2;</option><option value="m" selected>m&sup2;</option></select>
+      </div>
       <div class="chz-stat devor">
         <span class="lbl">Devor umumiy:</span>
         <span class="val" data-chz="totalRed">0</span>
@@ -250,6 +263,7 @@ const TEMPLATE = `
         &bull; <span style="color:var(--chz-offset)"><b>Offset +</b></span> &rarr; <b>faqat o'sha chiziq</b> shu tomonga offset bo'ladi (masofa kiriting).
           Yonidagi chiziq ham offset qilinsa — burchak avtomatik tutashadi (fillet).<br>
         &bull; <span style="color:var(--chz-qozon)"><b>Qozon bo'laklari</b></span> — har burchakda devor&harr;qoshni bog'lab <b>avtomatik</b> chiziladi (eni&times;bo'yi).<br>
+        &bull; <span style="color:var(--chz-darvoza)"><b>Darvozaxona</b></span> &rarr; yopiq kontur chizing — yopgan yuzasi <b>Darvozaxona yuzasi</b> bo'lib hisoblanadi. Offset tashlansa, qosh emas — <b>o'sha rangda</b> tushadi; uni ham yopsangiz, tashqi (offset) halqa <b>umumiy yuza</b>, ichkari halqa esa <b>Hovuzi</b> yuzasi bo'lib alohida ko'rsatiladi.<br>
         &bull; Chizishda (+ bosgach): razmer yozing <b>yoki</b> kursorni surib bosing; <b>boshqa nuqtaga tekislab</b> ham bosib chizsa bo'ladi. Bekor qilish — faqat <b>Esc</b>.<br>
         &bull; Chiziqqa <b>2 marta bosing</b> — razmerni tahrirlash.<br>
         &bull; Chiziqni bosib <b>belgilang</b> (Shift — bir nechta), so'ng <b>Delete</b> / "O'chirish".<br>
@@ -274,6 +288,7 @@ export function mountChizma(root) {
   function applyPaletteVars() {
     root.style.setProperty('--chz-devor', P.devor);
     root.style.setProperty('--chz-qosh', P.qosh);
+    root.style.setProperty('--chz-darvoza', P.darvoza);
     root.style.setProperty('--chz-accent', P.accent);
     root.style.setProperty('--chz-qozon', P.qozon);
     root.style.setProperty('--chz-kazirok', P.kazirok);
@@ -290,9 +305,10 @@ export function mountChizma(root) {
     lines:  [],            // {id, a, b, color, length(mm), unit}
     nextPointId: 1,
     nextLineId: 1,
-    color: 'red',          // "red" (Devor) | "yellow" (Qosh)
+    color: 'red',          // "red" (Devor) | "yellow" (Qosh) | "darvoza" (Darvozaxona)
     unit: 'm',
     unitDevor: 'm', unitQosh: 'm', unitKazirok: 'm', unitKazirokArea: 'm', unitCorner: 'cm',
+    unitDarvozaArea: 'm', unitDarvozaHovuz: 'm',
     selectedLines: new Set(),
     scale: 1 / 50,         // piksel / mm
     panX: 0, panY: 0,
@@ -300,6 +316,7 @@ export function mountChizma(root) {
     placingPoint: false,   // "Nuqta qo'shish" rejimi — maydonni bosib nuqta ekiladi
     showDevorPlus: true,
     showQoshPlus: false,
+    showDarvozaPlus: true,
     showQozon: true,
     showRazmer: true,
     showKazTiles: true,    // devor↔qosh orasidagi kazirok bo'laklari (35.6 + 6 sm) ko'rinishi
@@ -368,16 +385,19 @@ export function mountChizma(root) {
 
   // Nuqtaga ulangan chiziqlarning ranglari — "+" guruhini aniqlash uchun.
   function pointColors(pid) {
-    let red = false, yellow = false;
+    let red = false, yellow = false, darvoza = false;
     for (const l of state.lines) {
-      if (l.a === pid || l.b === pid) { if (l.color === 'yellow') yellow = true; else red = true; }
+      if (l.a !== pid && l.b !== pid) continue;
+      if (l.color === 'yellow') yellow = true;
+      else if (l.color === 'darvoza') darvoza = true;
+      else red = true;
     }
-    return { red, yellow };
+    return { red, yellow, darvoza };
   }
   function pointPlusVisible(pid) {
     const c = pointColors(pid);
-    if (!c.red && !c.yellow) return state.showDevorPlus || state.showQoshPlus;
-    return (c.red && state.showDevorPlus) || (c.yellow && state.showQoshPlus);
+    if (!c.red && !c.yellow && !c.darvoza) return state.showDevorPlus || state.showQoshPlus || state.showDarvozaPlus;
+    return (c.red && state.showDevorPlus) || (c.yellow && state.showQoshPlus) || (c.darvoza && state.showDarvozaPlus);
   }
 
   // startId dan boshlab, excludeLineId chetidan o'tmasdan, ulangan nuqtalar.
@@ -562,8 +582,11 @@ export function mountChizma(root) {
     const nb = { id: state.nextPointId++, x: b.x + side.x * dist, y: b.y + side.y * dist, mapOrig: orig.b };
     state.points.push(na, nb);
 
+    // Offset rangi: Devor (red) offset qilinsa — Qosh (yellow) bo'ladi; aks holda
+    // (Qosh yoki Darvozaxona) offset o'z rangida tushadi (qosh chiziq emas).
+    const offColor = orig.color === 'red' ? 'yellow' : orig.color;
     const L = {
-      id: state.nextLineId++, a: na.id, b: nb.id, color: 'yellow',
+      id: state.nextLineId++, a: na.id, b: nb.id, color: offColor,
       length: Math.hypot(nb.x - na.x, nb.y - na.y), unit: 'm',
       srcEdge: edgeId, offDist: dist, offSide: { x: side.x, y: side.y }, offUnit: state.unit,
     };
@@ -576,7 +599,7 @@ export function mountChizma(root) {
 
   function filletCorner(L, origCornerId, newPointId) {
     for (const L2 of state.lines.slice()) {
-      if (L2 === L || L2.srcEdge == null) continue;
+      if (L2 === L || L2.srcEdge == null || L2.color !== L.color) continue;
       const pA = getPoint(L2.a), pB = getPoint(L2.b);
       let p2 = null;
       if (pA && pA.mapOrig === origCornerId) p2 = pA;
@@ -1521,6 +1544,7 @@ export function mountChizma(root) {
     const corners = computeBlueCorners();   // qozonlar (konveks + ichki) — zonasini chiqaramiz
     for (const L of state.lines) {
       if (L.srcEdge == null || !L.offSide || !(L.offDist > 0)) continue;
+      if (L.color !== 'yellow') continue;   // kazirok bo'laklari faqat Qosh offseti uchun (Darvozaxona emas)
       // Tiling DEVOR chizig'i bo'ylab teriladi (devor uchidan boshlanadi) —
       // qosh fillet'da burchaklarda siljigani uchun devor aniqroq mos keladi.
       const orig = getLine(L.srcEdge);
@@ -1589,8 +1613,11 @@ export function mountChizma(root) {
   // halqa(lar) yuzasi (mm²). Qirralarni kuzatib (trace), shoelace bilan
   // hisoblaymiz; bir nechta yopiq halqa bo'lsa, yuzalar qo'shiladi.
   // Yopilmagan (ochiq) qism hisobga olinmaydi.
-  function traceArea(edges) {
-    if (edges.length < 3) return 0;
+  // Har bir YOPIQ halqani { area(mm²), pts:[{x,y}] } ko'rinishida qaytaradi.
+  // pts — halqa burchaklari world mm da (ichkarida/tashqarida tekshiruvi uchun).
+  function traceLoops(edges) {
+    const loops = [];
+    if (edges.length < 3) return loops;
     const adj = new Map();
     for (const l of edges) {
       if (l.a === l.b) continue;
@@ -1601,7 +1628,6 @@ export function mountChizma(root) {
     }
     const key = (u, v) => Math.min(u, v) + '-' + Math.max(u, v);
     const used = new Set();
-    let total = 0;
     for (const l of edges) {
       if (l.a === l.b || used.has(key(l.a, l.b))) continue;
       const loop = [l.a];
@@ -1620,19 +1646,47 @@ export function mountChizma(root) {
         prev = cur; cur = next;
       }
       if (cur !== l.a) continue;             // yopilmagan — o'tkazib yuboramiz
-      let a2 = 0;
+      const pts = [];
+      let a2 = 0, ok = true;
       for (let i = 0; i < loop.length; i++) {
         const p = getPoint(loop[i]), qp = getPoint(loop[(i + 1) % loop.length]);
-        if (!p || !qp) { a2 = 0; break; }
+        if (!p || !qp) { ok = false; break; }
+        pts.push({ x: p.x, y: p.y });
         a2 += p.x * qp.y - qp.x * p.y;
       }
-      total += Math.abs(a2) / 2;
+      if (ok) { const area = Math.abs(a2) / 2; if (area > 0) loops.push({ area, pts }); }
     }
-    return total;                            // mm²
+    return loops;
+  }
+  // Qirralar to'plamining (har biri {a,b} nuqta-id) hosil qilgan barcha
+  // yopiq halqa(lar) yuzasi yig'indisi (mm²). Ochiq qism hisobga olinmaydi.
+  function traceArea(edges) {
+    return traceLoops(edges).reduce((s, l) => s + l.area, 0);
+  }
+  // Nuqta ko'pburchak ichidami? (ray-casting — orqali o'tish soni toq bo'lsa, ichida).
+  function pointInPoly(pt, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+      if (((yi > pt.y) !== (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  // L halqasi O halqasining ichidami? L burchaklarining KO'PCHILIGI O ichida
+  // bo'lsa — ha. Ko'pchilik ovozi konkav (L-shaklli) halqalarda ham ishonchli
+  // (bitta nuqta — markaz — konkavda tashqariga tushib qolishi mumkin edi).
+  function loopInside(L, O) {
+    let inN = 0;
+    for (const p of L.pts) if (pointInPoly(p, O.pts)) inN++;
+    return inN * 2 > L.pts.length;
   }
   // Bir rangdagi chiziqlar hosil qilgan yopiq kontur(lar) yuzasi.
   function contourArea(color) {
     return traceArea(state.lines.filter((l) => l.color === color));
+  }
+  // Darvozaxona (yopiq) halqalari — { area, pts } ro'yxati (joylashuvi bilan).
+  function darvozaLoops() {
+    return traceLoops(state.lines.filter((l) => l.color === 'darvoza').map((l) => ({ a: l.a, b: l.b })));
   }
 
   // Qosh (offset) chizig'ining OCHIQ uchlari — devor konturi to'liq
@@ -1686,7 +1740,8 @@ export function mountChizma(root) {
     if (caps.length) {
       // Devor konturi OCHIQ — devor + qosh + uch yopqichlari birgalikda
       // bitta yopiq halqa (strip) hosil qiladi; yuzasi = kazirok yuzasi.
-      const edges = state.lines.map((l) => ({ a: l.a, b: l.b }));
+      // Darvozaxona chiziqlari bu hisobga kirmaydi (ular alohida yopiq halqa).
+      const edges = state.lines.filter((l) => l.color !== 'darvoza').map((l) => ({ a: l.a, b: l.b }));
       for (const c of caps) edges.push({ a: c.yp.id, b: c.dp.id });
       area = traceArea(edges);
     } else {
@@ -1696,6 +1751,36 @@ export function mountChizma(root) {
       if (devorA > 0 && qoshA > 0) area = Math.abs(qoshA - devorA);
     }
     areaEl.textContent = area > 0 ? fmtArea(area, state.unitKazirokArea) : '—';
+  }
+
+  // DARVOZAXONA yuzasi — yopiq Darvozaxona halqalaridan hisoblanadi. Halqalar
+  // bir-birining ICHIDA-tashqarisidaligi (nesting) bo'yicha tasniflanadi:
+  //  • depth 0 (eng tashqi halqa(lar)) yig'indisi = "Darvozaxona yuzasi" (umumiy).
+  //  • depth 1 (bevosita ichidagi halqa(lar)) yig'indisi = "...(Hovuzi)".
+  // Shu sababli: ikki ALOHIDA (ichma-ich emas) darvoza shakli ikkalasi ham
+  // umumiyga qo'shiladi (hovuz emas); ko'p marta offset (ichma-ich) qilinsa,
+  // hovuz ikki marta sanalmaydi (faqat bevosita ichidagisi olinadi).
+  function updateDarvoza() {
+    const totalEl = q('darvozaArea');
+    const hovuzEl = q('darvozaHovuz');
+    const loops = darvozaLoops();
+    if (!loops.length) { totalEl.textContent = '—'; hovuzEl.textContent = '—'; return; }
+    // Har bir halqani o'rab turgan (kattaroq) halqalar soni = ichaklik chuqurligi.
+    const depth = loops.map((L) => {
+      let d = 0;
+      for (const O of loops) {
+        if (O === L) continue;
+        if (O.area > L.area && loopInside(L, O)) d++;
+      }
+      return d;
+    });
+    let total = 0, hovuz = 0, hasHovuz = false;
+    for (let i = 0; i < loops.length; i++) {
+      if (depth[i] === 0) total += loops[i].area;                    // eng tashqi — umumiy
+      else if (depth[i] === 1) { hovuz += loops[i].area; hasHovuz = true; }   // bevosita ichidagi — hovuz
+    }
+    totalEl.textContent = total > 0 ? fmtArea(total, state.unitDarvozaArea) : '—';
+    hovuzEl.textContent = hasHovuz ? fmtArea(hovuz, state.unitDarvozaHovuz) : '—';
   }
 
   // Qosh (Latok) umumiy (metr) qiymatini saqlab, tashqariga (React) xabar beramiz.
@@ -1724,7 +1809,7 @@ export function mountChizma(root) {
     for (const k in attrs) el.setAttribute(k, attrs[k]);
     return el;
   }
-  function colorHex(c) { return c === 'yellow' ? P.qosh : P.devor; }
+  function colorHex(c) { return c === 'yellow' ? P.qosh : c === 'darvoza' ? P.darvoza : P.devor; }
 
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -1928,7 +2013,8 @@ export function mountChizma(root) {
       }
     }
     for (const ln of state.lines) {
-      const grpVisible = ln.color === 'yellow' ? state.showQoshPlus : state.showDevorPlus;
+      const grpVisible = ln.color === 'yellow' ? state.showQoshPlus
+        : ln.color === 'darvoza' ? state.showDarvozaPlus : state.showDevorPlus;
       if (!grpVisible) continue;
       const a = getPoint(ln.a), b = getPoint(ln.b);
       if (!a || !b) continue;
@@ -2061,13 +2147,16 @@ export function mountChizma(root) {
   function updatePanel() {
     let totRed = 0, totYel = 0;
     for (const ln of state.lines) {
-      if (ln.color === 'yellow') totYel += ln.length; else totRed += ln.length;
+      if (ln.color === 'yellow') totYel += ln.length;
+      else if (ln.color === 'darvoza') { /* Darvozaxona alohida hisoblanadi — Devor/Qoshga qo'shilmaydi */ }
+      else totRed += ln.length;
     }
     q('totalRed').textContent = fmt(totRed, state.unitDevor);
     q('totalYellow').textContent = fmt(totYel, state.unitQosh);
     q('lineCount').textContent = state.lines.filter((l) => l.color === 'red').length;
 
     updateKazirok();
+    updateDarvoza();
     publishLatokMeters(totYel / UNITS.m); // latok uzunligi — Qosh (Latok) umumiy bo'yicha
 
     const corners = computeBlueCorners();
@@ -2100,8 +2189,8 @@ export function mountChizma(root) {
     state.lines.forEach((ln, i) => {
       const item = document.createElement('div');
       item.className = 'item' + (state.selectedLines.has(ln.id) ? ' selected' : '');
-      const lu = ln.color === 'yellow' ? state.unitQosh : state.unitDevor;
-      const sw = ln.color === 'yellow' ? 'var(--chz-qosh)' : 'var(--chz-devor)';
+      const lu = ln.color === 'yellow' ? state.unitQosh : ln.color === 'darvoza' ? ln.unit : state.unitDevor;
+      const sw = ln.color === 'yellow' ? 'var(--chz-qosh)' : ln.color === 'darvoza' ? 'var(--chz-darvoza)' : 'var(--chz-devor)';
       item.innerHTML =
         `<span class="swatch" style="background:${sw}"></span>` +
         `<span>#${i + 1}</span>` +
@@ -2118,7 +2207,7 @@ export function mountChizma(root) {
   function updateScaleInfo() {
     const mmPerPx = Math.round((1 / state.scale) * 100) / 100;
     q('scaleInfo').textContent =
-      `1 px = ${mmPerPx} mm • Chizish: ${state.color === 'yellow' ? 'Qosh (Latok)' : 'Devor'} • Birlik: ${state.unit}`;
+      `1 px = ${mmPerPx} mm • Chizish: ${state.color === 'yellow' ? 'Qosh (Latok)' : state.color === 'darvoza' ? 'Darvozaxona' : 'Devor'} • Birlik: ${state.unit}`;
   }
 
   function syncHistoryButtons() {
@@ -2129,6 +2218,7 @@ export function mountChizma(root) {
     q('btnAddPoint').classList.toggle('active', state.placingPoint);
     q('tgDevor').classList.toggle('off', !state.showDevorPlus);
     q('tgQosh').classList.toggle('off', !state.showQoshPlus);
+    q('tgDarvoza').classList.toggle('off', !state.showDarvozaPlus);
     q('tgQozon').classList.toggle('off', !state.showQozon);
     q('tgKaz').classList.toggle('off', !state.showKazTiles);
     q('tgRazmer').classList.toggle('off', !state.showRazmer);
@@ -2204,7 +2294,8 @@ export function mountChizma(root) {
           color: state.color, unit: state.unit,
           unitDevor: state.unitDevor, unitQosh: state.unitQosh,
           unitKazirok: state.unitKazirok, unitKazirokArea: state.unitKazirokArea, unitCorner: state.unitCorner,
-          showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showQozon: state.showQozon,
+          unitDarvozaArea: state.unitDarvozaArea, unitDarvozaHovuz: state.unitDarvozaHovuz,
+          showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showDarvozaPlus: state.showDarvozaPlus, showQozon: state.showQozon,
           showRazmer: state.showRazmer, showRef: state.showRef, showKazTiles: state.showKazTiles,
           scale: state.scale, panX: state.panX, panY: state.panY,
         }));
@@ -2235,8 +2326,11 @@ export function mountChizma(root) {
       state.unitKazirok = o.unitKazirok || 'm';
       state.unitKazirokArea = o.unitKazirokArea || 'm';
       state.unitCorner = o.unitCorner || 'cm';
+      state.unitDarvozaArea = o.unitDarvozaArea || 'm';
+      state.unitDarvozaHovuz = o.unitDarvozaHovuz || 'm';
       state.showDevorPlus = o.showDevorPlus !== false;
       state.showQoshPlus = o.showQoshPlus === true;
+      state.showDarvozaPlus = o.showDarvozaPlus !== false;
       state.showQozon = o.showQozon !== false;
       state.showRazmer = o.showRazmer !== false;
       state.showRef = o.showRef !== false;
@@ -2417,6 +2511,7 @@ export function mountChizma(root) {
   on(q('btnAddPoint'), 'click', () => setPlacingPoint(!state.placingPoint));
   on(q('btnRed'), 'click', () => setColor('red'));
   on(q('btnYellow'), 'click', () => setColor('yellow'));
+  on(q('btnDarvoza'), 'click', () => setColor('darvoza'));
   on(q('btnUndo'), 'click', undo);
   on(q('btnRedo'), 'click', redo);
   on(q('btnDelete'), 'click', deleteSelected);
@@ -2465,12 +2560,15 @@ export function mountChizma(root) {
 
   on(q('unitKazirok'), 'change', (e) => { state.unitKazirok = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitKazirokArea'), 'change', (e) => { state.unitKazirokArea = e.target.value; updatePanel(); saveStateLS(); });
+  on(q('unitDarvozaArea'), 'change', (e) => { state.unitDarvozaArea = e.target.value; updatePanel(); saveStateLS(); });
+  on(q('unitDarvozaHovuz'), 'change', (e) => { state.unitDarvozaHovuz = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitDevor'), 'change',   (e) => { state.unitDevor   = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitQosh'), 'change',    (e) => { state.unitQosh    = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitCorner'), 'change',  (e) => { state.unitCorner  = e.target.value; updatePanel(); saveStateLS(); });
 
   on(q('tgDevor'), 'click', () => { state.showDevorPlus = !state.showDevorPlus; syncToggleButtons(); render(); });
   on(q('tgQosh'), 'click',  () => { state.showQoshPlus  = !state.showQoshPlus;  syncToggleButtons(); render(); });
+  on(q('tgDarvoza'), 'click', () => { state.showDarvozaPlus = !state.showDarvozaPlus; syncToggleButtons(); render(); });
   on(q('tgQozon'), 'click', () => { state.showQozon     = !state.showQozon;     syncToggleButtons(); render(); });
   on(q('tgKaz'), 'click',   () => { state.showKazTiles  = !state.showKazTiles;  syncToggleButtons(); render(); });
   on(q('tgRazmer'), 'click', () => { state.showRazmer   = !state.showRazmer;    syncToggleButtons(); saveStateLS(); render(); });
@@ -2495,6 +2593,7 @@ export function mountChizma(root) {
     state.color = c;
     q('btnRed').classList.toggle('active', c === 'red');
     q('btnYellow').classList.toggle('active', c === 'yellow');
+    q('btnDarvoza').classList.toggle('active', c === 'darvoza');
     updateScaleInfo();
   }
 
@@ -2566,6 +2665,8 @@ export function mountChizma(root) {
   setColor(state.color);
   q('unitKazirok').value = state.unitKazirok;
   q('unitKazirokArea').value = state.unitKazirokArea;
+  q('unitDarvozaArea').value = state.unitDarvozaArea;
+  q('unitDarvozaHovuz').value = state.unitDarvozaHovuz;
   q('unitDevor').value = state.unitDevor;
   q('unitQosh').value = state.unitQosh;
   q('unitCorner').value = state.unitCorner;

@@ -497,8 +497,10 @@ html.themed .chz button.tool:hover { border-color: var(--c-t4); }
 /* Devor / Qosh rang tugmalari — mavzudan hosil bo'lgan ranglarda */
 .chz button.tool.color-devor { border-color: var(--chz-devor); color: var(--chz-devor); }
 .chz button.tool.color-qosh  { border-color: var(--chz-qosh);  color: var(--chz-qosh); }
+.chz button.tool.color-darvoza { border-color: var(--chz-darvoza); color: var(--chz-darvoza); }
 .chz button.tool.color-devor.active { background: color-mix(in srgb, var(--chz-devor) 15%, transparent); box-shadow: 0 0 0 1.5px var(--chz-devor) inset; }
 .chz button.tool.color-qosh.active  { background: color-mix(in srgb, var(--chz-qosh) 15%, transparent);  box-shadow: 0 0 0 1.5px var(--chz-qosh) inset; }
+.chz button.tool.color-darvoza.active { background: color-mix(in srgb, var(--chz-darvoza) 15%, transparent); box-shadow: 0 0 0 1.5px var(--chz-darvoza) inset; }
 
 /* "Nuqta qo'shish" tugmasi — yoqilganda accent rangda ajralib turadi */
 .chz button.tool.addpoint { border-color: var(--chz-accent); color: var(--chz-accent); }
@@ -565,11 +567,13 @@ html.themed .chz-stat { background: var(--c-surface); border-color: var(--c-line
 .chz-stat.kazirok, html.themed .chz-stat.kazirok { border-left-color: var(--chz-kazirok); }
 .chz-stat.devor,   html.themed .chz-stat.devor   { border-left-color: var(--chz-devor); }
 .chz-stat.qosh,    html.themed .chz-stat.qosh    { border-left-color: var(--chz-qosh); }
+.chz-stat.darvoza, html.themed .chz-stat.darvoza { border-left-color: var(--chz-darvoza); }
 .chz-stat.qozon,   html.themed .chz-stat.qozon   { border-left-color: var(--chz-qozon); }
 .chz-stat.lines,   html.themed .chz-stat.lines   { border-left-color: var(--chz-accent); }
 .chz-stat.kazirok .val { color: var(--chz-kazirok); }
 .chz-stat.devor .val   { color: var(--chz-devor); }
 .chz-stat.qosh .val    { color: var(--chz-qosh); }
+.chz-stat.darvoza .val { color: var(--chz-darvoza); }
 .chz-stat.qozon .val   { color: var(--chz-qozon); }
 .chz-stat.lines .val   { color: var(--chz-accent); }
 
