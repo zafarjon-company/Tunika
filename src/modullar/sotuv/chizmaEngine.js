@@ -140,10 +140,10 @@ const TEMPLATE = `
     </div>
     <div class="chz-panel">
       <h3>Hisoblash</h3>
-      <div class="chz-stat kazirok">
-        <span class="lbl">Kazirok umumiy:</span>
-        <span class="val" data-chz="kazirokLen">&mdash;</span>
-        <select class="rowUnit" data-chz="unitKazirok"><option>mm</option><option>cm</option><option selected>m</option></select>
+      <div class="chz-stat qosh">
+        <span class="lbl">Qosh (Latok) umumiy:</span>
+        <span class="val" data-chz="totalYellow">0</span>
+        <select class="rowUnit" data-chz="unitQosh"><option>mm</option><option>cm</option><option selected>m</option></select>
       </div>
       <div class="chz-stat kazirok">
         <span class="lbl">Kazirok yuzasi:</span>
@@ -155,10 +155,10 @@ const TEMPLATE = `
         <span class="val" data-chz="totalRed">0</span>
         <select class="rowUnit" data-chz="unitDevor"><option>mm</option><option>cm</option><option selected>m</option></select>
       </div>
-      <div class="chz-stat qosh">
-        <span class="lbl">Qosh (Latok) umumiy:</span>
-        <span class="val" data-chz="totalYellow">0</span>
-        <select class="rowUnit" data-chz="unitQosh"><option>mm</option><option>cm</option><option selected>m</option></select>
+      <div class="chz-stat kazirok">
+        <span class="lbl">Kazirok umumiy:</span>
+        <span class="val" data-chz="kazirokLen">&mdash;</span>
+        <select class="rowUnit" data-chz="unitKazirok"><option>mm</option><option>cm</option><option selected>m</option></select>
       </div>
       <div class="chz-stat qozon">
         <span class="lbl">Qozon:</span>
