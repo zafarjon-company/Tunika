@@ -162,6 +162,9 @@ const TEMPLATE = `
     <button type="button" class="tool etool" data-chz="etMirror" data-tool="mirror" title="Mirror — o'qqa nisbatan aks ettirish">Mirror</button>
     <button type="button" class="tool etool" data-chz="etScale" data-tool="scale" title="Scale — masshtab">Scale</button>
     <button type="button" class="tool etool" data-chz="etOffset" data-tool="offset" title="Offset — parallel (line/circle)">Offset</button>
+    <button type="button" class="tool etool" data-chz="etTrim" data-tool="trim" title="Trim — chiziqning ortiqcha qismini kesish (kesishishgacha)">Trim</button>
+    <button type="button" class="tool etool" data-chz="etExtend" data-tool="extend" title="Extend — chiziq uchini eng yaqin chegaragacha cho'zish">Extend</button>
+    <button type="button" class="tool etool" data-chz="etFillet" data-tool="fillet" title="Fillet — ikki chiziqni burchakda tutashtirish (kesishgacha trim/extend)">Fillet</button>
     <button type="button" class="tool etool" data-chz="etErase" data-tool="erase" title="Erase — o'chirish">Erase</button>
     <span class="sep"></span>
     <button type="button" class="tool" data-chz="btnRefEdit" title="Import qilingan DXF namunani tahrirlanadigan elementlarga aylantirish">&#8631; Namunani tahrirlash</button>
@@ -726,7 +729,7 @@ export function mountChizma(root) {
      Asboblar: select, line, pline, rect, circle, move, copy, rotate,
      mirror, scale, offset, erase. Hammasi sichqoncha bilan (jonli ko'rinish).
      ============================================================ */
-  const EDIT_TOOLS = ['select', 'line', 'pline', 'rect', 'circle', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'erase'];
+  const EDIT_TOOLS = ['select', 'line', 'pline', 'rect', 'circle', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'trim', 'extend', 'fillet', 'erase'];
   let editSel = null;        // select asbobi uchun: {sx,sy,moved,additive,candidate}
   state.cursorW = { x: 0, y: 0 };
 
@@ -873,6 +876,9 @@ export function mountChizma(root) {
       mirror: 'Mirror: o\'q 1-nuqta → 2-nuqta',
       scale: 'Scale: tayanch nuqta → masshtab nuqtasi',
       offset: 'Offset: elementni bosing → tomonni bosing',
+      trim: 'Trim: chiziqning kesib tashlanadigan qismini bosing',
+      extend: 'Extend: chiziqning cho\'ziladigan uchi tomonidan bosing',
+      fillet: 'Fillet: 1-chiziq → 2-chiziqni bosing (burchakda tutashadi)',
       erase: 'Erase: o\'chirish uchun element ustiga bosing',
     };
     return m[t] || '';
@@ -897,6 +903,9 @@ export function mountChizma(root) {
     if (t === 'rect') return rectClick(w);
     if (t === 'circle') return circleClick(w);
     if (t === 'offset') return offsetClick(sx, sy, w);
+    if (t === 'trim') return trimClick(sx, sy, w);
+    if (t === 'extend') return extendClick(sx, sy, w);
+    if (t === 'fillet') return filletClick(sx, sy, w);
     if (['move', 'copy', 'rotate', 'mirror', 'scale'].includes(t)) return modifyClick(t, w);
   }
   function editMove(e) {
@@ -1061,6 +1070,101 @@ export function mountChizma(root) {
     render();
   }
 
+  // ---- Trim / Extend / Fillet uchun geometriya ----
+  // Cheksiz to'g'ri chiziqlar kesishishi: p1->p2 va p3->p4. t — 1-chiziq bo'yicha
+  // (nuqta = p1 + t*(p2-p1)), u — 2-chiziq bo'yicha. Parallel bo'lsa null.
+  function lineInt(p1, p2, p3, p4) {
+    const d1x = p2.x - p1.x, d1y = p2.y - p1.y;
+    const d2x = p4.x - p3.x, d2y = p4.y - p3.y;
+    const den = d1x * d2y - d1y * d2x;
+    if (Math.abs(den) < 1e-9) return null;
+    const t = ((p3.x - p1.x) * d2y - (p3.y - p1.y) * d2x) / den;
+    const u = ((p3.x - p1.x) * d1y - (p3.y - p1.y) * d1x) / den;
+    return { x: p1.x + t * d1x, y: p1.y + t * d1y, t, u };
+  }
+  // Element qirralari (chegara sifatida): line/polyline. Circle hozircha o'tkazilmaydi.
+  function entSegs(ent) {
+    const segs = [];
+    if (ent.type === 'line') segs.push([{ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }]);
+    else if (ent.type === 'polyline') {
+      const p = ent.pts;
+      for (let i = 0; i < p.length - 1; i++) segs.push([p[i], p[i + 1]]);
+      if (ent.closed && p.length > 2) segs.push([p[p.length - 1], p[0]]);
+    }
+    return segs;
+  }
+  function trimClick(sx, sy, w) {
+    const ent = entAtScreen(sx, sy);
+    if (!ent || ent.type !== 'line') { setEditInfo('Trim hozircha faqat Line uchun'); return; }
+    const A = { x: ent.x1, y: ent.y1 }, B = { x: ent.x2, y: ent.y2 };
+    const dx = B.x - A.x, dy = B.y - A.y, L2 = dx * dx + dy * dy;
+    if (L2 < 1e-9) return;
+    const ts = [0, 1];
+    for (const other of state.editEntities) {
+      if (other === ent) continue;
+      for (const [c, d] of entSegs(other)) {
+        const r = lineInt(A, B, c, d);
+        if (r && r.t > 1e-6 && r.t < 1 - 1e-6 && r.u >= -1e-6 && r.u <= 1 + 1e-6) ts.push(r.t);
+      }
+    }
+    if (ts.length <= 2) { setEditInfo('Kesishish topilmadi'); return; }
+    ts.sort((a, b) => a - b);
+    const uniq = [];
+    for (const t of ts) if (!uniq.length || Math.abs(uniq[uniq.length - 1] - t) > 1e-6) uniq.push(t);
+    const tc = ((w.x - A.x) * dx + (w.y - A.y) * dy) / L2;
+    let i = 0;
+    while (i < uniq.length - 1 && !(tc >= uniq[i] - 1e-6 && tc <= uniq[i + 1] + 1e-6)) i++;
+    if (i >= uniq.length - 1) { setEditInfo('Kesish joyi aniqlanmadi'); return; }
+    const ta = uniq[i], tb = uniq[i + 1];
+    const pt = (t) => ({ x: A.x + dx * t, y: A.y + dy * t });
+    const repl = [];
+    if (ta > 1e-6) { const p0 = pt(0), pa = pt(ta); repl.push(newEnt('line', { x1: p0.x, y1: p0.y, x2: pa.x, y2: pa.y })); }
+    if (tb < 1 - 1e-6) { const pb = pt(tb), p1 = pt(1); repl.push(newEnt('line', { x1: pb.x, y1: pb.y, x2: p1.x, y2: p1.y })); }
+    pushHistory();
+    const idx = state.editEntities.indexOf(ent);
+    state.editEntities.splice(idx, 1, ...repl);
+    state.selEdit.delete(ent.id);
+    render();
+  }
+  function extendClick(sx, sy, w) {
+    const ent = entAtScreen(sx, sy);
+    if (!ent || ent.type !== 'line') { setEditInfo('Extend hozircha faqat Line uchun'); return; }
+    const A = { x: ent.x1, y: ent.y1 }, B = { x: ent.x2, y: ent.y2 };
+    const extendB = Math.hypot(w.x - B.x, w.y - B.y) <= Math.hypot(w.x - A.x, w.y - A.y);
+    const fix = extendB ? A : B, mov = extendB ? B : A;
+    let best = null, bestT = Infinity;
+    for (const other of state.editEntities) {
+      if (other === ent) continue;
+      for (const [c, d] of entSegs(other)) {
+        const r = lineInt(fix, mov, c, d);
+        if (r && r.t > 1 + 1e-6 && r.u >= -1e-6 && r.u <= 1 + 1e-6 && r.t < bestT) { bestT = r.t; best = { x: r.x, y: r.y }; }
+      }
+    }
+    if (!best) { setEditInfo('Cho\'zish uchun chegara topilmadi'); return; }
+    pushHistory();
+    if (extendB) { ent.x2 = best.x; ent.y2 = best.y; } else { ent.x1 = best.x; ent.y1 = best.y; }
+    render();
+  }
+  function filletClick(sx, sy, w) {
+    const ent = entAtScreen(sx, sy);
+    if (!ent || ent.type !== 'line') { setEditInfo('Fillet hozircha faqat Line uchun'); return; }
+    const d = state.toolDraft;
+    if (!d || d.tool !== 'fillet') { state.toolDraft = { tool: 'fillet', ent1: ent, click1: w }; setEditInfo('Ikkinchi chiziqni bosing'); render(); return; }
+    if (ent === d.ent1) { setEditInfo('Boshqa chiziqni tanlang'); return; }
+    const e1 = d.ent1, e2 = ent;
+    const r = lineInt({ x: e1.x1, y: e1.y1 }, { x: e1.x2, y: e1.y2 }, { x: e2.x1, y: e2.y1 }, { x: e2.x2, y: e2.y2 });
+    if (!r) { setEditInfo('Chiziqlar parallel — burchak yo\'q'); state.toolDraft = null; render(); return; }
+    pushHistory();
+    const moveNear = (e, click) => {
+      if (Math.hypot(click.x - e.x2, click.y - e.y2) <= Math.hypot(click.x - e.x1, click.y - e.y1)) { e.x2 = r.x; e.y2 = r.y; }
+      else { e.x1 = r.x; e.y1 = r.y; }
+    };
+    moveNear(e1, d.click1);
+    moveNear(e2, w);
+    state.toolDraft = null;
+    render();
+  }
+
   function eraseSelectedEnts() {
     if (state.selEdit.size === 0) return;
     pushHistory();
@@ -1123,6 +1227,8 @@ export function mountChizma(root) {
       if (d.tool === 'mirror') { const s1 = worldToScreen(base.x, base.y), s2 = worldToScreen(cur.x, cur.y); ghost(svgEl('line', { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y, stroke: P.accent, 'stroke-width': 1, 'stroke-dasharray': '2 3' })); }
     } else if (d && d.tool === 'offset' && d.ent) {
       ghost(entSvg(d.ent, { stroke: P.accent, 'stroke-width': 2.6, fill: 'none' }));
+    } else if (d && d.tool === 'fillet' && d.ent1) {
+      ghost(entSvg(d.ent1, { stroke: P.accent, 'stroke-width': 2.6, fill: 'none' }));
     }
     if (d && d.base) { const s = worldToScreen(d.base.x, d.base.y); svg.appendChild(svgEl('circle', { cx: s.x, cy: s.y, r: 3, fill: P.accent })); }
   }
