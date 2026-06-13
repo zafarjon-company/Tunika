@@ -489,6 +489,18 @@ html.themed .chz button.tool:hover { border-color: var(--c-t4); }
 .chz button.tool.addpoint { border-color: var(--chz-accent); color: var(--chz-accent); }
 .chz button.tool.addpoint.active { background: color-mix(in srgb, var(--chz-accent) 16%, transparent); box-shadow: 0 0 0 1.5px var(--chz-accent) inset; }
 
+/* DXF import tugmasi + fon namuna boshqaruvi */
+.chz button.tool.import { border-color: var(--chz-accent); color: var(--chz-accent); }
+.chz-refinfo { font-size: 11px; color: #64748b; margin-left: 4px; white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+html.themed .chz-refinfo { color: var(--c-t3); }
+.chz-canvas.chz-dragover { outline: 2px dashed var(--chz-accent); outline-offset: -6px; }
+.chz-canvas.chz-dragover::after {
+  content: 'DXF faylni shu yerga tashlang'; position: absolute; inset: 0; z-index: 7;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: var(--chz-accent);
+  background: color-mix(in srgb, var(--chz-accent) 9%, transparent); pointer-events: none;
+}
+
 /* Belgilar (+) toggle tugmalari */
 .chz button.tool.tg { border-color: var(--chz-accent); color: var(--chz-accent); }
 .chz button.tool.tg.off { opacity: .45; text-decoration: line-through; border-color: #cbd5e1; color: #94a3b8; }

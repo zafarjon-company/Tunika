@@ -37,6 +37,13 @@ export function readChizmaQozon() {
 }
 
 const STORAGE_KEY = 'xona-chizma-v1';
+const REF_KEY = 'xona-chizma-ref-v1';   // DXF fon namuna alohida saqlanadi (asosiy chizmaga xalaqit bermasin)
+
+/* DXF fon namuna birliklari — 1 birlik necha millimetr.
+   Faqat fon (ko'rinish) uchun; hech qaysi hisobga qo'shilmaydi. */
+const REF_UNITS = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8 };
+// DXF $INSUNITS kodi -> bizdagi birlik kaliti (0/noma'lum -> null, default mm).
+const INSUNITS_MAP = { 1: 'in', 2: 'ft', 4: 'mm', 5: 'cm', 6: 'm' };
 
 /* ---------------- MAVZUGA MOS RANG PALITRASI ----------------
    --c-btn (mavzu asosiy rangi) tusidan boshlab, rang doirasida
@@ -103,6 +110,7 @@ export function computePalette() {
     labelBg: themed ? 'rgba(6,8,12,.78)' : 'rgba(255,255,255,.88)',
     point:   themed ? '#e8e8e8' : '#334155',
     pointStroke: themed ? '#888' : '#94a3b8',
+    ref:     themed ? '#7e8a9c' : '#9aa6b6',   // DXF fon namuna (kulrang) rangi
   };
 }
 
@@ -110,6 +118,15 @@ export function computePalette() {
 const TEMPLATE = `
   <div class="chz-toolbar">
     <button type="button" class="tool addpoint" data-chz="btnAddPoint" title="Yoqilsa — maydonni bosib yangi nuqta qo'shiladi (Esc — bekor)">&#10010; Nuqta qo'shish</button>
+    <span class="sep"></span>
+    <button type="button" class="tool import" data-chz="btnImport" title="AutoCAD DXF faylni fon namuna sifatida yuklash (faylni maydonga sudrab tashlasangiz ham bo'ladi)">&#128193; DXF namuna</button>
+    <select class="rowUnit chz-refunit" data-chz="unitRef" title="DXF fayl o'lcham birligi (razmer shunga qarab o'giriladi)" style="display:none">
+      <option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option>
+      <option value="in">dyuym</option><option value="ft">fut</option>
+    </select>
+    <button type="button" class="tool" data-chz="btnRefClear" title="Fon namunasini o'chirish" style="display:none">&#10005; Namuna</button>
+    <span class="chz-refinfo" data-chz="refInfo"></span>
+    <input type="file" accept=".dxf,.DXF" data-chz="fileInput" style="display:none" />
     <span class="sep"></span>
     <button type="button" class="tool color-devor active" data-chz="btnRed">&#9679; Devor</button>
     <button type="button" class="tool color-qosh" data-chz="btnYellow">&#9679; Qosh (Latok)</button>
@@ -126,6 +143,7 @@ const TEMPLATE = `
     <button type="button" class="tool tg" data-chz="tgQosh" title="Qosh + belgilari — razmer ko'rinaveradi">Qosh +</button>
     <button type="button" class="tool tg" data-chz="tgQozon" title="Qozonlar ko'rinishi — hisobga ta'sir qilmaydi">Qozon</button>
     <button type="button" class="tool tg" data-chz="tgRazmer" title="Chiziq ustidagi razmer yozuvlari (raqam + o'lchov birligi)">Razmerlar</button>
+    <button type="button" class="tool tg" data-chz="tgRef" title="DXF fon namunasini ko'rsatish / yashirish" style="display:none">Namuna</button>
   </div>
   <div class="chz-main">
     <div class="chz-canvas" data-chz="canvasWrap">
@@ -183,6 +201,7 @@ const TEMPLATE = `
         </button>
       </div>
       <div class="chz-hint" data-chz="hintBox" style="display:none">
+        &bull; <span style="color:var(--chz-accent)"><b>DXF namuna</b></span> &rarr; AutoCAD <b>DXF</b> faylni tugma orqali yoki maydonga <b>sudrab tashlab</b> yuklang — chizma kulrang fon namuna bo'lib chiqadi (razmerlari aynan), ustidan Devor/Qosh chizib olasiz. Birlik noto'g'ri chiqsa — yondagi birlik ro'yxatidan to'g'rilang. Hisobga qo'shilmaydi.<br>
         &bull; <span style="color:var(--chz-accent)"><b>Nuqta qo'shish</b></span> &rarr; tugmani yoqib, maydonni bossangiz yangi (erkin) nuqta ekiladi; so'ng o'sha nuqtaning <b>+</b> belgisidan chizishni boshlang. Bekor &rarr; <b>Esc</b>.<br>
         &bull; <span style="color:var(--chz-accent)"><b>+</b></span> &rarr; yangi chiziq (uzunlik &rarr; Enter).<br>
         &bull; <span style="color:var(--chz-offset)"><b>Offset +</b></span> &rarr; <b>faqat o'sha chiziq</b> shu tomonga offset bo'ladi (masofa kiriting).
@@ -239,6 +258,9 @@ export function mountChizma(root) {
     showQoshPlus: false,
     showQozon: true,
     showRazmer: true,
+    ref: null,             // DXF fon namuna: { paths:[[ [x,y]... ]], unit } — xom (DXF birligida)
+    refWorld: [],          // namuna world mm (y to'g'rilangan) — ref'dan hosil qilinadi, saqlanmaydi
+    showRef: true,
   };
 
   const svg         = q('svg');
@@ -550,6 +572,112 @@ export function mountChizma(root) {
     state.selectedLines.clear();
     closeInput();
     render();
+  }
+
+  /* ---------------- DXF FON NAMUNA (import) ----------------
+     AutoCAD DXF faylni FAQAT ko'rinish uchun fon namuna sifatida yuklaydi.
+     Razmerlar aynan saqlanadi (DXF birligidan mm ga o'giriladi), Y o'qi
+     to'g'rilanadi (DXF Y yuqoriga, bizda pastga). Namuna tahrirlanmaydi va
+     hech qaysi hisob-kitobga (Devor/Qosh/Kazirok) qo'shilmaydi. */
+  function refUnitFactor() {
+    return REF_UNITS[(state.ref && state.ref.unit) || 'mm'] || 1;
+  }
+  // Xom DXF yo'llardan world mm yo'llarni qayta hisoblaymiz (birlik o'zgarsa ham).
+  function buildRefWorld() {
+    const f = refUnitFactor();
+    state.refWorld = (state.ref && state.ref.paths ? state.ref.paths : [])
+      .map((path) => path.map(([x, y]) => ({ x: x * f, y: -y * f })))
+      .filter((path) => path.length >= 2);
+  }
+  function refBounds() {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const path of state.refWorld) for (const p of path) {
+      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    }
+    return (minX === Infinity) ? null : { minX, minY, maxX, maxY };
+  }
+
+  // DXF matnini o'qib, fon namuna sifatida o'rnatadi. `dxf` kutubxonasi
+  // talab bo'lgandagina (dinamik) yuklanadi — boshlang'ich yuk yengil qoladi.
+  async function importDxfText(text, fileName) {
+    setRefInfo('DXF o\'qilmoqda…');
+    let Helper;
+    try {
+      const mod = await import('dxf');
+      Helper = mod.Helper || (mod.default && mod.default.Helper);
+    } catch (e) { setRefInfo('DXF kutubxonasi yuklanmadi'); return; }
+    if (!Helper) { setRefInfo('DXF kutubxonasi yuklanmadi'); return; }
+    let parsed, polylines;
+    try {
+      const helper = new Helper(text);
+      parsed = helper.parsed;
+      polylines = helper.toPolylines().polylines || [];
+    } catch (e) { setRefInfo('DXF o\'qib bo\'lmadi (fayl buzuq?)'); return; }
+
+    const paths = [];
+    for (const pl of polylines) {
+      const vs = (pl.vertices || []).filter((v) => Array.isArray(v) && isFinite(v[0]) && isFinite(v[1]));
+      if (vs.length >= 2) paths.push(vs.map((v) => [v[0], v[1]]));
+    }
+    if (!paths.length) { setRefInfo('DXF da chiziq topilmadi'); return; }
+
+    // O'lcham birligini $INSUNITS dan aniqlaymiz; noma'lum bo'lsa — mm.
+    const code = parsed && parsed.header ? parsed.header.insUnits : undefined;
+    const unit = INSUNITS_MAP[code] || 'mm';
+
+    state.ref = { paths, unit };
+    state.showRef = true;
+    buildRefWorld();
+    saveRefLS();
+    syncRefUI();
+    const knownU = INSUNITS_MAP[code] ? '' : ' (birlik noma\'lum — mm deb olindi, kerak bo\'lsa o\'zgartiring)';
+    setRefInfo(`${fileName || 'DXF'}: ${paths.length} chiziq • ${unit}${knownU}`);
+    centerView();   // namunani ekranga moslab ko'rsatamiz
+  }
+
+  function setRefUnit(u) {
+    if (!state.ref) return;
+    state.ref.unit = u;
+    buildRefWorld();
+    saveRefLS();
+    centerView();
+  }
+  function clearRef() {
+    state.ref = null;
+    state.refWorld = [];
+    try { localStorage.removeItem(REF_KEY); } catch (e) { /* noop */ }
+    setRefInfo('');
+    syncRefUI();
+    render();
+  }
+  function setRefInfo(msg) {
+    const el = q('refInfo');
+    if (el) el.textContent = msg || '';
+  }
+  function saveRefLS() {
+    try {
+      if (state.ref) localStorage.setItem(REF_KEY, JSON.stringify(state.ref));
+    } catch (e) { /* juda katta bo'lsa — saqlamaymiz, lekin ko'rinaveradi */ }
+  }
+  function loadRefLS() {
+    try {
+      const raw = localStorage.getItem(REF_KEY);
+      if (!raw) return;
+      const o = JSON.parse(raw);
+      if (o && Array.isArray(o.paths) && o.paths.length) {
+        state.ref = { paths: o.paths, unit: REF_UNITS[o.unit] ? o.unit : 'mm' };
+        buildRefWorld();
+      }
+    } catch (e) { /* noop */ }
+  }
+  // Namuna tugmalari (birlik tanlash, o'chirish, ko'rsатish toggle) ko'rinishi.
+  function syncRefUI() {
+    const has = !!(state.ref && state.refWorld.length);
+    const u = q('unitRef'), c = q('btnRefClear'), t = q('tgRef');
+    if (u) { u.style.display = has ? '' : 'none'; if (has) u.value = state.ref.unit; }
+    if (c) c.style.display = has ? '' : 'none';
+    if (t) { t.style.display = has ? '' : 'none'; t.classList.toggle('off', !state.showRef); }
   }
 
   /* ---------------- UZUNLIK QUTISI ---------------- */
@@ -865,6 +993,20 @@ export function mountChizma(root) {
 
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // 0) DXF FON NAMUNA — eng pastki qatlam, kulrang, bosib bo'lmaydi
+    //    (pointer-events yo'q — bosish ostidagi maydonga o'tadi).
+    if (state.showRef && state.refWorld.length) {
+      for (const path of state.refWorld) {
+        let pts = '';
+        for (const p of path) { const s = worldToScreen(p.x, p.y); pts += s.x + ',' + s.y + ' '; }
+        svg.appendChild(svgEl('polyline', {
+          points: pts.trim(), fill: 'none', stroke: P.ref,
+          'stroke-width': 1, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+          opacity: 0.85, 'pointer-events': 'none',
+        }));
+      }
+    }
 
     const labels = [];
 
@@ -1292,7 +1434,7 @@ export function mountChizma(root) {
           unitDevor: state.unitDevor, unitQosh: state.unitQosh,
           unitKazirok: state.unitKazirok, unitKazirokArea: state.unitKazirokArea, unitCorner: state.unitCorner,
           showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showQozon: state.showQozon,
-          showRazmer: state.showRazmer,
+          showRazmer: state.showRazmer, showRef: state.showRef,
           scale: state.scale, panX: state.panX, panY: state.panY,
         }));
       } catch (e) { /* noop */ }
@@ -1320,6 +1462,7 @@ export function mountChizma(root) {
       state.showQoshPlus = o.showQoshPlus === true;
       state.showQozon = o.showQozon !== false;
       state.showRazmer = o.showRazmer !== false;
+      state.showRef = o.showRef !== false;
       if (o.scale) state.scale = o.scale;
       if (typeof o.panX === 'number') state.panX = o.panX;
       if (typeof o.panY === 'number') state.panY = o.panY;
@@ -1490,6 +1633,34 @@ export function mountChizma(root) {
   on(q('btnClear'), 'click', clearAll);
   on(q('btnFit'), 'click', centerView);
 
+  // DXF fon namuna: tugma / fayl tanlash / sudrab-tashlash / birlik / o'chirish.
+  async function handleRefFile(file) {
+    if (!file) return;
+    const name = file.name || 'DXF';
+    if (!/\.dxf$/i.test(name)) { setRefInfo('Faqat .dxf fayl bo\'lishi kerak'); return; }
+    let text;
+    try { text = await file.text(); } catch (e) { setRefInfo('Faylni o\'qib bo\'lmadi'); return; }
+    await importDxfText(text, name);
+  }
+  on(q('btnImport'), 'click', () => q('fileInput').click());
+  on(q('fileInput'), 'change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    handleRefFile(f);
+    e.target.value = '';   // bir xil faylni qayta tanlash mumkin bo'lsin
+  });
+  on(q('unitRef'), 'change', (e) => setRefUnit(e.target.value));
+  on(q('btnRefClear'), 'click', clearRef);
+  on(q('tgRef'), 'click', () => { state.showRef = !state.showRef; syncRefUI(); render(); });
+  // Faylni chizma maydoniga sudrab tashlash.
+  on(canvasWrap, 'dragover', (e) => { e.preventDefault(); canvasWrap.classList.add('chz-dragover'); });
+  on(canvasWrap, 'dragleave', () => canvasWrap.classList.remove('chz-dragover'));
+  on(canvasWrap, 'drop', (e) => {
+    e.preventDefault();
+    canvasWrap.classList.remove('chz-dragover');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    handleRefFile(f);
+  });
+
   on(q('unitKazirok'), 'change', (e) => { state.unitKazirok = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitKazirokArea'), 'change', (e) => { state.unitKazirokArea = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitDevor'), 'change',   (e) => { state.unitDevor   = e.target.value; updatePanel(); saveStateLS(); });
@@ -1533,12 +1704,18 @@ export function mountChizma(root) {
     const ids = new Set();
     for (const l of state.lines) { ids.add(l.a); ids.add(l.b); }
     const pts = ids.size ? state.points.filter((p) => ids.has(p.id)) : state.points;
-    if (pts.length === 0) return;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const p of pts) {
       minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
       minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
     }
+    // DXF fon namuna chegarasini ham hisobga olamiz (mavjud bo'lsa).
+    const rb = refBounds();
+    if (rb) {
+      minX = Math.min(minX, rb.minX); maxX = Math.max(maxX, rb.maxX);
+      minY = Math.min(minY, rb.minY); maxY = Math.max(maxY, rb.maxY);
+    }
+    if (minX === Infinity) return;
     const w = maxX - minX, h = maxY - minY;
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     const pad = 45;
@@ -1577,6 +1754,7 @@ export function mountChizma(root) {
     state.panX = rect.width / 2;
     state.panY = rect.height / 2;
   }
+  loadRefLS();             // saqlangan DXF fon namuna (bo'lsa)
   setColor(state.color);
   q('unitKazirok').value = state.unitKazirok;
   q('unitKazirokArea').value = state.unitKazirokArea;
@@ -1584,10 +1762,11 @@ export function mountChizma(root) {
   q('unitQosh').value = state.unitQosh;
   q('unitCorner').value = state.unitCorner;
   syncToggleButtons();
+  syncRefUI();
   render();
-  // Saqlangan chizma bo'lsa — ochilganda darhol markazga olamiz
+  // Chizma yoki namuna bo'lsa — ochilganda darhol markazga olamiz
   // (oyna o'lchami avvalgi sessiyadan farq qilishi mumkin).
-  if (restored && state.lines.length) requestAnimationFrame(centerView);
+  if (state.lines.length || state.refWorld.length) requestAnimationFrame(centerView);
 
   return {
     centerView,
