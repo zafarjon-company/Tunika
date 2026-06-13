@@ -722,15 +722,15 @@ export function mountChizma(root) {
     return corners;
   }
 
-  // Bir rangdagi chiziqlar hosil qilgan YOPIQ kontur(lar) yuzasi (mm²).
-  // Konturni qirralardan kuzatib (trace), shoelace bilan hisoblaymiz;
-  // bir nechta yopiq halqa bo'lsa, yuzalar qo'shiladi. Yopilmagan
-  // (ochiq) qism hisobga olinmaydi.
-  function contourArea(color) {
-    const lines = state.lines.filter((l) => l.color === color);
-    if (lines.length < 3) return 0;
+  // Qirralar to'plamining (har biri {a,b} nuqta-id) hosil qilgan YOPIQ
+  // halqa(lar) yuzasi (mm²). Qirralarni kuzatib (trace), shoelace bilan
+  // hisoblaymiz; bir nechta yopiq halqa bo'lsa, yuzalar qo'shiladi.
+  // Yopilmagan (ochiq) qism hisobga olinmaydi.
+  function traceArea(edges) {
+    if (edges.length < 3) return 0;
     const adj = new Map();
-    for (const l of lines) {
+    for (const l of edges) {
+      if (l.a === l.b) continue;
       if (!adj.has(l.a)) adj.set(l.a, []);
       if (!adj.has(l.b)) adj.set(l.b, []);
       adj.get(l.a).push(l.b);
@@ -739,13 +739,13 @@ export function mountChizma(root) {
     const key = (u, v) => Math.min(u, v) + '-' + Math.max(u, v);
     const used = new Set();
     let total = 0;
-    for (const l of lines) {
-      if (used.has(key(l.a, l.b))) continue;
+    for (const l of edges) {
+      if (l.a === l.b || used.has(key(l.a, l.b))) continue;
       const loop = [l.a];
       let prev = l.a, cur = l.b;
       used.add(key(l.a, l.b));
       let guard = 0;
-      while (cur !== l.a && guard++ < lines.length + 2) {
+      while (cur !== l.a && guard++ < edges.length + 2) {
         loop.push(cur);
         let next = null;
         for (const n of (adj.get(cur) || [])) {
@@ -767,6 +767,41 @@ export function mountChizma(root) {
     }
     return total;                            // mm²
   }
+  // Bir rangdagi chiziqlar hosil qilgan yopiq kontur(lar) yuzasi.
+  function contourArea(color) {
+    return traceArea(state.lines.filter((l) => l.color === color));
+  }
+
+  // Qosh (offset) chizig'ining OCHIQ uchlari — devor konturi to'liq
+  // yopilmaganda. Har bir ochiq qosh uchi (faqat bitta qosh chizig'iga
+  // ulangan nuqta) o'zi kelib chiqqan devor burchagiga (mapOrig) ulanadi.
+  // Bu "yopqich" chiziqlar — FAQAT ko'rinish va kazirok yuzasi uchun;
+  // hech qaysi uzunlik/son hisobiga qo'shilmaydi. Chizma davom etib yana
+  // offset tashlansa, eski uch fillet bilan birikib (daraja 2) ochiqligini
+  // yo'qotadi — yopqich avtomatik yangi ochiq uchlarga ko'chadi.
+  function yellowDegree(pid) {
+    let d = 0;
+    for (const l of state.lines) if (l.color === 'yellow' && (l.a === pid || l.b === pid)) d++;
+    return d;
+  }
+  function computeEndCaps() {
+    const caps = [];
+    const seen = new Set();
+    for (const l of state.lines) {
+      if (l.color !== 'yellow' || l.srcEdge == null) continue;
+      for (const pid of [l.a, l.b]) {
+        if (seen.has(pid)) continue;
+        seen.add(pid);
+        const yp = getPoint(pid);
+        if (!yp || yp.mapOrig == null) continue;
+        if (yellowDegree(pid) !== 1) continue;     // faqat ochiq uch
+        const dp = getPoint(yp.mapOrig);
+        if (!dp) continue;
+        caps.push({ yp, dp });
+      }
+    }
+    return caps;
+  }
 
   // Kazirok = devor umumiy uzunligi − botiq burchaklardagi qozon ikki o'lchami.
   // Kazirok yuzasi = qosh (tashqi kontur) yuzasi − devor (ichki kontur) yuzasi
@@ -783,11 +818,21 @@ export function mountChizma(root) {
     }
 
     const areaEl = q('kazirokArea');
-    const devorA = contourArea('red');
-    const qoshA  = contourArea('yellow');
-    areaEl.textContent = (devorA > 0 && qoshA > 0)
-      ? fmtArea(Math.abs(qoshA - devorA), state.unitKazirokArea)
-      : '—';
+    const caps = computeEndCaps();
+    let area = 0;
+    if (caps.length) {
+      // Devor konturi OCHIQ — devor + qosh + uch yopqichlari birgalikda
+      // bitta yopiq halqa (strip) hosil qiladi; yuzasi = kazirok yuzasi.
+      const edges = state.lines.map((l) => ({ a: l.a, b: l.b }));
+      for (const c of caps) edges.push({ a: c.yp.id, b: c.dp.id });
+      area = traceArea(edges);
+    } else {
+      // Devor ham, qosh ham yopiq — ikki kontur yuzasi ayirmasi.
+      const devorA = contourArea('red');
+      const qoshA  = contourArea('yellow');
+      if (devorA > 0 && qoshA > 0) area = Math.abs(qoshA - devorA);
+    }
+    areaEl.textContent = area > 0 ? fmtArea(area, state.unitKazirokArea) : '—';
   }
 
   // Qosh (Latok) umumiy (metr) qiymatini saqlab, tashqariga (React) xabar beramiz.
@@ -862,6 +907,17 @@ export function mountChizma(root) {
       const side = chooseSide({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, perp, ln.color === 'yellow');
       const horizontal = Math.abs(tx) >= Math.abs(ty);
       labels.push({ mx, my, side, horizontal, selected, text: fmt(ln.length, ln.unit) });
+    }
+
+    // 1.5) UCH YOPQICHLARI — ochiq qosh uchini devor uchiga qosh rangida
+    //      ulaydi (faqat ko'rinish; hech qaysi hisobga qo'shilmaydi).
+    for (const c of computeEndCaps()) {
+      const s1 = worldToScreen(c.yp.x, c.yp.y);
+      const s2 = worldToScreen(c.dp.x, c.dp.y);
+      svg.appendChild(svgEl('line', {
+        x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y,
+        stroke: colorHex('yellow'), 'stroke-width': 1.8, 'stroke-linecap': 'round',
+      }));
     }
 
     // 2) NUQTALAR
