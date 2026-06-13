@@ -415,6 +415,7 @@ export function mountChizma(root) {
     if (typeof o.showRef === 'boolean') state.showRef = o.showRef;
     state.selectedLines.clear();
     state.selEdit.clear();
+    state.toolDraft = null;   // undo/redo amaldagi asbob jarayonini (masalan fillet 1-bosqich) bekor qiladi — eski element havolasi qolmasin
     syncRefUI();
     rebuildLayerSelect();
   }
@@ -1192,10 +1193,10 @@ export function mountChizma(root) {
     const pt = (t) => ({ x: A.x + dx * t, y: A.y + dy * t });
     // Yangi bo'laklar manba chiziq xossalarini (qatlam/rang/qalinlik) meros oladi.
     const mk = (p, q) => { const e = newEnt('line', { x1: p.x, y1: p.y, x2: q.x, y2: q.y }); e.layer = ent.layer; e.color = ent.color; e.width = ent.width; return e; };
+    pushHistory();   // har qanday mutatsiyadan (nextEntId++ dan ham) OLDIN suratga olamiz
     const repl = [];
     if (ta > 1e-6) repl.push(mk(pt(0), pt(ta)));
     if (tb < 1 - 1e-6) repl.push(mk(pt(tb), pt(1)));
-    pushHistory();
     const idx = state.editEntities.indexOf(ent);
     state.editEntities.splice(idx, 1, ...repl);
     state.selEdit.delete(ent.id);
