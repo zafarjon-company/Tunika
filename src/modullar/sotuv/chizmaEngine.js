@@ -17,6 +17,11 @@ const PLUS_OFFSET = 26;   // yashil "+" (chizish) nuqtadan necha piksel narida
 const OFFSET_BTN  = 30;   // offset "+" chiziq o'rtasidan necha piksel narida
 const SNAP_PX     = 14;   // yopishish (snap) chegarasi, pikselda
 
+/* Kazirok bo'laklari (devor↔qosh orasidagi yo'lak) — chiziq bo'ylab enlari (mm).
+   Bo'yi har doim offset masofasiga teng. Juft-juft (asosiy + paloska) teriladi. */
+const KAZ_MAIN_MM  = 356;  // asosiy bo'lak eni — 35.6 sm
+const KAZ_STRIP_MM = 60;   // paloska eni — 6 sm
+
 /* O'lcham birliklari — 1 birlik necha millimetrga teng */
 const UNITS = { mm: 1, cm: 10, m: 1000 };
 const LATOK_M_KEY = 'xona-chizma-latok-m'; // Qosh (Latok) umumiy (metr) — React shu yerdan o'qiydi
@@ -144,6 +149,7 @@ const TEMPLATE = `
     <button type="button" class="tool tg" data-chz="tgDevor" title="Devor + belgilari — razmer ko'rinaveradi">Devor +</button>
     <button type="button" class="tool tg" data-chz="tgQosh" title="Qosh + belgilari — razmer ko'rinaveradi">Qosh +</button>
     <button type="button" class="tool tg" data-chz="tgQozon" title="Qozonlar ko'rinishi — hisobga ta'sir qilmaydi">Qozon</button>
+    <button type="button" class="tool tg" data-chz="tgKaz" title="Devor↔qosh orasidagi kazirok bo'laklari (35.6 + 6 sm juft-juft) — ko'rinish">Kaz.bo'lak</button>
     <button type="button" class="tool tg" data-chz="tgRazmer" title="Chiziq ustidagi razmer yozuvlari (raqam + o'lchov birligi)">Razmerlar</button>
     <button type="button" class="tool tg" data-chz="tgRef" title="DXF fon namunasini ko'rsatish / yashirish" style="display:none">Namuna</button>
   </div>
@@ -296,6 +302,7 @@ export function mountChizma(root) {
     showQoshPlus: false,
     showQozon: true,
     showRazmer: true,
+    showKazTiles: true,    // devor↔qosh orasidagi kazirok bo'laklari (35.6 + 6 sm) ko'rinishi
     ref: null,             // DXF fon namuna: { paths:[[ [x,y]... ]], unit } — xom (DXF birligida)
     refWorld: [],          // namuna world mm (y to'g'rilangan) — ref'dan hosil qilinadi, saqlanmaydi
     showRef: true,
@@ -1503,6 +1510,41 @@ export function mountChizma(root) {
     return corners;
   }
 
+  // KAZIROK BO'LAKLARI — devor↔qosh orasidagi yo'lakni to'rtburchaklarga bo'ladi.
+  // Har bir offset (qosh) segmenti uchun, chiziq bo'ylab juft-juft teriladi:
+  // asosiy (eni KAZ_MAIN_MM) + paloska (eni KAZ_STRIP_MM); bo'yi = offset masofa.
+  // Segment oxirida razmer to'g'ri kelmasa, oxirgi bo'lak kichrayadi va FAQAT
+  // o'shaning razmeri (eni×bo'yi) ko'rsatiladi. Faqat ko'rinish — hisobga ta'sir yo'q.
+  function computeKazTiles() {
+    const out = [];
+    for (const L of state.lines) {
+      if (L.srcEdge == null || !L.offSide || !(L.offDist > 0)) continue;
+      const a = getPoint(L.a), b = getPoint(L.b);
+      if (!a || !b) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const seg = Math.hypot(dx, dy);
+      if (seg < 1) continue;
+      const ux = dx / seg, uy = dy / seg;            // chiziq bo'ylab birlik vektor
+      const sx = L.offSide.x, sy = L.offSide.y;      // devor→qosh birlik perpendikulyar
+      const dist = L.offDist;
+      const pattern = [KAZ_MAIN_MM, KAZ_STRIP_MM];
+      let s = 0, i = 0, guard = 0;
+      while (s < seg - 0.5 && guard++ < 2000) {
+        const intended = pattern[i % 2];
+        let w = intended, shrunk = false;
+        if (s + intended >= seg - 0.5) { w = seg - s; shrunk = (intended - w) > 1; }
+        const q1 = { x: a.x + ux * s, y: a.y + uy * s };
+        const q2 = { x: a.x + ux * (s + w), y: a.y + uy * (s + w) };
+        const p1 = { x: q1.x - sx * dist, y: q1.y - sy * dist };
+        const p2 = { x: q2.x - sx * dist, y: q2.y - sy * dist };
+        out.push({ pts: [q1, q2, p2, p1], paloska: (i % 2 === 1), label: shrunk, w, h: dist });
+        s += w; i++;
+        if (s >= seg - 0.5) break;
+      }
+    }
+    return out;
+  }
+
   // Qirralar to'plamining (har biri {a,b} nuqta-id) hosil qilgan YOPIQ
   // halqa(lar) yuzasi (mm²). Qirralarni kuzatib (trace), shoelace bilan
   // hisoblaymiz; bir nechta yopiq halqa bo'lsa, yuzalar qo'shiladi.
@@ -1750,6 +1792,22 @@ export function mountChizma(root) {
       });
     }
 
+    // 2.6) KAZIROK BO'LAKLARI (devor↔qosh orasidagi yo'lak; faqat ko'rinish).
+    if (state.showKazTiles) for (const t of computeKazTiles()) {
+      const scr = t.pts.map((p) => worldToScreen(p.x, p.y));
+      svg.appendChild(svgEl('polygon', {
+        points: scr.map((s) => s.x + ',' + s.y).join(' '),
+        fill: P.kazirok, 'fill-opacity': t.paloska ? 0.28 : 0.10,
+        stroke: P.kazirok, 'stroke-width': 1,
+      }));
+      // Faqat oxirgi (kichraygan) bo'lakning razmeri ko'rinadi — qozondagidek.
+      if (t.label) {
+        const cx = (scr[0].x + scr[1].x + scr[2].x + scr[3].x) / 4;
+        const cy = (scr[0].y + scr[1].y + scr[2].y + scr[3].y) / 4;
+        labels.push({ mx: cx, my: cy, side: { x: 0, y: 0 }, horizontal: true, selected: false, kaz: true, text: fmtPair(t.w, t.h, state.unitCorner) });
+      }
+    }
+
     // 3) OFFSET MASOFA O'LCHOVLARI (dimlinear uslubi).
     for (const L of state.lines) {
       if (L.srcEdge == null) continue;
@@ -1784,7 +1842,7 @@ export function mountChizma(root) {
     const LABEL_OFF = 13;
     if (state.showRazmer) for (const L of labels) {
       let x, y, anchor, baseline, ry;
-      if (L.blue) {
+      if (L.blue || L.kaz) {
         x = L.mx; y = L.my; anchor = 'middle'; baseline = 'middle'; ry = y - 7;
       } else {
         x = L.mx + L.side.x * LABEL_OFF;
@@ -1805,7 +1863,7 @@ export function mountChizma(root) {
       else rx = x - w + 3;
       svg.appendChild(svgEl('rect', { x: rx, y: ry, width: w, height: 14, rx: 3, fill: P.labelBg }));
       const label = svgEl('text', {
-        x, y, fill: L.blue ? P.qozon : (L.selected ? P.accent : P.text), 'font-size': 11,
+        x, y, fill: L.kaz ? P.kazirok : (L.blue ? P.qozon : (L.selected ? P.accent : P.text)), 'font-size': 11,
         'text-anchor': anchor, 'dominant-baseline': baseline,
       });
       label.textContent = L.text;
@@ -2029,6 +2087,7 @@ export function mountChizma(root) {
     q('tgDevor').classList.toggle('off', !state.showDevorPlus);
     q('tgQosh').classList.toggle('off', !state.showQoshPlus);
     q('tgQozon').classList.toggle('off', !state.showQozon);
+    q('tgKaz').classList.toggle('off', !state.showKazTiles);
     q('tgRazmer').classList.toggle('off', !state.showRazmer);
   }
 
@@ -2103,7 +2162,7 @@ export function mountChizma(root) {
           unitDevor: state.unitDevor, unitQosh: state.unitQosh,
           unitKazirok: state.unitKazirok, unitKazirokArea: state.unitKazirokArea, unitCorner: state.unitCorner,
           showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showQozon: state.showQozon,
-          showRazmer: state.showRazmer, showRef: state.showRef,
+          showRazmer: state.showRazmer, showRef: state.showRef, showKazTiles: state.showKazTiles,
           scale: state.scale, panX: state.panX, panY: state.panY,
         }));
       } catch (e) { /* noop */ }
@@ -2138,6 +2197,7 @@ export function mountChizma(root) {
       state.showQozon = o.showQozon !== false;
       state.showRazmer = o.showRazmer !== false;
       state.showRef = o.showRef !== false;
+      state.showKazTiles = o.showKazTiles !== false;
       if (o.scale) state.scale = o.scale;
       if (typeof o.panX === 'number') state.panX = o.panX;
       if (typeof o.panY === 'number') state.panY = o.panY;
@@ -2369,6 +2429,7 @@ export function mountChizma(root) {
   on(q('tgDevor'), 'click', () => { state.showDevorPlus = !state.showDevorPlus; syncToggleButtons(); render(); });
   on(q('tgQosh'), 'click',  () => { state.showQoshPlus  = !state.showQoshPlus;  syncToggleButtons(); render(); });
   on(q('tgQozon'), 'click', () => { state.showQozon     = !state.showQozon;     syncToggleButtons(); render(); });
+  on(q('tgKaz'), 'click',   () => { state.showKazTiles  = !state.showKazTiles;  syncToggleButtons(); render(); });
   on(q('tgRazmer'), 'click', () => { state.showRazmer   = !state.showRazmer;    syncToggleButtons(); saveStateLS(); render(); });
 
   // Chiziqlar ro'yxati — DOIM yashirin boshlanadi, tugma bosilsa ochiladi.
