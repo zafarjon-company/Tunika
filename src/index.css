@@ -468,6 +468,19 @@ html.themed .chz-tglbl { color: var(--c-t3); }
 .chz-scale { font-size: 11px; color: #64748b; margin-left: auto; white-space: nowrap; }
 html.themed .chz-scale { color: var(--c-t3); }
 
+/* Tahrir (AutoCAD uslubidagi) asboblar paneli — ikkinchi qator */
+.chz-edittoolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px 10px; background: color-mix(in srgb, var(--chz-edit) 9%, #f8fafc);
+  border: 1px solid #e2e8f0; border-top: 1px dashed var(--chz-edit); border-bottom: 0;
+}
+html.themed .chz-edittoolbar { background: color-mix(in srgb, var(--chz-edit) 14%, var(--c-surface2)); border-color: var(--c-line); }
+.chz-edittoolbar .sep { width: 1px; height: 22px; background: #e2e8f0; margin: 0 2px; }
+html.themed .chz-edittoolbar .sep { background: var(--c-line); }
+.chz button.tool.editbtn { border-color: var(--chz-edit); color: var(--chz-edit); }
+.chz button.tool.editbtn.active { background: color-mix(in srgb, var(--chz-edit) 16%, transparent); box-shadow: 0 0 0 1.5px var(--chz-edit) inset; }
+.chz button.tool.etool.active { background: color-mix(in srgb, var(--chz-edit) 18%, transparent); box-shadow: 0 0 0 1.5px var(--chz-edit) inset; color: var(--chz-edit); }
+
 .chz button.tool {
   background: #fff; color: #334155;
   border: 1px solid #cbd5e1; border-radius: 6px;
