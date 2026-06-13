@@ -1528,7 +1528,15 @@ export function mountChizma(root) {
       const ux = dx / seg, uy = dy / seg;            // chiziq bo'ylab birlik vektor
       const sx = L.offSide.x, sy = L.offSide.y;      // devor→qosh birlik perpendikulyar
       const dist = L.offDist;
-      let pos = 0;
+      // Uchi BURCHAK bo'lsa (qosh davom etadi — daraja ≥ 2), o'sha uchda qozon
+      // turadi → tiling shu uchni offset masofasicha (qozon kengligi) bo'sh qoldiradi.
+      // Ochiq uchda (daraja 1) qozon yo'q — uchgacha to'ldiriladi.
+      const insetA = (yellowDegree(L.a) >= 2) ? dist : 0;
+      const insetB = (yellowDegree(L.b) >= 2) ? dist : 0;
+      const start = insetA, end = seg - insetB;
+      const usable = end - start;
+      if (usable < 1) continue;   // burchaklar orasida joy yo'q — faqat qozon turadi
+      let pos = start;
       const push = (w, paloska, label) => {
         if (w <= 0.5) return;
         const q1 = { x: a.x + ux * pos, y: a.y + uy * pos };
@@ -1539,17 +1547,17 @@ export function mountChizma(root) {
         pos += w;
       };
       // Juda qisqa yo'lak — bitta paloska (kerak bo'lsa kichraygan).
-      if (seg <= P + 1) { push(seg, true, seg < P - 1); continue; }
+      if (usable <= P + 1) { push(usable, true, usable < P - 1); continue; }
       // 1) boshlang'ich paloska (doim).
       push(P, true, false);
       // 2) to'liq (asosiy + paloska) juftliklari — oxirgi paloskaga joy qoldirib.
       let guard = 0;
-      while ((seg - pos) >= (M + P) && guard++ < 2000) {
+      while ((end - pos) >= (M + P) && guard++ < 2000) {
         push(M, false, false);
         push(P, true, false);
       }
       // 3) qoldiq: oxirgi asosiy bo'lak kichrayadi (FAQAT u razmerli ko'rinadi).
-      const leftover = seg - pos;
+      const leftover = end - pos;
       if (leftover > 1) {
         const shrunkMain = leftover - P;
         if (shrunkMain >= HALF) {
