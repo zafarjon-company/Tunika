@@ -1537,14 +1537,11 @@ export function mountChizma(root) {
       const ux = dx / seg, uy = dy / seg;            // devor bo'ylab birlik vektor
       const sx = L.offSide.x, sy = L.offSide.y;      // devor→qosh birlik perpendikulyar
       const dist = L.offDist;
-      // Devor uchi BURCHAK bo'lsa (boshqa devor davom etadi — daraja ≥ 2), o'sha
-      // uchda qozon turadi → tiling shu uchni offset masofasicha bo'sh qoldiradi.
-      // Ochiq uchda (daraja 1) qozon yo'q — devor uchigacha to'ldiriladi.
-      const insetA = (redDegreeAt(orig.a) >= 2) ? dist : 0;
-      const insetB = (redDegreeAt(orig.b) >= 2) ? dist : 0;
-      const start = insetA, end = seg - insetB;
-      const usable = end - start;
-      if (usable < 1) continue;   // burchaklar orasida joy yo'q — faqat qozon turadi
+      // Yo'lak TO'LIQ qoplanadi — devor uchidan-uchigacha, hech bo'sh joy qolmaydi.
+      // Burchaklarda qo'shni segmentlar bo'laklari biroz ustma-ust tushadi (bu yaxshi —
+      // bo'sh joy qolmasligi muhim). Burchakdagi qism ham asosiy bo'lak (= qozon) bo'ladi.
+      const start = 0, end = seg;
+      const usable = seg;
       let pos = start;
       const push = (w, paloska, label) => {
         if (w <= 0.5) return;
