@@ -1515,35 +1515,44 @@ export function mountChizma(root) {
   // asosiy (eni KAZ_MAIN_MM) + paloska (eni KAZ_STRIP_MM); bo'yi = offset masofa.
   // Segment oxirida razmer to'g'ri kelmasa, oxirgi bo'lak kichrayadi va FAQAT
   // o'shaning razmeri (eni×bo'yi) ko'rsatiladi. Faqat ko'rinish — hisobga ta'sir yo'q.
+  function redDegreeAt(pid) {
+    let d = 0;
+    for (const l of state.lines) if (l.color !== 'yellow' && (l.a === pid || l.b === pid)) d++;
+    return d;
+  }
   function computeKazTiles() {
     const out = [];
     const M = KAZ_MAIN_MM, P = KAZ_STRIP_MM, HALF = KAZ_MAIN_MM / 2;
     for (const L of state.lines) {
       if (L.srcEdge == null || !L.offSide || !(L.offDist > 0)) continue;
-      const a = getPoint(L.a), b = getPoint(L.b);
-      if (!a || !b) continue;
-      const dx = b.x - a.x, dy = b.y - a.y;
+      // Tiling DEVOR chizig'i bo'ylab teriladi (devor uchidan boshlanadi) —
+      // qosh fillet'da burchaklarda siljigani uchun devor aniqroq mos keladi.
+      const orig = getLine(L.srcEdge);
+      if (!orig) continue;
+      const da = getPoint(orig.a), db = getPoint(orig.b);
+      if (!da || !db) continue;
+      const dx = db.x - da.x, dy = db.y - da.y;
       const seg = Math.hypot(dx, dy);
       if (seg < 1) continue;
-      const ux = dx / seg, uy = dy / seg;            // chiziq bo'ylab birlik vektor
+      const ux = dx / seg, uy = dy / seg;            // devor bo'ylab birlik vektor
       const sx = L.offSide.x, sy = L.offSide.y;      // devor→qosh birlik perpendikulyar
       const dist = L.offDist;
-      // Uchi BURCHAK bo'lsa (qosh davom etadi — daraja ≥ 2), o'sha uchda qozon
-      // turadi → tiling shu uchni offset masofasicha (qozon kengligi) bo'sh qoldiradi.
-      // Ochiq uchda (daraja 1) qozon yo'q — uchgacha to'ldiriladi.
-      const insetA = (yellowDegree(L.a) >= 2) ? dist : 0;
-      const insetB = (yellowDegree(L.b) >= 2) ? dist : 0;
+      // Devor uchi BURCHAK bo'lsa (boshqa devor davom etadi — daraja ≥ 2), o'sha
+      // uchda qozon turadi → tiling shu uchni offset masofasicha bo'sh qoldiradi.
+      // Ochiq uchda (daraja 1) qozon yo'q — devor uchigacha to'ldiriladi.
+      const insetA = (redDegreeAt(orig.a) >= 2) ? dist : 0;
+      const insetB = (redDegreeAt(orig.b) >= 2) ? dist : 0;
       const start = insetA, end = seg - insetB;
       const usable = end - start;
       if (usable < 1) continue;   // burchaklar orasida joy yo'q — faqat qozon turadi
       let pos = start;
       const push = (w, paloska, label) => {
         if (w <= 0.5) return;
-        const q1 = { x: a.x + ux * pos, y: a.y + uy * pos };
-        const q2 = { x: a.x + ux * (pos + w), y: a.y + uy * (pos + w) };
-        const p1 = { x: q1.x - sx * dist, y: q1.y - sy * dist };
-        const p2 = { x: q2.x - sx * dist, y: q2.y - sy * dist };
-        out.push({ pts: [q1, q2, p2, p1], paloska, label: !!label, w, h: dist });
+        const d1 = { x: da.x + ux * pos, y: da.y + uy * pos };            // devor tomoni
+        const d2 = { x: da.x + ux * (pos + w), y: da.y + uy * (pos + w) };
+        const q1 = { x: d1.x + sx * dist, y: d1.y + sy * dist };          // qosh tomoni
+        const q2 = { x: d2.x + sx * dist, y: d2.y + sy * dist };
+        out.push({ pts: [d1, d2, q2, q1], paloska, label: !!label, w, h: dist });
         pos += w;
       };
       // Juda qisqa yo'lak — bitta paloska (kerak bo'lsa kichraygan).
