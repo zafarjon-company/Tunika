@@ -1515,14 +1515,10 @@ export function mountChizma(root) {
   // asosiy (eni KAZ_MAIN_MM) + paloska (eni KAZ_STRIP_MM); bo'yi = offset masofa.
   // Segment oxirida razmer to'g'ri kelmasa, oxirgi bo'lak kichrayadi va FAQAT
   // o'shaning razmeri (eni×bo'yi) ko'rsatiladi. Faqat ko'rinish — hisobga ta'sir yo'q.
-  function redDegreeAt(pid) {
-    let d = 0;
-    for (const l of state.lines) if (l.color !== 'yellow' && (l.a === pid || l.b === pid)) d++;
-    return d;
-  }
   function computeKazTiles() {
     const out = [];
     const M = KAZ_MAIN_MM, P = KAZ_STRIP_MM, HALF = KAZ_MAIN_MM / 2;
+    const corners = computeBlueCorners();   // qozonlar (konveks + ichki) — zonasini chiqaramiz
     for (const L of state.lines) {
       if (L.srcEdge == null || !L.offSide || !(L.offDist > 0)) continue;
       // Tiling DEVOR chizig'i bo'ylab teriladi (devor uchidan boshlanadi) —
@@ -1537,11 +1533,22 @@ export function mountChizma(root) {
       const ux = dx / seg, uy = dy / seg;            // devor bo'ylab birlik vektor
       const sx = L.offSide.x, sy = L.offSide.y;      // devor→qosh birlik perpendikulyar
       const dist = L.offDist;
-      // Yo'lak TO'LIQ qoplanadi — devor uchidan-uchigacha, hech bo'sh joy qolmaydi.
-      // Burchaklarda qo'shni segmentlar bo'laklari biroz ustma-ust tushadi (bu yaxshi —
-      // bo'sh joy qolmasligi muhim). Burchakdagi qism ham asosiy bo'lak (= qozon) bo'ladi.
-      const start = 0, end = seg;
-      const usable = seg;
+      // Qozon zonalarini (konveks va ichki) segment bo'ylab proyeksiyalab chiqaramiz:
+      // har qozon to'rtburchagi segment ichiga qancha kirsa — o'shancha bo'sh qoldiriladi.
+      // Shunda bo'laklar qozon chetiga aniq tutashadi (gap ham, ustma-ustlik ham yo'q).
+      let insetA = 0, insetB = 0;
+      for (const c of corners) {
+        const rx1 = Math.min(c.rx, c.yx), rx2 = Math.max(c.rx, c.yx);
+        const ry1 = Math.min(c.ry, c.yy), ry2 = Math.max(c.ry, c.yy);
+        const rcs = [{ x: rx1, y: ry1 }, { x: rx2, y: ry1 }, { x: rx2, y: ry2 }, { x: rx1, y: ry2 }];
+        if (Math.hypot(c.rx - da.x, c.ry - da.y) < 5) { let m = 0; for (const rc of rcs) m = Math.max(m, (rc.x - da.x) * ux + (rc.y - da.y) * uy); if (m > insetA) insetA = m; }
+        if (Math.hypot(c.rx - db.x, c.ry - db.y) < 5) { let m = 0; for (const rc of rcs) m = Math.max(m, (db.x - rc.x) * ux + (db.y - rc.y) * uy); if (m > insetB) insetB = m; }
+      }
+      insetA = Math.max(0, Math.min(insetA, seg));
+      insetB = Math.max(0, Math.min(insetB, seg));
+      const start = insetA, end = seg - insetB;
+      const usable = end - start;
+      if (usable < 1) continue;   // segment butunlay qozon(lar) ichida — bo'lak yo'q
       let pos = start;
       const push = (w, paloska, label) => {
         if (w <= 0.5) return;
