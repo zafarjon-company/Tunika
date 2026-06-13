@@ -794,6 +794,15 @@ export default function App() {
         const nom = (a?.nomi || '');
         if (!aksRangKerak(nom)) item.rang = '';
         else { const t = tunikaBaza.find((x) => x.id === lastTunikaId); item.rang = t ? rangTozala(t.nomi) : ''; }
+        // Tirsak: joriy zakasda nechta varyonka bo'lsa, shuncha tirsak qo'yilsin
+        if (nom.toLowerCase().startsWith('tirsak')) {
+          const totalVaryonka = draft.items.reduce((sum, it) => {
+            if (it.kind !== 'aksessuar') return sum;
+            const aks = aksessuarlar.find((x) => x.id === it.aksId);
+            return aks && aks.nomi.toLowerCase().startsWith('varyonka') ? sum + (parseInt(it.soni) || 0) : sum;
+          }, 0);
+          if (totalVaryonka > 0) item.soni = String(totalVaryonka);
+        }
       }
       // Kazirokga rang: qoziq lenta/germetika — rangsiz; aks holda — List rangi
       if (item.kind === 'kazirok') {

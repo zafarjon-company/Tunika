@@ -44,9 +44,10 @@ function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan kat
   return (
     <div>
       <label className="block text-xs text-slate-500 mb-1">{label}</label>
-      <input type="number" inputMode="decimal" step="0.01" value={value}
+      <input type="text" inputMode="decimal" value={value}
         onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()} onKeyDown={focusNextNav}
-        onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        onChange={(e) => { const v = e.target.value; if (/^-?\d*\.?\d*$/.test(v) || v === '') onChange(v); }}
+        placeholder={placeholder}
         className={`js-nav w-full px-3 py-2 border-2 rounded-lg bg-white tabular-nums text-sm outline-none transition ${
           invalid ? `input-error ${shake ? 'anim-shake' : ''}` : 'border-slate-200 focus:border-slate-900'
         }`} />
@@ -62,8 +63,10 @@ import { readChizmaLatokMeters, readChizmaQozon } from './chizmaEngine.js';
 export function olchovDisp(it) {
   if (it.kind === 'aksessuar' || it.kind === 'kazirok') return `${it.soni} ${it.birlik || 'dona'}`;
   if (it.kind === 'metrli') {
-    const z = parseFloat(it.zapas) || 0;
-    return z > 0 ? `${it.uzunlik || 0} + ${z} zapas metr` : `${it.uzunlik || 0} metr`;
+    const total = it.jamiMeyor != null
+      ? it.jamiMeyor
+      : (parseFloat(it.uzunlik) || 0) + (parseFloat(it.zapas) || 0);
+    return `${total} metr`;
   }
   return `${it.uzunlik || 0} metr × ${it.soni} dona`;
 }

@@ -485,6 +485,10 @@ html.themed .chz button.tool:hover { border-color: var(--c-t4); }
 .chz button.tool.color-devor.active { background: color-mix(in srgb, var(--chz-devor) 15%, transparent); box-shadow: 0 0 0 1.5px var(--chz-devor) inset; }
 .chz button.tool.color-qosh.active  { background: color-mix(in srgb, var(--chz-qosh) 15%, transparent);  box-shadow: 0 0 0 1.5px var(--chz-qosh) inset; }
 
+/* "Nuqta qo'shish" tugmasi — yoqilganda accent rangda ajralib turadi */
+.chz button.tool.addpoint { border-color: var(--chz-accent); color: var(--chz-accent); }
+.chz button.tool.addpoint.active { background: color-mix(in srgb, var(--chz-accent) 16%, transparent); box-shadow: 0 0 0 1.5px var(--chz-accent) inset; }
+
 /* Belgilar (+) toggle tugmalari */
 .chz button.tool.tg { border-color: var(--chz-accent); color: var(--chz-accent); }
 .chz button.tool.tg.off { opacity: .45; text-decoration: line-through; border-color: #cbd5e1; color: #94a3b8; }

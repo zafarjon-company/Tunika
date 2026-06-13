@@ -24,7 +24,7 @@ export function itemDisp(it) {
     const olchov = (it.kind === 'aksessuar' || it.kind === 'kazirok')
       ? `${it.soni} ${it.birlik || 'dona'}`
       : it.kind === 'metrli'
-        ? (zapas > 0 ? `${it.uzunlik || 0} + ${zapas} zapas metr` : `${it.uzunlik || 0} metr`)
+        ? `${it.jamiMeyor || it.uzunlik || 0} metr`
         : `${it.uzunlik || 0} metr × ${it.soni} dona`;
     return { nomi: it.nomi, tafsilot: stripNarxTuri(it.tafsilot), olchov, jami: it.jamiSumma };
   }

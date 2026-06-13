@@ -109,6 +109,8 @@ export function computePalette() {
 /* ---------------- DOM SHABLONI ---------------- */
 const TEMPLATE = `
   <div class="chz-toolbar">
+    <button type="button" class="tool addpoint" data-chz="btnAddPoint" title="Yoqilsa — maydonni bosib yangi nuqta qo'shiladi (Esc — bekor)">&#10010; Nuqta qo'shish</button>
+    <span class="sep"></span>
     <button type="button" class="tool color-devor active" data-chz="btnRed">&#9679; Devor</button>
     <button type="button" class="tool color-qosh" data-chz="btnYellow">&#9679; Qosh (Latok)</button>
     <span class="sep"></span>
@@ -181,6 +183,7 @@ const TEMPLATE = `
         </button>
       </div>
       <div class="chz-hint" data-chz="hintBox" style="display:none">
+        &bull; <span style="color:var(--chz-accent)"><b>Nuqta qo'shish</b></span> &rarr; tugmani yoqib, maydonni bossangiz yangi (erkin) nuqta ekiladi; so'ng o'sha nuqtaning <b>+</b> belgisidan chizishni boshlang. Bekor &rarr; <b>Esc</b>.<br>
         &bull; <span style="color:var(--chz-accent)"><b>+</b></span> &rarr; yangi chiziq (uzunlik &rarr; Enter).<br>
         &bull; <span style="color:var(--chz-offset)"><b>Offset +</b></span> &rarr; <b>faqat o'sha chiziq</b> shu tomonga offset bo'ladi (masofa kiriting).
           Yonidagi chiziq ham offset qilinsa — burchak avtomatik tutashadi (fillet).<br>
@@ -231,6 +234,7 @@ export function mountChizma(root) {
     scale: 1 / 50,         // piksel / mm
     panX: 0, panY: 0,
     activeInput: null,     // {mode:"draw"|...}
+    placingPoint: false,   // "Nuqta qo'shish" rejimi — maydonni bosib nuqta ekiladi
     showDevorPlus: true,
     showQoshPlus: false,
     showQozon: true,
@@ -518,6 +522,24 @@ export function mountChizma(root) {
 
   function cleanupOrphans() {
     state.points = state.points.filter((p) => p.id === 0 || degree(p.id) > 0);
+  }
+
+  // "Nuqta qo'shish" rejimini yoqish/o'chirish. Yoqilsa — maydonni bosib
+  // erkin (chiziqqa ulanmagan) nuqta ekiladi; o'sha nuqtadan "+" orqali
+  // chizishni boshlash mumkin.
+  function setPlacingPoint(on) {
+    state.placingPoint = on;
+    if (on) { closeInput(); state.selectedLines.clear(); }
+    syncToggleButtons();
+    render();
+  }
+
+  // Maydonning berilgan ekran nuqtasiga yangi erkin nuqta ekadi.
+  function placePointAt(sx, sy) {
+    const w = screenToWorld(sx, sy);
+    pushHistory();
+    state.points.push({ id: state.nextPointId++, x: w.x, y: w.y });
+    render();
   }
 
   function clearAll() {
@@ -1138,6 +1160,7 @@ export function mountChizma(root) {
     q('btnRedo').disabled = redoStack.length === 0;
   }
   function syncToggleButtons() {
+    q('btnAddPoint').classList.toggle('active', state.placingPoint);
     q('tgDevor').classList.toggle('off', !state.showDevorPlus);
     q('tgQosh').classList.toggle('off', !state.showQoshPlus);
     q('tgQozon').classList.toggle('off', !state.showQozon);
@@ -1310,6 +1333,12 @@ export function mountChizma(root) {
     }
     if (e.target !== svg) return;
     const rect = svg.getBoundingClientRect();
+    // "Nuqta qo'shish" rejimi — chap tugma bilan maydonni bosib nuqta ekiladi.
+    if (e.button === 0 && state.placingPoint) {
+      e.preventDefault();
+      placePointAt(e.clientX - rect.left, e.clientY - rect.top);
+      return;
+    }
     if (e.button === 0) {
       selecting = true; selMoved = false; selShift = e.shiftKey;
       selStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -1381,6 +1410,8 @@ export function mountChizma(root) {
       if (e.key === 'Escape') { closeInput(); render(); }
       return;
     }
+    // "Nuqta qo'shish" rejimi — Esc bilan bekor qilinadi.
+    if (state.placingPoint && e.key === 'Escape') { setPlacingPoint(false); return; }
     // Boshqa input/textarea fokusta bo'lsa aralashmaymiz (zakas formasi).
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
@@ -1394,6 +1425,7 @@ export function mountChizma(root) {
   });
 
   // Toolbar hodisalari.
+  on(q('btnAddPoint'), 'click', () => setPlacingPoint(!state.placingPoint));
   on(q('btnRed'), 'click', () => setColor('red'));
   on(q('btnYellow'), 'click', () => setColor('yellow'));
   on(q('btnUndo'), 'click', undo);
