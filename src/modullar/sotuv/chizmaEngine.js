@@ -1517,6 +1517,7 @@ export function mountChizma(root) {
   // o'shaning razmeri (eni×bo'yi) ko'rsatiladi. Faqat ko'rinish — hisobga ta'sir yo'q.
   function computeKazTiles() {
     const out = [];
+    const M = KAZ_MAIN_MM, P = KAZ_STRIP_MM, HALF = KAZ_MAIN_MM / 2;
     for (const L of state.lines) {
       if (L.srcEdge == null || !L.offSide || !(L.offDist > 0)) continue;
       const a = getPoint(L.a), b = getPoint(L.b);
@@ -1527,19 +1528,37 @@ export function mountChizma(root) {
       const ux = dx / seg, uy = dy / seg;            // chiziq bo'ylab birlik vektor
       const sx = L.offSide.x, sy = L.offSide.y;      // devor→qosh birlik perpendikulyar
       const dist = L.offDist;
-      const pattern = [KAZ_MAIN_MM, KAZ_STRIP_MM];
-      let s = 0, i = 0, guard = 0;
-      while (s < seg - 0.5 && guard++ < 2000) {
-        const intended = pattern[i % 2];
-        let w = intended, shrunk = false;
-        if (s + intended >= seg - 0.5) { w = seg - s; shrunk = (intended - w) > 1; }
-        const q1 = { x: a.x + ux * s, y: a.y + uy * s };
-        const q2 = { x: a.x + ux * (s + w), y: a.y + uy * (s + w) };
+      let pos = 0;
+      const push = (w, paloska, label) => {
+        if (w <= 0.5) return;
+        const q1 = { x: a.x + ux * pos, y: a.y + uy * pos };
+        const q2 = { x: a.x + ux * (pos + w), y: a.y + uy * (pos + w) };
         const p1 = { x: q1.x - sx * dist, y: q1.y - sy * dist };
         const p2 = { x: q2.x - sx * dist, y: q2.y - sy * dist };
-        out.push({ pts: [q1, q2, p2, p1], paloska: (i % 2 === 1), label: shrunk, w, h: dist });
-        s += w; i++;
-        if (s >= seg - 0.5) break;
+        out.push({ pts: [q1, q2, p2, p1], paloska, label: !!label, w, h: dist });
+        pos += w;
+      };
+      // Juda qisqa yo'lak — bitta paloska (kerak bo'lsa kichraygan).
+      if (seg <= P + 1) { push(seg, true, seg < P - 1); continue; }
+      // 1) boshlang'ich paloska (doim).
+      push(P, true, false);
+      // 2) to'liq (asosiy + paloska) juftliklari — oxirgi paloskaga joy qoldirib.
+      let guard = 0;
+      while ((seg - pos) >= (M + P) && guard++ < 2000) {
+        push(M, false, false);
+        push(P, true, false);
+      }
+      // 3) qoldiq: oxirgi asosiy bo'lak kichrayadi (FAQAT u razmerli ko'rinadi).
+      const leftover = seg - pos;
+      if (leftover > 1) {
+        const shrunkMain = leftover - P;
+        if (shrunkMain >= HALF) {
+          push(shrunkMain, false, true);  // kichraygan asosiy — razmeri ko'rinadi
+          push(P, true, false);           // yakuniy paloska (doim, agar asosiy yarmidan katta bo'lsa)
+        } else {
+          // asosiy yarmidan kichik bo'lib qolardi → yakuniy paloskasiz, qoldiq asosiy bo'ladi
+          push(leftover, false, true);
+        }
       }
     }
     return out;
@@ -1793,18 +1812,21 @@ export function mountChizma(root) {
     }
 
     // 2.6) KAZIROK BO'LAKLARI (devor↔qosh orasidagi yo'lak; faqat ko'rinish).
+    //   Asosiy bo'lak = qozon bilan bir xil narsa → qozon rangida; paloska — kazirok
+    //   rangida (ikki xil rang). Birinchi va oxirgi bo'lak doim paloska.
     if (state.showKazTiles) for (const t of computeKazTiles()) {
       const scr = t.pts.map((p) => worldToScreen(p.x, p.y));
+      const col = t.paloska ? P.kazirok : P.qozon;
       svg.appendChild(svgEl('polygon', {
         points: scr.map((s) => s.x + ',' + s.y).join(' '),
-        fill: P.kazirok, 'fill-opacity': t.paloska ? 0.28 : 0.10,
-        stroke: P.kazirok, 'stroke-width': 1,
+        fill: col, 'fill-opacity': t.paloska ? 0.24 : 0.13,
+        stroke: col, 'stroke-width': 1,
       }));
       // Faqat oxirgi (kichraygan) bo'lakning razmeri ko'rinadi — qozondagidek.
       if (t.label) {
         const cx = (scr[0].x + scr[1].x + scr[2].x + scr[3].x) / 4;
         const cy = (scr[0].y + scr[1].y + scr[2].y + scr[3].y) / 4;
-        labels.push({ mx: cx, my: cy, side: { x: 0, y: 0 }, horizontal: true, selected: false, kaz: true, text: fmtPair(t.w, t.h, state.unitCorner) });
+        labels.push({ mx: cx, my: cy, side: { x: 0, y: 0 }, horizontal: true, selected: false, kaz: true, col, text: fmtPair(t.w, t.h, state.unitCorner) });
       }
     }
 
@@ -1863,7 +1885,7 @@ export function mountChizma(root) {
       else rx = x - w + 3;
       svg.appendChild(svgEl('rect', { x: rx, y: ry, width: w, height: 14, rx: 3, fill: P.labelBg }));
       const label = svgEl('text', {
-        x, y, fill: L.kaz ? P.kazirok : (L.blue ? P.qozon : (L.selected ? P.accent : P.text)), 'font-size': 11,
+        x, y, fill: L.kaz ? (L.col || P.kazirok) : (L.blue ? P.qozon : (L.selected ? P.accent : P.text)), 'font-size': 11,
         'text-anchor': anchor, 'dominant-baseline': baseline,
       });
       label.textContent = L.text;
