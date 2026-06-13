@@ -480,6 +480,8 @@ html.themed .chz-edittoolbar .sep { background: var(--c-line); }
 .chz button.tool.editbtn { border-color: var(--chz-edit); color: var(--chz-edit); }
 .chz button.tool.editbtn.active { background: color-mix(in srgb, var(--chz-edit) 16%, transparent); box-shadow: 0 0 0 1.5px var(--chz-edit) inset; }
 .chz button.tool.etool.active { background: color-mix(in srgb, var(--chz-edit) 18%, transparent); box-shadow: 0 0 0 1.5px var(--chz-edit) inset; color: var(--chz-edit); }
+.chz .chz-colorin { width: 30px; height: 26px; padding: 0; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; background: #fff; }
+html.themed .chz .chz-colorin { border-color: var(--c-line); background: var(--c-chip); }
 
 .chz button.tool {
   background: #fff; color: #334155;

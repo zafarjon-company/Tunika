@@ -155,6 +155,7 @@ const TEMPLATE = `
     <button type="button" class="tool etool" data-chz="etPline" data-tool="pline" title="Polyline — nuqtalar, Enter tugatadi">Polyline</button>
     <button type="button" class="tool etool" data-chz="etRect" data-tool="rect" title="Rectangle — 2 burchak">Rectangle</button>
     <button type="button" class="tool etool" data-chz="etCircle" data-tool="circle" title="Circle — markaz + radius">Circle</button>
+    <button type="button" class="tool etool" data-chz="etDim" data-tool="dim" title="O'lcham — ikki nuqta orasini o'lchaydi">O'lcham</button>
     <span class="sep"></span>
     <button type="button" class="tool etool" data-chz="etMove" data-tool="move" title="Move — tanlangan(lar)ni ko'chirish">Move</button>
     <button type="button" class="tool etool" data-chz="etCopy" data-tool="copy" title="Copy — nusxa (Esc to'xtatadi)">Copy</button>
@@ -166,6 +167,17 @@ const TEMPLATE = `
     <button type="button" class="tool etool" data-chz="etExtend" data-tool="extend" title="Extend — chiziq uchini eng yaqin chegaragacha cho'zish">Extend</button>
     <button type="button" class="tool etool" data-chz="etFillet" data-tool="fillet" title="Fillet — ikki chiziqni burchakda tutashtirish (kesishgacha trim/extend)">Fillet</button>
     <button type="button" class="tool etool" data-chz="etErase" data-tool="erase" title="Erase — o'chirish">Erase</button>
+    <span class="sep"></span>
+    <span class="chz-tglbl">Rang/qalinlik:</span>
+    <input type="color" class="chz-colorin" data-chz="entColor" value="#0d9488" title="Rang — tanlangan element(lar)ga va yangi chiziladiganlarga" />
+    <select class="rowUnit" data-chz="entWidth" title="Chiziq qalinligi">
+      <option value="1">ingichka</option><option value="1.6" selected>o'rta</option><option value="3">qalin</option>
+    </select>
+    <span class="sep"></span>
+    <span class="chz-tglbl">Qatlam:</span>
+    <select class="rowUnit" data-chz="layerSel" title="Joriy qatlam (yangi elementlar shunga tushadi)"></select>
+    <button type="button" class="tool" data-chz="btnLayerAdd" title="Yangi qatlam qo'shish">+</button>
+    <button type="button" class="tool" data-chz="btnLayerVis" title="Joriy qatlamni ko'rsatish/yashirish">&#128065;</button>
     <span class="sep"></span>
     <button type="button" class="tool" data-chz="btnRefEdit" title="Import qilingan DXF namunani tahrirlanadigan elementlarga aylantirish">&#8631; Namunani tahrirlash</button>
     <span class="chz-refinfo" data-chz="editInfo"></span>
@@ -292,9 +304,13 @@ export function mountChizma(root) {
     editEntities: [],      // {id,type:'line'|'polyline'|'circle'|'arc', ...world mm, layer}
     nextEntId: 1,
     editMode: false,       // "Tahrir" rejimi yoniq/ochiq
-    tool: 'select',        // faol asbob: select|line|pline|rect|circle|move|copy|rotate|mirror|scale|offset|erase
+    tool: 'select',        // faol asbob
     selEdit: new Set(),    // tanlangan tahrir element id'lari
     toolDraft: null,       // chizilayotgan/amaldagi asbob holati (rubber-band)
+    curColor: null,        // joriy rang (null = standart) — yangi/tanlangan elementlarga
+    curWidth: null,        // joriy chiziq qalinligi (null = standart 1.6)
+    curLayer: '0',         // joriy qatlam (yangi elementlar shunga tushadi)
+    layers: [{ name: '0', visible: true }],  // qatlamlar (nom + ko'rinish)
   };
 
   const svg         = q('svg');
@@ -381,6 +397,7 @@ export function mountChizma(root) {
       points: state.points, lines: state.lines,
       np: state.nextPointId, nl: state.nextLineId,
       ents: state.editEntities, ne: state.nextEntId,
+      layers: state.layers, curLayer: state.curLayer,
       showRef: state.showRef,   // namuna ko'rinishi ham tarixga kiradi (DXF "tahrirlash"ni qaytarish uchun)
     });
   }
@@ -392,10 +409,14 @@ export function mountChizma(root) {
     state.nextLineId = o.nl;
     state.editEntities = o.ents || [];
     state.nextEntId = o.ne || (Math.max(0, ...state.editEntities.map((e) => e.id)) + 1);
+    if (Array.isArray(o.layers) && o.layers.length) state.layers = o.layers;
+    if (typeof o.curLayer === 'string') state.curLayer = o.curLayer;
+    if (!state.layers.some((l) => l.name === state.curLayer)) state.curLayer = state.layers[0].name;
     if (typeof o.showRef === 'boolean') state.showRef = o.showRef;
     state.selectedLines.clear();
     state.selEdit.clear();
     syncRefUI();
+    rebuildLayerSelect();
   }
   function pushHistory() {
     undoStack.push(snapshot());
@@ -729,11 +750,14 @@ export function mountChizma(root) {
      Asboblar: select, line, pline, rect, circle, move, copy, rotate,
      mirror, scale, offset, erase. Hammasi sichqoncha bilan (jonli ko'rinish).
      ============================================================ */
-  const EDIT_TOOLS = ['select', 'line', 'pline', 'rect', 'circle', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'trim', 'extend', 'fillet', 'erase'];
+  const EDIT_TOOLS = ['select', 'line', 'pline', 'rect', 'circle', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'trim', 'extend', 'fillet', 'erase'];
   let editSel = null;        // select asbobi uchun: {sx,sy,moved,additive,candidate}
   state.cursorW = { x: 0, y: 0 };
 
-  function newEnt(type, props) { return Object.assign({ id: state.nextEntId++, type, layer: '0' }, props); }
+  function newEnt(type, props) {
+    return Object.assign({ id: state.nextEntId++, type, layer: state.curLayer, color: state.curColor || null, width: state.curWidth || null }, props);
+  }
+  function layerVisible(name) { const l = state.layers.find((x) => x.name === name); return !l || l.visible; }
   function getEnt(id) { return state.editEntities.find((e) => e.id === id); }
   function cloneEnt(ent) {
     const c = JSON.parse(JSON.stringify(ent));
@@ -742,14 +766,14 @@ export function mountChizma(root) {
   }
   // Element nuqtalari (hit-test / chegara uchun). Circle — 4 chekka nuqta.
   function entVerts(ent) {
-    if (ent.type === 'line') return [{ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }];
+    if (ent.type === 'line' || ent.type === 'dim') return [{ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }];
     if (ent.type === 'polyline') return ent.pts;
     if (ent.type === 'circle') return [{ x: ent.cx - ent.r, y: ent.cy }, { x: ent.cx + ent.r, y: ent.cy }, { x: ent.cx, y: ent.cy - ent.r }, { x: ent.cx, y: ent.cy + ent.r }];
     return [];
   }
   // Snap (yopishish) uchun "tugun" nuqtalar: uchlar, vertexlar, markaz.
   function entSnapPts(ent) {
-    if (ent.type === 'line') return [{ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }];
+    if (ent.type === 'line' || ent.type === 'dim') return [{ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }];
     if (ent.type === 'polyline') return ent.pts;
     if (ent.type === 'circle') return [{ x: ent.cx, y: ent.cy }];
     return [];
@@ -765,7 +789,7 @@ export function mountChizma(root) {
   }
   // Element bilan (wx,wy) orasidagi masofa (world mm).
   function distToEnt(ent, wx, wy) {
-    if (ent.type === 'line') return distToSeg(wx, wy, ent.x1, ent.y1, ent.x2, ent.y2);
+    if (ent.type === 'line' || ent.type === 'dim') return distToSeg(wx, wy, ent.x1, ent.y1, ent.x2, ent.y2);
     if (ent.type === 'polyline') {
       let best = Infinity;
       const p = ent.pts;
@@ -781,6 +805,7 @@ export function mountChizma(root) {
     let best = null, bd = thr;
     const w = screenToWorld(sx, sy);
     for (const ent of state.editEntities) {
+      if (!layerVisible(ent.layer)) continue;
       const d = distToEnt(ent, w.x, w.y);
       if (d <= bd) { bd = d; best = ent; }
     }
@@ -799,11 +824,11 @@ export function mountChizma(root) {
     return { x: 2 * jx - p.x, y: 2 * jy - p.y };
   }
   function mapEnt(ent, fn, rFactor) {
-    if (ent.type === 'line') { const a = fn({ x: ent.x1, y: ent.y1 }), b = fn({ x: ent.x2, y: ent.y2 }); ent.x1 = a.x; ent.y1 = a.y; ent.x2 = b.x; ent.y2 = b.y; }
+    if (ent.type === 'line' || ent.type === 'dim') { const a = fn({ x: ent.x1, y: ent.y1 }), b = fn({ x: ent.x2, y: ent.y2 }); ent.x1 = a.x; ent.y1 = a.y; ent.x2 = b.x; ent.y2 = b.y; }
     else if (ent.type === 'polyline') { ent.pts = ent.pts.map(fn); }
     else if (ent.type === 'circle') { const c = fn({ x: ent.cx, y: ent.cy }); ent.cx = c.x; ent.cy = c.y; if (rFactor != null) ent.r = Math.abs(ent.r * rFactor); }
   }
-  function selectedEnts() { return state.editEntities.filter((e) => state.selEdit.has(e.id)); }
+  function selectedEnts() { return state.editEntities.filter((e) => state.selEdit.has(e.id) && layerVisible(e.layer)); }
   function translateSel(dx, dy) { for (const e of selectedEnts()) mapEnt(e, (p) => ({ x: p.x + dx, y: p.y + dy })); }
   function rotateSel(c, ang) { for (const e of selectedEnts()) mapEnt(e, (p) => rotPt(p, c, ang)); }
   function scaleSel(c, f) { for (const e of selectedEnts()) mapEnt(e, (p) => ({ x: c.x + (p.x - c.x) * f, y: c.y + (p.y - c.y) * f }), f); }
@@ -870,6 +895,7 @@ export function mountChizma(root) {
       pline: 'Polyline: nuqtalarni bosing; Enter yoki ikki marta bosish — tugatish',
       rect: 'Rectangle: bir burchak → qarama-qarshi burchak',
       circle: 'Circle: markaz → radius nuqtasini bosing',
+      dim: 'O\'lcham: 1-nuqta → 2-nuqta (oraliq masofa yoziladi)',
       move: 'Move: tayanch nuqta → yangi joy',
       copy: 'Copy: tayanch nuqta → nusxa joyi (Esc — to\'xtatish)',
       rotate: 'Rotate: tayanch nuqta → burchak nuqtasi',
@@ -889,6 +915,41 @@ export function mountChizma(root) {
     const be = q('btnEdit'); if (be) be.classList.toggle('active', state.editMode);
     root.querySelectorAll('.etool').forEach((b) => b.classList.toggle('active', b.getAttribute('data-tool') === state.tool));
   }
+  // ---- Qatlam (Layers) ----
+  function rebuildLayerSelect() {
+    const sel = q('layerSel'); if (!sel) return;
+    sel.innerHTML = '';
+    for (const l of state.layers) {
+      const o = document.createElement('option');
+      o.value = l.name; o.textContent = l.name + (l.visible ? '' : ' (yashirin)');
+      sel.appendChild(o);
+    }
+    sel.value = state.curLayer;
+  }
+  function addLayer() {
+    let n = state.layers.length, name = 'Qatlam ' + n;
+    while (state.layers.some((l) => l.name === name)) { n++; name = 'Qatlam ' + n; }
+    pushHistory();
+    state.layers.push({ name, visible: true });
+    state.curLayer = name;
+    rebuildLayerSelect(); render();
+  }
+  function toggleCurLayerVis() {
+    const l = state.layers.find((x) => x.name === state.curLayer);
+    if (!l) return;
+    pushHistory();
+    l.visible = !l.visible;
+    // Yashirilgan qatlamdagi elementlar tanlovdan chiqariladi (ko'rinmas holda tahrirlanmasin).
+    if (!l.visible) for (const e of state.editEntities) if (e.layer === l.name) state.selEdit.delete(e.id);
+    rebuildLayerSelect(); render();
+  }
+  // ---- Xossa (rang / qalinlik) ----
+  function applyToSel(prop, val) {
+    if (state.selEdit.size === 0) return;
+    pushHistory();
+    for (const e of selectedEnts()) e[prop] = val;
+    render();
+  }
 
   // ---- Sichqoncha hodisalari (faqat editMode da, chap tugma) ----
   function editDown(e) {
@@ -902,6 +963,7 @@ export function mountChizma(root) {
     if (t === 'pline') return plineClick(w);
     if (t === 'rect') return rectClick(w);
     if (t === 'circle') return circleClick(w);
+    if (t === 'dim') return dimClick(w);
     if (t === 'offset') return offsetClick(sx, sy, w);
     if (t === 'trim') return trimClick(sx, sy, w);
     if (t === 'extend') return extendClick(sx, sy, w);
@@ -944,6 +1006,7 @@ export function mountChizma(root) {
       const crossing = sx < editSel.sx;
       if (!editSel.additive) state.selEdit.clear();
       for (const ent of state.editEntities) {
+        if (!layerVisible(ent.layer)) continue;
         const vs = entVerts(ent).map((p) => worldToScreen(p.x, p.y));
         const allIn = vs.every((s) => pointInRect(s.x, s.y, r));
         let hit = allIn;
@@ -1006,6 +1069,16 @@ export function mountChizma(root) {
     if (!d || d.tool !== 'circle') { state.toolDraft = { tool: 'circle', c: w }; return; }
     const r = Math.hypot(w.x - d.c.x, w.y - d.c.y);
     if (r > 0) { pushHistory(); state.editEntities.push(newEnt('circle', { cx: d.c.x, cy: d.c.y, r })); }
+    state.toolDraft = null;
+    render();
+  }
+  // O'lcham (Dimension) — ikki nuqta orasini o'lchab, razmer chizig'i + yozuv qo'yadi.
+  function dimClick(w) {
+    const d = state.toolDraft;
+    if (!d || d.tool !== 'dim') { state.toolDraft = { tool: 'dim', p1: w }; return; }
+    if (Math.hypot(w.x - d.p1.x, w.y - d.p1.y) < 1e-6) return;
+    pushHistory();
+    state.editEntities.push(newEnt('dim', { x1: d.p1.x, y1: d.p1.y, x2: w.x, y2: w.y, unit: state.unit }));
     state.toolDraft = null;
     render();
   }
@@ -1101,7 +1174,7 @@ export function mountChizma(root) {
     if (L2 < 1e-9) return;
     const ts = [0, 1];
     for (const other of state.editEntities) {
-      if (other === ent) continue;
+      if (other === ent || !layerVisible(other.layer)) continue;
       for (const [c, d] of entSegs(other)) {
         const r = lineInt(A, B, c, d);
         if (r && r.t > 1e-6 && r.t < 1 - 1e-6 && r.u >= -1e-6 && r.u <= 1 + 1e-6) ts.push(r.t);
@@ -1117,9 +1190,11 @@ export function mountChizma(root) {
     if (i >= uniq.length - 1) { setEditInfo('Kesish joyi aniqlanmadi'); return; }
     const ta = uniq[i], tb = uniq[i + 1];
     const pt = (t) => ({ x: A.x + dx * t, y: A.y + dy * t });
+    // Yangi bo'laklar manba chiziq xossalarini (qatlam/rang/qalinlik) meros oladi.
+    const mk = (p, q) => { const e = newEnt('line', { x1: p.x, y1: p.y, x2: q.x, y2: q.y }); e.layer = ent.layer; e.color = ent.color; e.width = ent.width; return e; };
     const repl = [];
-    if (ta > 1e-6) { const p0 = pt(0), pa = pt(ta); repl.push(newEnt('line', { x1: p0.x, y1: p0.y, x2: pa.x, y2: pa.y })); }
-    if (tb < 1 - 1e-6) { const pb = pt(tb), p1 = pt(1); repl.push(newEnt('line', { x1: pb.x, y1: pb.y, x2: p1.x, y2: p1.y })); }
+    if (ta > 1e-6) repl.push(mk(pt(0), pt(ta)));
+    if (tb < 1 - 1e-6) repl.push(mk(pt(tb), pt(1)));
     pushHistory();
     const idx = state.editEntities.indexOf(ent);
     state.editEntities.splice(idx, 1, ...repl);
@@ -1134,7 +1209,7 @@ export function mountChizma(root) {
     const fix = extendB ? A : B, mov = extendB ? B : A;
     let best = null, bestT = Infinity;
     for (const other of state.editEntities) {
-      if (other === ent) continue;
+      if (other === ent || !layerVisible(other.layer)) continue;
       for (const [c, d] of entSegs(other)) {
         const r = lineInt(fix, mov, c, d);
         if (r && r.t > 1 + 1e-6 && r.u >= -1e-6 && r.u <= 1 + 1e-6 && r.t < bestT) { bestT = r.t; best = { x: r.x, y: r.y }; }
@@ -1166,9 +1241,10 @@ export function mountChizma(root) {
   }
 
   function eraseSelectedEnts() {
-    if (state.selEdit.size === 0) return;
+    const ids = new Set(selectedEnts().map((e) => e.id));   // faqat ko'rinadigan tanlanganlar
+    if (!ids.size) return;
     pushHistory();
-    state.editEntities = state.editEntities.filter((e) => !state.selEdit.has(e.id));
+    state.editEntities = state.editEntities.filter((e) => !ids.has(e.id));
     state.selEdit.clear();
     render();
   }
@@ -1197,13 +1273,35 @@ export function mountChizma(root) {
   }
   function renderEditLayer() {
     for (const ent of state.editEntities) {
+      if (!layerVisible(ent.layer)) continue;
       const sel = state.selEdit.has(ent.id);
+      if (ent.type === 'dim') { drawDim(ent, sel); continue; }
+      const wdt = ent.width || 1.6;
       const el = entSvg(ent, {
-        stroke: sel ? P.accent : P.edit, 'stroke-width': sel ? 2.4 : 1.6,
+        stroke: sel ? P.accent : (ent.color || P.edit), 'stroke-width': sel ? (wdt + 0.9) : wdt,
         'stroke-dasharray': sel ? '6 4' : 'none', 'pointer-events': 'none', 'stroke-linejoin': 'round',
       });
       if (el) svg.appendChild(el);
     }
+  }
+  // O'lcham (Dimension) chizilishi — chiziq + uchidagi qoq belgilar + masofa yozuvi.
+  function drawDim(ent, sel) {
+    const s1 = worldToScreen(ent.x1, ent.y1), s2 = worldToScreen(ent.x2, ent.y2);
+    const col = sel ? P.accent : (ent.color || P.kazirok);
+    const g = svgEl('g', { 'pointer-events': 'none' });
+    g.appendChild(svgEl('line', { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y, stroke: col, 'stroke-width': sel ? 2.2 : 1.2 }));
+    let tx = s2.x - s1.x, ty = s2.y - s1.y; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+    const px = -ty * 5, py = tx * 5;
+    for (const s of [s1, s2]) g.appendChild(svgEl('line', { x1: s.x - px, y1: s.y - py, x2: s.x + px, y2: s.y + py, stroke: col, 'stroke-width': 1.2 }));
+    const lenMm = Math.hypot(ent.x2 - ent.x1, ent.y2 - ent.y1);
+    const txt = fmt(lenMm, ent.unit || state.unit);
+    const mx = (s1.x + s2.x) / 2, my = (s1.y + s2.y) / 2;
+    const w = txt.length * 6.4 + 6;
+    g.appendChild(svgEl('rect', { x: mx - w / 2, y: my - 16, width: w, height: 14, rx: 3, fill: P.labelBg }));
+    const t = svgEl('text', { x: mx, y: my - 5, fill: col, 'font-size': 11, 'text-anchor': 'middle' });
+    t.textContent = txt;
+    g.appendChild(t);
+    svg.appendChild(g);
   }
   function renderEditPreview() {
     if (!state.editMode) return;
@@ -1214,6 +1312,7 @@ export function mountChizma(root) {
     else if (d && d.tool === 'pline') ghost(entSvg({ type: 'polyline', pts: d.pts.concat([cur]), closed: false }, dash));
     else if (d && d.tool === 'rect') { const a = d.p1; ghost(entSvg({ type: 'polyline', pts: [{ x: a.x, y: a.y }, { x: cur.x, y: a.y }, { x: cur.x, y: cur.y }, { x: a.x, y: cur.y }], closed: true }, dash)); }
     else if (d && d.tool === 'circle') ghost(entSvg({ type: 'circle', cx: d.c.x, cy: d.c.y, r: Math.hypot(cur.x - d.c.x, cur.y - d.c.y) }, dash));
+    else if (d && d.tool === 'dim') ghost(entSvg({ type: 'line', x1: d.p1.x, y1: d.p1.y, x2: cur.x, y2: cur.y }, dash));
     else if (d && ['move', 'copy', 'rotate', 'scale', 'mirror'].includes(d.tool)) {
       const base = d.base;
       for (const e of selectedEnts()) {
@@ -1997,6 +2096,7 @@ export function mountChizma(root) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           points: state.points, lines: state.lines,
           ents: state.editEntities, ne: state.nextEntId,
+          layers: state.layers, curLayer: state.curLayer, curColor: state.curColor, curWidth: state.curWidth,
           np: state.nextPointId, nl: state.nextLineId,
           color: state.color, unit: state.unit,
           unitDevor: state.unitDevor, unitQosh: state.unitQosh,
@@ -2018,6 +2118,10 @@ export function mountChizma(root) {
       state.points = o.points;
       state.lines = o.lines || [];
       state.editEntities = o.ents || [];
+      if (Array.isArray(o.layers) && o.layers.length) state.layers = o.layers;
+      if (typeof o.curLayer === 'string') state.curLayer = o.curLayer;
+      state.curColor = o.curColor || null;
+      state.curWidth = o.curWidth || null;
       state.nextPointId = o.np || (Math.max(0, ...state.points.map((p) => p.id)) + 1);
       state.nextLineId = o.nl || (Math.max(0, ...state.lines.map((l) => l.id)) + 1);
       state.nextEntId = o.ne || (Math.max(0, ...state.editEntities.map((e) => e.id)) + 1);
@@ -2247,6 +2351,13 @@ export function mountChizma(root) {
   on(q('btnEdit'), 'click', () => setEditMode(!state.editMode));
   on(q('btnRefEdit'), 'click', makeRefEditable);
   root.querySelectorAll('.etool').forEach((b) => on(b, 'click', () => setEditTool(b.getAttribute('data-tool'))));
+  // Xossa (rang/qalinlik) — joriy qiymatga o'rnatadi va tanlangan(lar)ga qo'llaydi.
+  on(q('entColor'), 'change', (e) => { state.curColor = e.target.value; applyToSel('color', e.target.value); });
+  on(q('entWidth'), 'change', (e) => { state.curWidth = parseFloat(e.target.value); applyToSel('width', parseFloat(e.target.value)); });
+  // Qatlam
+  on(q('layerSel'), 'change', (e) => { state.curLayer = e.target.value; });
+  on(q('btnLayerAdd'), 'click', addLayer);
+  on(q('btnLayerVis'), 'click', toggleCurLayerVis);
 
   on(q('unitKazirok'), 'change', (e) => { state.unitKazirok = e.target.value; updatePanel(); saveStateLS(); });
   on(q('unitKazirokArea'), 'change', (e) => { state.unitKazirokArea = e.target.value; updatePanel(); saveStateLS(); });
@@ -2356,6 +2467,7 @@ export function mountChizma(root) {
   syncToggleButtons();
   syncRefUI();
   syncEditUI();
+  rebuildLayerSelect();
   render();
   // Chizma yoki namuna bo'lsa — ochilganda darhol markazga olamiz
   // (oyna o'lchami avvalgi sessiyadan farq qilishi mumkin).
