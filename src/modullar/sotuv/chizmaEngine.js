@@ -204,20 +204,15 @@ const TEMPLATE = `
     </div>
     <div class="chz-panel">
       <h3>Hisoblash</h3>
-      <div class="chz-stat kazirok">
-        <span class="lbl">Kazirok umumiy:</span>
-        <span class="val" data-chz="kazirokLen">&mdash;</span>
-        <select class="rowUnit" data-chz="unitKazirok"><option>mm</option><option>cm</option><option selected>m</option></select>
+      <div class="chz-stat qosh">
+        <span class="lbl">Qosh (Latok) umumiy:</span>
+        <span class="val" data-chz="totalYellow">0</span>
+        <select class="rowUnit" data-chz="unitQosh"><option>mm</option><option>cm</option><option selected>m</option></select>
       </div>
       <div class="chz-stat kazirok">
         <span class="lbl">Kazirok yuzasi:</span>
         <span class="val" data-chz="kazirokArea">&mdash;</span>
         <select class="rowUnit" data-chz="unitKazirokArea"><option value="mm">mm&sup2;</option><option value="cm">cm&sup2;</option><option value="m" selected>m&sup2;</option></select>
-      </div>
-      <div class="chz-stat qosh">
-        <span class="lbl">Qosh (Latok) umumiy:</span>
-        <span class="val" data-chz="totalYellow">0</span>
-        <select class="rowUnit" data-chz="unitQosh"><option>mm</option><option>cm</option><option selected>m</option></select>
       </div>
       <div class="chz-stat darvoza">
         <span class="lbl">Darvozaxona yuzasi:</span>
@@ -234,6 +229,11 @@ const TEMPLATE = `
         <span class="val" data-chz="totalRed">0</span>
         <select class="rowUnit" data-chz="unitDevor"><option>mm</option><option>cm</option><option selected>m</option></select>
       </div>
+      <div class="chz-stat kazirok">
+        <span class="lbl">Kazirok umumiy:</span>
+        <span class="val" data-chz="kazirokLen">&mdash;</span>
+        <select class="rowUnit" data-chz="unitKazirok"><option>mm</option><option>cm</option><option selected>m</option></select>
+      </div>
       <div class="chz-stat qozon">
         <span class="lbl">Qozon:</span>
         <span class="val" data-chz="qozonCount">0 dona</span>
@@ -241,6 +241,12 @@ const TEMPLATE = `
       <div class="chz-stat lines">
         <span class="lbl">Tomonlar soni:</span>
         <span class="val" data-chz="lineCount">0</span>
+      </div>
+
+      <!-- ===== Kazirok bo'limi (alohida bo'lim — tarkibi keyin qo'shiladi) ===== -->
+      <div class="chz-kbolim" data-chz="kazirokBolim">
+        <h3>Kazirok</h3>
+        <div class="chz-kbolim-empty" data-chz="kazirokBolimBody">&mdash; bo'lim ochildi; tarkibi tez orada qo'shiladi.</div>
       </div>
       <div class="chz-listhead">
         <button type="button" class="chz-listbtn" data-chz="tgList" title="Chiziqlar ro'yxatini ko'rsatish / yashirish">
