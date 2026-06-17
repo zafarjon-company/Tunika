@@ -42,7 +42,7 @@ export function readChizmaQozon() {
 }
 
 const STORAGE_KEY = 'xona-chizma-v1';
-const REF_KEY = 'xona-chizma-ref-v1';   // DXF fon namuna alohida saqlanadi (asosiy chizmaga xalaqit bermasin)
+const REF_KEY = 'xona-chizma-ref-v1';   // import xom nusxasi (DXF birligida) — birlik o'zgarsa chiziqlar qayta quriladi
 
 /* DXF fon namuna birliklari — 1 birlik necha millimetr.
    Faqat fon (ko'rinish) uchun; hech qaysi hisobga qo'shilmaydi. */
@@ -126,12 +126,12 @@ const TEMPLATE = `
   <div class="chz-toolbar">
     <button type="button" class="tool addpoint" data-chz="btnAddPoint" title="Yoqilsa — maydonni bosib yangi nuqta qo'shiladi (Esc — bekor)">&#10010; Nuqta qo'shish</button>
     <span class="sep"></span>
-    <button type="button" class="tool import" data-chz="btnImport" title="AutoCAD DXF faylni fon namuna sifatida yuklash (faylni maydonga sudrab tashlasangiz ham bo'ladi)">&#128193; DXF namuna</button>
-    <select class="rowUnit chz-refunit" data-chz="unitRef" title="DXF fayl o'lcham birligi (razmer shunga qarab o'giriladi)" style="display:none">
+    <button type="button" class="tool import" data-chz="btnImport" title="Chizma (AutoCAD DXF) faylni import qilish — to'g'ridan-to'g'ri tahrirlanadigan chiziqlar bo'lib chiqadi (faylni maydonga sudrab tashlasangiz ham bo'ladi)">&#128193; Import</button>
+    <select class="rowUnit chz-refunit" data-chz="unitRef" title="Import faylning o'lcham birligi (o'lchamlar shunga qarab o'giriladi)" style="display:none">
       <option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option>
       <option value="in">dyuym</option><option value="ft">fut</option>
     </select>
-    <button type="button" class="tool" data-chz="btnRefClear" title="Fon namunasini o'chirish" style="display:none">&#10005; Namuna</button>
+    <button type="button" class="tool" data-chz="btnRefClear" title="Import qilingan chizmani o'chirish" style="display:none">&#10005; Importni o'chirish</button>
     <span class="chz-refinfo" data-chz="refInfo"></span>
     <input type="file" accept=".dxf,.DXF" data-chz="fileInput" style="display:none" />
     <button type="button" class="tool editbtn" data-chz="btnEdit" title="Tahrir rejimi — AutoCAD uslubidagi chizish va tahrir (Line/Move/Rotate...)">&#9998; Tahrir</button>
@@ -188,7 +188,6 @@ const TEMPLATE = `
     <button type="button" class="tool" data-chz="btnLayerAdd" title="Yangi qatlam qo'shish">+</button>
     <button type="button" class="tool" data-chz="btnLayerVis" title="Joriy qatlamni ko'rsatish/yashirish">&#128065;</button>
     <span class="sep"></span>
-    <button type="button" class="tool" data-chz="btnRefEdit" title="Import qilingan DXF namunani tahrirlanadigan elementlarga aylantirish">&#8631; Namunani tahrirlash</button>
     <span class="chz-refinfo" data-chz="editInfo"></span>
   </div>
   <div class="chz-main">
@@ -262,7 +261,7 @@ const TEMPLATE = `
         </button>
       </div>
       <div class="chz-hint" data-chz="hintBox" style="display:none">
-        &bull; <span style="color:var(--chz-accent)"><b>DXF namuna</b></span> &rarr; AutoCAD <b>DXF</b> faylni tugma orqali yoki maydonga <b>sudrab tashlab</b> yuklang — chizma kulrang fon namuna bo'lib chiqadi (razmerlari aynan), ustidan Devor/Qosh chizib olasiz. Birlik noto'g'ri chiqsa — yondagi birlik ro'yxatidan to'g'rilang. Hisobga qo'shilmaydi.<br>
+        &bull; <span style="color:var(--chz-accent)"><b>Import</b></span> &rarr; AutoCAD <b>DXF</b> faylni tugma orqali yoki maydonga <b>sudrab tashlab</b> yuklang — chizma <b>to'g'ridan-to'g'ri tahrirlanadigan</b> chiziqlarga aylanadi (o'lchamlari aynan): darhol Tahrir rejimida Select bilan tutib, Move/Erase/Scale/Trim... qilasiz. Birlik noto'g'ri chiqsa — yondagi birlik ro'yxatidan to'g'rilang. Devor/Qosh/Kazirok hisobiga qo'shilmaydi.<br>
         &bull; <span style="color:var(--chz-accent)"><b>Nuqta qo'shish</b></span> &rarr; tugmani yoqib, maydonni bossangiz yangi (erkin) nuqta ekiladi; so'ng o'sha nuqtaning <b>+</b> belgisidan chizishni boshlang. Bekor &rarr; <b>Esc</b>.<br>
         &bull; <span style="color:var(--chz-accent)"><b>+</b></span> &rarr; yangi chiziq (uzunlik &rarr; Enter).<br>
         &bull; <span style="color:var(--chz-offset)"><b>Offset +</b></span> &rarr; <b>faqat o'sha chiziq</b> shu tomonga offset bo'ladi (masofa kiriting).
@@ -325,9 +324,10 @@ export function mountChizma(root) {
     showQozon: true,
     showRazmer: true,
     showKazTiles: true,    // devor↔qosh orasidagi kazirok bo'laklari (35.6 + 6 sm) ko'rinishi
-    ref: null,             // DXF fon namuna: { paths:[[ [x,y]... ]], unit } — xom (DXF birligida)
-    refWorld: [],          // namuna world mm (y to'g'rilangan) — ref'dan hosil qilinadi, saqlanmaydi
-    showRef: true,
+    ref: null,             // import xom nusxasi (vaqtinchalik): { paths, unit } — faqat import payti/legacy
+    refWorld: [],          // import world mm (vaqtinchalik) — ref'dan hosil qilinadi, saqlanmaydi
+    showRef: false,        // (eskirgan) kulrang fon — endi import to'g'ridan-to'g'ri tahrirlanadi
+    impUnit: null,         // import qilingan chiziqlarning birligi (birlik o'zgarsa joyida masshtablash uchun)
     // ----- TAHRIR (AutoCAD uslubidagi mustaqil tahrir qatlami) -----
     // Bu qatlam devor/qosh/kazirok hisobiga TEGMAYDI — erkin geometriya.
     editEntities: [],      // {id,type:'line'|'polyline'|'circle'|'arc', ...world mm, layer}
@@ -430,7 +430,8 @@ export function mountChizma(root) {
       np: state.nextPointId, nl: state.nextLineId,
       ents: state.editEntities, ne: state.nextEntId,
       layers: state.layers, curLayer: state.curLayer,
-      showRef: state.showRef,   // namuna ko'rinishi ham tarixga kiradi (DXF "tahrirlash"ni qaytarish uchun)
+      showRef: state.showRef,
+      impUnit: state.impUnit,   // import birligi tarix bilan birga yuradi (import qatlami uzilib qolmasin)
     });
   }
   function restore(s) {
@@ -445,6 +446,8 @@ export function mountChizma(root) {
     if (typeof o.curLayer === 'string') state.curLayer = o.curLayer;
     if (!state.layers.some((l) => l.name === state.curLayer)) state.curLayer = state.layers[0].name;
     if (typeof o.showRef === 'boolean') state.showRef = o.showRef;
+    state.impUnit = o.impUnit || null;
+    state.ref = null; state.refWorld = [];   // vaqtinchalik xom nusxa — undo/redo'dan keyin arvoh chegara qolmasin
     state.selectedLines.clear();
     state.selEdit.clear();
     state.toolDraft = null;   // undo/redo amaldagi asbob jarayonini (masalan fillet 1-bosqich) bekor qiladi — eski element havolasi qolmasin
@@ -672,11 +675,14 @@ export function mountChizma(root) {
     render();
   }
 
-  /* ---------------- DXF FON NAMUNA (import) ----------------
-     AutoCAD DXF faylni FAQAT ko'rinish uchun fon namuna sifatida yuklaydi.
-     Razmerlar aynan saqlanadi (DXF birligidan mm ga o'giriladi), Y o'qi
-     to'g'rilanadi (DXF Y yuqoriga, bizda pastga). Namuna tahrirlanmaydi va
-     hech qaysi hisob-kitobga (Devor/Qosh/Kazirok) qo'shilmaydi. */
+  /* ---------------- CHIZMA IMPORT (DXF) ----------------
+     AutoCAD DXF faylni o'qib, TO'G'RIDAN-TO'G'RI tahrirlanadigan chiziqlarga
+     (tahrir qatlami elementlariga) aylantiradi. O'lchamlar aynan saqlanadi
+     (DXF birligidan mm ga o'giriladi), Y o'qi to'g'rilanadi (DXF Y yuqoriga,
+     bizda pastga). Import qilingan chiziqlar erkin geometriya — Move/Erase/
+     Scale... bilan tahrirlanadi, biroq Devor/Qosh/Kazirok hisobiga qo'shilmaydi.
+     (`state.ref`/`refWorld` xom nusxa sifatida saqlanadi — birlik o'zgarsa
+      chiziqlar qayta quriladi.) */
   function refUnitFactor() {
     return REF_UNITS[(state.ref && state.ref.unit) || 'mm'] || 1;
   }
@@ -724,26 +730,43 @@ export function mountChizma(root) {
     const code = parsed && parsed.header ? parsed.header.insUnits : undefined;
     const unit = INSUNITS_MAP[code] || 'mm';
 
-    state.ref = { paths, unit };
-    state.showRef = true;
+    pushHistory();                  // import — bitta undo qadami (avval: undo aynan import oldidagi holatga qaytadi)
+    // Avvalgi import chiziqlarini "doimiy" qilamiz — yangi import ularni o'chirmasin
+    // (ular oddiy tahrir elementiga aylanadi, birlik o'zgarsa ham qayta qurilmaydi).
+    state.editEntities.forEach((e) => { delete e._imp; });
+    state.ref = { paths, unit };    // vaqtinchalik — faqat shu importda elementlar yasash uchun
+    state.showRef = false;          // kulrang fon EMAS — to'g'ridan-to'g'ri tahrirlanadigan chiziqlar
     buildRefWorld();
-    saveRefLS();
+    const n = importToEntities();   // refWorld -> tahrirlanadigan polyline elementlar (_imp belgisi bilan)
+    state.impUnit = unit;           // import birligi (birlik o'zgarsa joyida masshtablanadi)
+    if (!state.editMode) setEditMode(true);
+    setEditTool('select');          // darhol tanlab tahrirlash uchun
     syncRefUI();
-    const knownU = INSUNITS_MAP[code] ? '' : ' (birlik noma\'lum — mm deb olindi, kerak bo\'lsa o\'zgartiring)';
-    setRefInfo(`${fileName || 'DXF'}: ${paths.length} chiziq • ${unit}${knownU}`);
-    centerView();   // namunani ekranga moslab ko'rsatamiz
+    const knownU = INSUNITS_MAP[code] ? '' : ' (birlik noma\'lum — mm deb olindi, kerak bo\'lsa yondagi ro\'yxatdan to\'g\'rilang)';
+    setRefInfo(`${fileName || 'Chizma'}: ${n} ta chiziq import qilindi — tahrirlash mumkin${knownU}`);
+    centerView();   // import qilingan chizmani ekranga moslab ko'rsatamiz (render + saqlash shu yerda)
   }
 
+  // Birlik o'zgarsa — import chiziqlarini JOYIDA (origin atrofida nisbat bilan) masshtablaymiz.
+  // Bu xom nusxadan qayta QURMAYDI, shuning uchun foydalanuvchi tahrirlari saqlanadi.
   function setRefUnit(u) {
-    if (!state.ref) return;
-    state.ref.unit = u;
-    buildRefWorld();
-    saveRefLS();
+    const imp = state.editEntities.filter((e) => e._imp);
+    if (!imp.length) return;
+    if (!state.impUnit || state.impUnit === u) { state.impUnit = u; syncRefUI(); return; }
+    const oldF = REF_UNITS[state.impUnit] || 1, newF = REF_UNITS[u] || 1;
+    const ratio = newF / oldF;
+    if (ratio === 1) { state.impUnit = u; syncRefUI(); return; }
+    pushHistory();
+    for (const e of imp) mapEnt(e, (p) => ({ x: p.x * ratio, y: p.y * ratio }), ratio);
+    state.impUnit = u;
     centerView();
   }
   function clearRef() {
+    if (state.editEntities.some((e) => e._imp)) pushHistory();
     state.ref = null;
     state.refWorld = [];
+    state.impUnit = null;
+    state.editEntities = state.editEntities.filter((e) => !e._imp);   // import chiziqlarini ham o'chiramiz
     try { localStorage.removeItem(REF_KEY); } catch (e) { /* noop */ }
     setRefInfo('');
     syncRefUI();
@@ -752,11 +775,6 @@ export function mountChizma(root) {
   function setRefInfo(msg) {
     const el = q('refInfo');
     if (el) el.textContent = msg || '';
-  }
-  function saveRefLS() {
-    try {
-      if (state.ref) localStorage.setItem(REF_KEY, JSON.stringify(state.ref));
-    } catch (e) { /* juda katta bo'lsa — saqlamaymiz, lekin ko'rinaveradi */ }
   }
   function loadRefLS() {
     try {
@@ -769,13 +787,15 @@ export function mountChizma(root) {
       }
     } catch (e) { /* noop */ }
   }
-  // Namuna tugmalari (birlik tanlash, o'chirish, ko'rsатish toggle) ko'rinishi.
+  // Import boshqaruvi (birlik tanlash, o'chirish) ko'rinishi — import chiziqlari
+  // bor-yo'qligiga qarab (ya'ni `_imp` elementlar). Shunda undo'dan keyin "arvoh" tugma qolmaydi.
   function syncRefUI() {
-    const has = !!(state.ref && state.refWorld.length);
+    const has = state.editEntities.some((e) => e._imp);
     const u = q('unitRef'), c = q('btnRefClear'), t = q('tgRef');
-    if (u) { u.style.display = has ? '' : 'none'; if (has) u.value = state.ref.unit; }
+    if (u) { u.style.display = has ? '' : 'none'; if (has && state.impUnit) u.value = state.impUnit; }
     if (c) c.style.display = has ? '' : 'none';
-    if (t) { t.style.display = has ? '' : 'none'; t.classList.toggle('off', !state.showRef); }
+    // Import endi to'g'ridan-to'g'ri tahrirlanadigan — kulrang fon "Namuna" tugmasi kerak emas.
+    if (t) t.style.display = 'none';
   }
 
   /* ============================================================
@@ -880,10 +900,13 @@ export function mountChizma(root) {
   }
   function evScreen(e) { const r = svg.getBoundingClientRect(); return { sx: e.clientX - r.left, sy: e.clientY - r.top }; }
 
-  // ---- Import qilingan DXF namunani TAHRIRLANADIGAN qilish ----
-  function makeRefEditable() {
-    if (!state.refWorld.length || !state.showRef) { setRefInfo('Avval DXF namuna yuklang (Namuna ko\'rinib tursin)'); return; }
-    pushHistory();
+  // ---- Import qilingan chizmani TAHRIRLANADIGAN chiziqlarga aylantirish ----
+  // refWorld (DXF -> world mm) yo'llaridan polyline elementlari yasaydi. Har biri
+  // `_imp` bilan belgilanadi: birlik o'zgarsa qayta quriladi, yangi import esa
+  // eski importni o'chiradi (lekin allaqachon "doimiy" qilingan chiziqlarga tegmaydi).
+  // Tarixga (undo) shu yerda tegilmaydi — chaqiruvchi pushHistory()ni o'zi bajaradi.
+  function importToEntities() {
+    state.editEntities = state.editEntities.filter((e) => !e._imp);
     let n = 0;
     for (const path of state.refWorld) {
       if (path.length < 2) continue;
@@ -891,17 +914,12 @@ export function mountChizma(root) {
       const a = pts[0], b = pts[pts.length - 1];
       const closed = pts.length > 2 && Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
       if (closed) pts.pop();
-      state.editEntities.push(newEnt('polyline', { pts, closed }));
+      const ent = newEnt('polyline', { pts, closed });
+      ent._imp = true;
+      state.editEntities.push(ent);
       n++;
     }
-    // Namuna tahrir qatlamiga ko'chdi — kulrang fonni faqat YASHIRAMIZ (o'chirmaymiz),
-    // shunda undo (Ctrl+Z) namunani qaytara oladi va dublikat ko'rinmaydi.
-    state.showRef = false;
-    syncRefUI();
-    if (!state.editMode) setEditMode(true);
-    setEditTool('select');
-    setRefInfo(`${n} element tahrirlanadigan qilindi`);
-    render();
+    return n;
   }
 
   // ---- Rejim / asbob boshqaruvi ----
@@ -2301,7 +2319,7 @@ export function mountChizma(root) {
           unitKazirok: state.unitKazirok, unitKazirokArea: state.unitKazirokArea, unitCorner: state.unitCorner,
           unitDarvozaArea: state.unitDarvozaArea, unitDarvozaHovuz: state.unitDarvozaHovuz,
           showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showDarvozaPlus: state.showDarvozaPlus, showQozon: state.showQozon,
-          showRazmer: state.showRazmer, showRef: state.showRef, showKazTiles: state.showKazTiles,
+          showRazmer: state.showRazmer, showRef: state.showRef, showKazTiles: state.showKazTiles, impUnit: state.impUnit,
           scale: state.scale, panX: state.panX, panY: state.panY,
         }));
       } catch (e) { /* noop */ }
@@ -2339,6 +2357,7 @@ export function mountChizma(root) {
       state.showQozon = o.showQozon !== false;
       state.showRazmer = o.showRazmer !== false;
       state.showRef = o.showRef !== false;
+      state.impUnit = o.impUnit || null;
       state.showKazTiles = o.showKazTiles !== false;
       if (o.scale) state.scale = o.scale;
       if (typeof o.panX === 'number') state.panX = o.panX;
@@ -2523,7 +2542,7 @@ export function mountChizma(root) {
   on(q('btnClear'), 'click', clearAll);
   on(q('btnFit'), 'click', centerView);
 
-  // DXF fon namuna: tugma / fayl tanlash / sudrab-tashlash / birlik / o'chirish.
+  // Chizma import (DXF): tugma / fayl tanlash / sudrab-tashlash / birlik / o'chirish.
   async function handleRefFile(file) {
     if (!file) return;
     const name = file.name || 'DXF';
@@ -2553,7 +2572,6 @@ export function mountChizma(root) {
 
   // TAHRIR rejimi tugmalari.
   on(q('btnEdit'), 'click', () => setEditMode(!state.editMode));
-  on(q('btnRefEdit'), 'click', makeRefEditable);
   root.querySelectorAll('.etool').forEach((b) => on(b, 'click', () => setEditTool(b.getAttribute('data-tool'))));
   // Xossa (rang/qalinlik) — joriy qiymatga o'rnatadi va tanlangan(lar)ga qo'llaydi.
   on(q('entColor'), 'change', (e) => { state.curColor = e.target.value; applyToSel('color', e.target.value); });
@@ -2666,7 +2684,19 @@ export function mountChizma(root) {
     state.panX = rect.width / 2;
     state.panY = rect.height / 2;
   }
-  loadRefLS();             // saqlangan DXF fon namuna (bo'lsa)
+  loadRefLS();             // ESKI alohida kalitda (REF_KEY) saqlangan namuna bo'lsa (legacy)
+  // Legacy: eski kulrang fon namuna (xom nusxa bor, lekin import elementlari yo'q)
+  // bo'lsa — uni bir marta tahrirlanadigan chiziqlarga aylantiramiz.
+  if (state.refWorld.length && !state.editEntities.some((e) => e._imp)) {
+    importToEntities();
+    state.impUnit = (state.ref && state.ref.unit) || 'mm';
+    state.showRef = false;
+  }
+  // Xom nusxa endi alohida kalitda saqlanmaydi — eski kalitni tozalaymiz.
+  try { localStorage.removeItem(REF_KEY); } catch (e) { /* noop */ }
+  // Import elementlari bor-u, lekin birlik noma'lum bo'lsa (masalan eski/buzilgan
+  // saqlanmadan) — ularni doimiy qilamiz, shunda birlik tugmasi chalkashmaydi.
+  if (!state.impUnit) state.editEntities.forEach((e) => { delete e._imp; });
   setColor(state.color);
   q('unitKazirok').value = state.unitKazirok;
   q('unitKazirokArea').value = state.unitKazirokArea;
