@@ -605,6 +605,8 @@ html.themed .chz-kaz-fields input { background: var(--c-bg); color: var(--c-t1);
 html.themed .chz-kaz-draw { color: #cbd5e1; }
 .chz-kaz-note { font-size: 9.5px; line-height: 1.35; color: #94a3b8; margin-top: 6px; }
 html.themed .chz-kaz-note { color: var(--c-t3); }
+.chz-kaz-sep { height: 1px; background: #e2e8f0; margin: 14px 0; }
+html.themed .chz-kaz-sep { background: var(--c-line); }
 
 .chz .rowUnit {
   background: #fff; color: #334155; border: 1px solid #cbd5e1;
