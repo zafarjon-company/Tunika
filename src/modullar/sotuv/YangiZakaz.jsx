@@ -57,6 +57,7 @@ function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan kat
 }
 import { DynamicPaymentsSection } from './Tolovlar.jsx';
 import { ChizmaCard } from './Chizma.jsx';
+import { KazirokCard } from './Kazirok.jsx';
 import { readChizmaLatokMeters, readChizmaQozon } from './chizmaEngine.js';
 
 // O'lchov ustuni: latok(metrli) → faqat metr; list/profnastil → metr × dona; aksessuar → dona/kg
@@ -252,6 +253,9 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
 
           {/* CHIZMA — xona konturi (zakas olishda hisob-kitob yordamchisi) */}
           <ChizmaCard />
+
+          {/* KAZIROK — detallar (patalok) parametrik chizmasi */}
+          <KazirokCard />
 
           {/* TOVARLAR */}
           <Card>
