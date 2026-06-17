@@ -50,6 +50,16 @@ const REF_UNITS = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8 };
 // DXF $INSUNITS kodi -> bizdagi birlik kaliti (0/noma'lum -> null, default mm).
 const INSUNITS_MAP = { 1: 'in', 2: 'ft', 4: 'mm', 5: 'cm', 6: 'm' };
 
+/* ---- KAZIROK bo'limi: "Patalok" detali (parametrik, panelda) ----
+   List 62.5 sm enidan yasaladigan simmetrik detal. Faqat 2 razmer
+   o'zgaradi: peshona (yuqori) va razmeri (tana). Razmerlar chapda sm da. */
+const KAZ_KEY = 'kazirok-patalok-v1';
+const PAT_W = 62.5;        // list eni (sm, qat'iy)
+const PAT_NOTCH_H = 1.6;   // peshona burmasi (bend) balandligi
+const PAT_NOTCH_D = 1.5;   // o'yiqning ichkariga kirishi
+const PAT_HEM = 1.5;       // yuqori/past qatlama
+const PAT_DEF = { peshona: 10, razmeri: 50 };
+
 /* ---------------- MAVZUGA MOS RANG PALITRASI ----------------
    --c-btn (mavzu asosiy rangi) tusidan boshlab, rang doirasida
    teng oraliqlar bilan 6 ta vazifaviy rang hosil qilinadi.
@@ -328,6 +338,7 @@ export function mountChizma(root) {
     refWorld: [],          // import world mm (vaqtinchalik) — ref'dan hosil qilinadi, saqlanmaydi
     showRef: false,        // (eskirgan) kulrang fon — endi import to'g'ridan-to'g'ri tahrirlanadi
     impUnit: null,         // import qilingan chiziqlarning birligi (birlik o'zgarsa joyida masshtablash uchun)
+    kaz: { ...PAT_DEF },   // Kazirok > Patalok razmerlari (peshona / razmeri, sm)
     // ----- TAHRIR (AutoCAD uslubidagi mustaqil tahrir qatlami) -----
     // Bu qatlam devor/qosh/kazirok hisobiga TEGMAYDI — erkin geometriya.
     editEntities: [],      // {id,type:'line'|'polyline'|'circle'|'arc', ...world mm, layer}
@@ -796,6 +807,87 @@ export function mountChizma(root) {
     if (c) c.style.display = has ? '' : 'none';
     // Import endi to'g'ridan-to'g'ri tahrirlanadigan — kulrang fon "Namuna" tugmasi kerak emas.
     if (t) t.style.display = 'none';
+  }
+
+  /* ---------------- KAZIROK > PATALOK (panel bo'limi) ----------------
+     Parametrik chizma: peshona (yuqori) + razmeri (tana). Simmetrik —
+     chetdagi o'yiq (peshona burmasi) ikki tomonda bir xil. Razmerlar
+     chapda sm da. Qiymatlar localStorage'da saqlanadi. */
+  function loadKazLS() {
+    try {
+      const o = JSON.parse(localStorage.getItem(KAZ_KEY));
+      if (o && o.peshona > 0 && o.razmeri > 0) state.kaz = { peshona: +o.peshona, razmeri: +o.razmeri };
+    } catch (e) { /* noop */ }
+  }
+  function saveKazLS() {
+    try { localStorage.setItem(KAZ_KEY, JSON.stringify(state.kaz)); } catch (e) { /* noop */ }
+  }
+  function kazVal(k) { return state.kaz[k] > 0 ? state.kaz[k] : PAT_DEF[k]; }
+
+  // Patalok geometriyasi (sm) — tashqi kontur (ikki chetda o'yiq) + qatlama chiziqlari.
+  function patalokGeom(P, R) {
+    const yB1 = P, yB2 = P + PAT_NOTCH_H, H = yB2 + R, W = PAT_W, d = PAT_NOTCH_D, hem = PAT_HEM;
+    const outer = [
+      [0, 0], [W, 0],
+      [W, yB1], [W - d, yB1], [W - d, yB2], [W, yB2],
+      [W, H], [0, H],
+      [0, yB2], [d, yB2], [d, yB1], [0, yB1],
+      [0, 0],
+    ];
+    const hems = [[[0, hem], [W, hem]], [[0, H - hem], [W, H - hem]]];
+    return { outer, hems, yB1, yB2, H };
+  }
+  // Chapdagi vertikal razmer (o'q + strelkalar + sm yozuvi) — SVG matni.
+  function vdimMarkup(x, y1, y2, label, col) {
+    const a = 1.7, hw = 0.75, mid = (y1 + y2) / 2;
+    return `
+      <line x1="0" y1="${y1}" x2="${x}" y2="${y1}" stroke="${col}" stroke-width="0.16"/>
+      <line x1="0" y1="${y2}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="0.16"/>
+      <line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="0.24"/>
+      <polygon points="${x},${y1} ${x - hw},${y1 + a} ${x + hw},${y1 + a}" fill="${col}"/>
+      <polygon points="${x},${y2} ${x - hw},${y2 - a} ${x + hw},${y2 - a}" fill="${col}"/>
+      <text x="${x}" y="${mid}" fill="${col}" font-size="3.8" font-weight="700" text-anchor="middle"
+        dominant-baseline="central" transform="rotate(-90 ${x} ${mid})"
+        stroke="#ffffff" stroke-width="1.2" paint-order="stroke">${label}</text>`;
+  }
+  function kazSvgMarkup(P, R) {
+    const g = patalokGeom(P, R), W = PAT_W;
+    const dimX = -7, padL = 15, padR = 4, padT = 4, padB = 4;
+    const vbW = W + padL + padR, vbH = g.H + padT + padB;
+    const GREEN = '#16a34a', INK = '#0f172a';
+    const pts = g.outer.map((p) => p[0] + ',' + p[1]).join(' ');
+    const hems = g.hems.map((h) => `<line x1="${h[0][0]}" y1="${h[0][1]}" x2="${h[1][0]}" y2="${h[1][1]}" stroke="${INK}" stroke-width="0.3"/>`).join('');
+    return `<svg viewBox="${-padL} ${-padT} ${vbW} ${vbH}" width="100%" style="height:auto;display:block">
+      <polyline points="${pts}" fill="none" stroke="${INK}" stroke-width="0.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${hems}
+      ${vdimMarkup(dimX, 0, g.yB1, (+P.toFixed(1)) + ' sm', GREEN)}
+      ${vdimMarkup(dimX, g.yB2, g.H, (+R.toFixed(1)) + ' sm', GREEN)}
+    </svg>`;
+  }
+  function redrawKaz(body) {
+    const draw = (body || root).querySelector('.chz-kaz-draw');
+    if (draw) draw.innerHTML = kazSvgMarkup(kazVal('peshona'), kazVal('razmeri'));
+  }
+  function renderKazirokBolim() {
+    const body = q('kazirokBolimBody');
+    if (!body) return;
+    body.classList.remove('chz-kbolim-empty');
+    body.innerHTML = `
+      <div class="chz-kaz-head"><b>Patalok</b><span>eni ${PAT_W} sm</span></div>
+      <div class="chz-kaz-fields">
+        <label>Peshona<input type="number" min="1" step="0.5" data-chz-k="peshona" value="${state.kaz.peshona}" /><i>sm</i></label>
+        <label>Razmeri<input type="number" min="1" step="0.5" data-chz-k="razmeri" value="${state.kaz.razmeri}" /><i>sm</i></label>
+      </div>
+      <div class="chz-kaz-draw">${kazSvgMarkup(kazVal('peshona'), kazVal('razmeri'))}</div>
+      <div class="chz-kaz-note">Simmetrik — chap razmer o'zgarsa, o'ng ham aynan o'zgaradi.</div>`;
+    body.querySelectorAll('input[data-chz-k]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const k = inp.getAttribute('data-chz-k');
+        state.kaz[k] = inp.value === '' ? 0 : Math.max(0, parseFloat(inp.value) || 0);
+        saveKazLS();
+        redrawKaz(body);
+      });
+    });
   }
 
   /* ============================================================
@@ -2705,6 +2797,8 @@ export function mountChizma(root) {
   q('unitDevor').value = state.unitDevor;
   q('unitQosh').value = state.unitQosh;
   q('unitCorner').value = state.unitCorner;
+  loadKazLS();             // Kazirok > Patalok razmerlari (saqlangan bo'lsa)
+  renderKazirokBolim();    // panel "Kazirok" bo'limiga patalok chizmasini joylaymiz
   syncToggleButtons();
   syncRefUI();
   syncEditUI();

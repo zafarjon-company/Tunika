@@ -584,6 +584,26 @@ html.themed .chz-kbolim { border-bottom-color: var(--c-line); }
 .chz-kbolim-empty { font-size: 11px; font-style: italic; color: #94a3b8; padding: 4px 2px; }
 html.themed .chz-kbolim-empty { color: var(--c-t3); }
 
+/* Kazirok > Patalok — parametrik chizma (panel bo'limi ichida) */
+.chz-kaz-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+.chz-kaz-head b { font-size: 12px; color: #0f172a; }
+.chz-kaz-head span { font-size: 10px; color: #94a3b8; }
+html.themed .chz-kaz-head b { color: var(--c-t1); }
+html.themed .chz-kaz-head span { color: var(--c-t3); }
+.chz-kaz-fields { display: flex; gap: 6px; margin-bottom: 8px; }
+.chz-kaz-fields label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; position: relative; font-size: 10px; color: #64748b; }
+html.themed .chz-kaz-fields label { color: var(--c-t3); }
+.chz-kaz-fields input {
+  width: 100%; padding: 4px 20px 4px 6px; border: 1px solid #cbd5e1; border-radius: 5px;
+  font-size: 12px; font-weight: 700; color: #0f172a; background: #fff;
+}
+html.themed .chz-kaz-fields input { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+.chz-kaz-fields input:focus { outline: none; border-color: var(--chz-kazirok); }
+.chz-kaz-fields label i { position: absolute; right: 7px; bottom: 6px; font-style: normal; font-size: 9px; color: #94a3b8; pointer-events: none; }
+.chz-kaz-draw { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; }
+.chz-kaz-note { font-size: 9.5px; line-height: 1.35; color: #94a3b8; margin-top: 6px; }
+html.themed .chz-kaz-note { color: var(--c-t3); }
+
 .chz .rowUnit {
   background: #fff; color: #334155; border: 1px solid #cbd5e1;
   border-radius: 4px; padding: 1px 2px; font-size: 11px;
