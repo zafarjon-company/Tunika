@@ -839,29 +839,36 @@ export function mountChizma(root) {
   }
   // Chapdagi vertikal razmer (o'q + strelkalar + sm yozuvi) — SVG matni.
   function vdimMarkup(x, y1, y2, label, col) {
-    const a = 1.7, hw = 0.75, mid = (y1 + y2) / 2;
+    const a = 1.9, hw = 0.85, mid = (y1 + y2) / 2, fs = 3.8;
+    const half = (label.length * fs * 0.6) / 2 + 0.7;     // yozuv uchun o'qda bo'shliq
+    const broken = (y2 - y1) > (2 * half + 1.6);           // o'q yetarli uzun bo'lsa — chiziq uziladi (raqam o'rtada)
+    const lineSegs = broken
+      ? `<line x1="${x}" y1="${y1}" x2="${x}" y2="${mid - half}" stroke="${col}" stroke-width="0.34"/>
+         <line x1="${x}" y1="${mid + half}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="0.34"/>`
+      : `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="0.34"/>`;
+    const tx = broken ? x : x - 2.6;                        // sig'masa — raqam o'q yonida
     return `
-      <line x1="0" y1="${y1}" x2="${x}" y2="${y1}" stroke="${col}" stroke-width="0.16"/>
-      <line x1="0" y1="${y2}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="0.16"/>
-      <line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="0.24"/>
+      <line x1="0" y1="${y1}" x2="${x}" y2="${y1}" stroke="${col}" stroke-width="0.2"/>
+      <line x1="0" y1="${y2}" x2="${x}" y2="${y2}" stroke="${col}" stroke-width="0.2"/>
+      ${lineSegs}
       <polygon points="${x},${y1} ${x - hw},${y1 + a} ${x + hw},${y1 + a}" fill="${col}"/>
       <polygon points="${x},${y2} ${x - hw},${y2 - a} ${x + hw},${y2 - a}" fill="${col}"/>
-      <text x="${x}" y="${mid}" fill="${col}" font-size="3.8" font-weight="700" text-anchor="middle"
-        dominant-baseline="central" transform="rotate(-90 ${x} ${mid})"
-        stroke="#ffffff" stroke-width="1.2" paint-order="stroke">${label}</text>`;
+      <text x="${tx}" y="${mid}" fill="${col}" font-size="${fs}" font-weight="700" text-anchor="middle"
+        dominant-baseline="central" transform="rotate(-90 ${tx} ${mid})">${label}</text>`;
   }
   function kazSvgMarkup(P, R) {
     const g = patalokGeom(P, R), W = PAT_W;
-    const dimX = -7, padL = 15, padR = 4, padT = 4, padB = 4;
+    const dimX = -7, padL = 16, padR = 4, padT = 5, padB = 5;
     const vbW = W + padL + padR, vbH = g.H + padT + padB;
-    const GREEN = '#16a34a', INK = '#0f172a';
+    const GREEN = '#16a34a';
     const pts = g.outer.map((p) => p[0] + ',' + p[1]).join(' ');
-    const hems = g.hems.map((h) => `<line x1="${h[0][0]}" y1="${h[0][1]}" x2="${h[1][0]}" y2="${h[1][1]}" stroke="${INK}" stroke-width="0.3"/>`).join('');
+    // Detal chiziqlari — orqa fonsiz, tema-mos rang (currentColor) va qalinroq.
+    const hems = g.hems.map((h) => `<line x1="${h[0][0]}" y1="${h[0][1]}" x2="${h[1][0]}" y2="${h[1][1]}" stroke="currentColor" stroke-width="0.7"/>`).join('');
     return `<svg viewBox="${-padL} ${-padT} ${vbW} ${vbH}" width="100%" style="height:auto;display:block">
-      <polyline points="${pts}" fill="none" stroke="${INK}" stroke-width="0.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round"/>
       ${hems}
-      ${vdimMarkup(dimX, 0, g.yB1, (+P.toFixed(1)) + ' sm', GREEN)}
-      ${vdimMarkup(dimX, g.yB2, g.H, (+R.toFixed(1)) + ' sm', GREEN)}
+      ${vdimMarkup(dimX, 0, g.yB1, '' + (+P.toFixed(1)), GREEN)}
+      ${vdimMarkup(dimX, g.yB2, g.H, '' + (+R.toFixed(1)), GREEN)}
     </svg>`;
   }
   function redrawKaz(body) {

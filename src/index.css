@@ -600,7 +600,9 @@ html.themed .chz-kaz-fields label { color: var(--c-t3); }
 html.themed .chz-kaz-fields input { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
 .chz-kaz-fields input:focus { outline: none; border-color: var(--chz-kazirok); }
 .chz-kaz-fields label i { position: absolute; right: 7px; bottom: 6px; font-style: normal; font-size: 9px; color: #94a3b8; pointer-events: none; }
-.chz-kaz-draw { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; }
+/* Orqa fonsiz — chiziqlar tema-mos rangda (och temada to'q, qorong'i temada och) */
+.chz-kaz-draw { padding: 2px 0; color: #0f172a; }
+html.themed .chz-kaz-draw { color: #cbd5e1; }
 .chz-kaz-note { font-size: 9.5px; line-height: 1.35; color: #94a3b8; margin-top: 6px; }
 html.themed .chz-kaz-note { color: var(--c-t3); }
 
