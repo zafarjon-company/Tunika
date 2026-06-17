@@ -54,11 +54,21 @@ const INSUNITS_MAP = { 1: 'in', 2: 'ft', 4: 'mm', 5: 'cm', 6: 'm' };
    List 62.5 sm enidan yasaladigan simmetrik detal. Faqat 2 razmer
    o'zgaradi: peshona (yuqori) va razmeri (tana). Razmerlar chapda sm da. */
 const KAZ_KEY = 'kazirok-patalok-v1';
-const PAT_W = 62.5;        // list eni (sm, qat'iy)
-const PAT_NOTCH_H = 1.6;   // peshona burmasi (bend) balandligi
-const PAT_NOTCH_D = 1.5;   // o'yiqning ichkariga kirishi
-const PAT_HEM = 1.5;       // yuqori/past qatlama
+const PAT_W = 62.2;        // detal eni (sm) — DXF dan aniq (list 62.5, qatlamadan keyin 62.2)
 const PAT_DEF = { peshona: 10, razmeri: 50 };
+// Patalok konturi — "Kazirok 2 bolak.dxf" dan AYNAN olingan (sm, y = yuqoridan past).
+// 32 segment: yuqori chet + burchak qatlamalari, ikki chetda peshona o'yig'i
+// (diagonal bilan), tana, pastki qatlamalar. Default: peshona=10, razmeri=50.
+const PAT_SEG = [
+  [3.10, 0, 3.10, 1.50], [3.10, 0, 59.10, 0], [59.10, 0, 59.10, 1.50],
+  [0, 1.50, 0, 9.90], [0, 1.50, 1.50, 1.50], [1.50, 1.50, 1.50, 2.50], [1.50, 1.50, 3.10, 1.50],
+  [59.10, 1.50, 60.70, 1.50], [60.70, 1.50, 60.70, 2.50], [60.70, 1.50, 62.20, 1.50], [62.20, 1.50, 62.20, 9.90],
+  [0, 9.90, 1.50, 9.90], [1.50, 9.90, 1.50, 11.50], [60.70, 9.90, 60.70, 11.50], [60.70, 9.90, 62.20, 9.90],
+  [1.50, 11.50, 3.10, 11.50], [3.10, 11.50, 1.50, 13.10], [59.10, 11.50, 60.70, 11.50], [59.10, 11.50, 60.70, 13.10],
+  [0, 13.10, 0, 61.50], [0, 13.10, 1.50, 13.10], [60.70, 13.10, 62.20, 13.10], [62.20, 13.10, 62.20, 61.50],
+  [1.50, 60.50, 1.50, 61.50], [3.10, 60.50, 3.10, 61.50], [59.10, 60.50, 59.10, 61.50], [60.70, 60.50, 60.70, 61.50],
+  [0, 61.50, 1.50, 61.50], [1.50, 61.50, 3.10, 61.50], [3.10, 61.50, 59.10, 61.50], [59.10, 61.50, 60.70, 61.50], [60.70, 61.50, 62.20, 61.50],
+];
 
 /* ---------------- MAVZUGA MOS RANG PALITRASI ----------------
    --c-btn (mavzu asosiy rangi) tusidan boshlab, rang doirasida
@@ -822,20 +832,27 @@ export function mountChizma(root) {
   function saveKazLS() {
     try { localStorage.setItem(KAZ_KEY, JSON.stringify(state.kaz)); } catch (e) { /* noop */ }
   }
-  function kazVal(k) { return state.kaz[k] > 0 ? state.kaz[k] : PAT_DEF[k]; }
+  // Chizish uchun qiymat: 0/bo'sh -> default; juda kichik (<2 sm) -> 2 ga bog'lanadi,
+  // chunki peshona/tana cheti uzunligi = (qiymat - 1.6); 1.6 dan kichikda shakl teskari bo'ladi.
+  function kazVal(k) {
+    const v = state.kaz[k];
+    if (!(v > 0)) return PAT_DEF[k];
+    return Math.max(2, v);
+  }
 
-  // Patalok geometriyasi (sm) — tashqi kontur (ikki chetda o'yiq) + qatlama chiziqlari.
+  // y-koordinatani parametrlarga ko'ra siljitadi: peshona (dP) tana ustini,
+  // razmeri (dR) tanani cho'zadi. Vertexlar faqat ko'rsatilgan darajalarda
+  // bo'lgani uchun chegaralar (9.0 / 13.15) toza ajratadi.
+  function patY(y, dP, dR) {
+    if (y <= 9.0) return y;            // yuqori chet + qatlama + peshona edge ustki uchi (qat'iy)
+    if (y <= 13.15) return y + dP;     // peshona edge pastki uchi + o'yiq (dP ga siljiydi)
+    return y + dP + dR;                // tana pasti + pastki qatlama (dP+dR ga siljiydi)
+  }
+  // Patalok konturi (sm) — DXF segmentlarini parametrlarga ko'ra siljitadi.
   function patalokGeom(P, R) {
-    const yB1 = P, yB2 = P + PAT_NOTCH_H, H = yB2 + R, W = PAT_W, d = PAT_NOTCH_D, hem = PAT_HEM;
-    const outer = [
-      [0, 0], [W, 0],
-      [W, yB1], [W - d, yB1], [W - d, yB2], [W, yB2],
-      [W, H], [0, H],
-      [0, yB2], [d, yB2], [d, yB1], [0, yB1],
-      [0, 0],
-    ];
-    const hems = [[[0, hem], [W, hem]], [[0, H - hem], [W, H - hem]]];
-    return { outer, hems, yB1, yB2, H };
+    const dP = P - PAT_DEF.peshona, dR = R - PAT_DEF.razmeri;
+    const segs = PAT_SEG.map(([x1, y1, x2, y2]) => [x1, patY(y1, dP, dR), x2, patY(y2, dP, dR)]);
+    return { segs, H: patY(61.50, dP, dR) };
   }
   // Chapdagi vertikal razmer (o'q + strelkalar + sm yozuvi) — SVG matni.
   function vdimMarkup(x, y1, y2, label, col) {
@@ -861,14 +878,14 @@ export function mountChizma(root) {
     const dimX = -7, padL = 16, padR = 4, padT = 5, padB = 5;
     const vbW = W + padL + padR, vbH = g.H + padT + padB;
     const GREEN = '#16a34a';
-    const pts = g.outer.map((p) => p[0] + ',' + p[1]).join(' ');
-    // Detal chiziqlari — orqa fonsiz, tema-mos rang (currentColor) va qalinroq.
-    const hems = g.hems.map((h) => `<line x1="${h[0][0]}" y1="${h[0][1]}" x2="${h[1][0]}" y2="${h[1][1]}" stroke="currentColor" stroke-width="0.7"/>`).join('');
+    // Detal chiziqlari — orqa fonsiz, tema-mos rang (currentColor), qalinroq.
+    const det = g.segs.map((s) =>
+      `<line x1="${s[0]}" y1="${s[1].toFixed(2)}" x2="${s[2]}" y2="${s[3].toFixed(2)}" stroke="currentColor" stroke-width="0.85" stroke-linecap="round"/>`).join('');
+    // peshona dim: 0..P ; razmeri dim: (P+1.5)..(P+1.5+R) — pastki strelka aniq pastki chetga tushadi.
     return `<svg viewBox="${-padL} ${-padT} ${vbW} ${vbH}" width="100%" style="height:auto;display:block">
-      <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round"/>
-      ${hems}
-      ${vdimMarkup(dimX, 0, g.yB1, '' + (+P.toFixed(1)), GREEN)}
-      ${vdimMarkup(dimX, g.yB2, g.H, '' + (+R.toFixed(1)), GREEN)}
+      ${det}
+      ${vdimMarkup(dimX, 0, P, '' + (+P.toFixed(1)), GREEN)}
+      ${vdimMarkup(dimX, P + 1.5, P + 1.5 + R, '' + (+R.toFixed(1)), GREEN)}
     </svg>`;
   }
   function redrawKaz(body) {
@@ -882,8 +899,8 @@ export function mountChizma(root) {
     body.innerHTML = `
       <div class="chz-kaz-head"><b>Patalok</b><span>eni ${PAT_W} sm</span></div>
       <div class="chz-kaz-fields">
-        <label>Peshona<input type="number" min="1" step="0.5" data-chz-k="peshona" value="${state.kaz.peshona}" /><i>sm</i></label>
-        <label>Razmeri<input type="number" min="1" step="0.5" data-chz-k="razmeri" value="${state.kaz.razmeri}" /><i>sm</i></label>
+        <label>Peshona<input type="number" min="2" step="0.5" data-chz-k="peshona" value="${state.kaz.peshona}" /><i>sm</i></label>
+        <label>Razmeri<input type="number" min="2" step="0.5" data-chz-k="razmeri" value="${state.kaz.razmeri}" /><i>sm</i></label>
       </div>
       <div class="chz-kaz-draw">${kazSvgMarkup(kazVal('peshona'), kazVal('razmeri'))}</div>
       <div class="chz-kaz-note">Simmetrik — chap razmer o'zgarsa, o'ng ham aynan o'zgaradi.</div>`;
