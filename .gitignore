@@ -13,3 +13,9 @@ Rasmlar/plot.log
 
 # Vaqtinchalik test skriptlari
 test-*.mjs
+_*.mjs
+
+# Mahalliy DXF/AutoCAD ish fayllari (repoga kerak emas)
+DXF/
+*.dwl
+*.dwl2
