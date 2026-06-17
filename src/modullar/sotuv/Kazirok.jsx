@@ -120,7 +120,8 @@ function NumField({ label, value, onChange, hint }) {
 }
 
 export function KazirokCard() {
-  const [open, setOpen] = useState(() => localStorage.getItem('kazirok-open') === '1');
+  // Ko'rinishi uchun DEFAULT ochiq (foydalanuvchi yopsa — '0' saqlanadi).
+  const [open, setOpen] = useState(() => localStorage.getItem('kazirok-open') !== '0');
   const [vals, setVals] = useState(loadVals);
 
   useEffect(() => {
