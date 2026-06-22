@@ -1178,14 +1178,14 @@ export function mountChizma(root, opts) {
     state._kazSig = kazSig(groups);
     if (!groups.length) {
       body.classList.add('chz-kbolim-empty');
-      body.innerHTML = 'Avval devorga <b>offset (Qosh)</b> tashlang — har offset uchun Patalok va Paloska razmerlari (dona soni bilan) shu yerda chiqadi.';
+      body.innerHTML = 'Avval devorga <b>Chiqishi (Qosh)</b> tashlang — har Chiqishi uchun Patalok va Paloska razmerlari (dona soni bilan) shu yerda chiqadi.';
       return;
     }
     body.classList.remove('chz-kbolim-empty');
     body.innerHTML = groups.map((g) => {
       const b = kazBlock(g.offCm);
       return '<div class="chz-kaz-group' + (b.off ? ' chz-kaz-off' : '') + '">' +
-        '<div class="chz-kaz-ghead">Offset ' + g.offCm + ' sm' + (b.off ? ' · <i>kerak emas</i>' : '') + '</div>' +
+        '<div class="chz-kaz-ghead">Chiqishi ' + g.offCm + ' sm' + (b.off ? ' · <i>kerak emas</i>' : '') + '</div>' +
         kazCard(g.offCm, 'pat', b, g.patCount) +
         '<div class="chz-kaz-sep"></div>' +
         kazCard(g.offCm, 'pal', b, g.palCount) +

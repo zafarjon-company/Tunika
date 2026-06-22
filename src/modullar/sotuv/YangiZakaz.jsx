@@ -355,7 +355,10 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                         <td className="py-1.5 pr-2">
                           <div className="font-medium text-slate-800">Kazirok</div>
                         </td>
-                        <td className="py-1.5 px-1 text-center text-[11px] text-slate-600">{r.listNom}</td>
+                        <td className="py-1.5 px-1 text-center text-[11px] text-slate-600">
+                          <div>{r.listNom}</div>
+                          {r.sizeLabel && <div className="text-[10px] text-slate-400 leading-tight">{r.sizeLabel}</div>}
+                        </td>
                         <td className="py-1.5 px-1">
                           {r.rang
                             ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold border border-black/10 whitespace-nowrap" style={rangChipStyle(r.rang)}>{r.rang}</span>

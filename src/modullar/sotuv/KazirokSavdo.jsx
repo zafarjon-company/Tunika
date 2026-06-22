@@ -31,22 +31,32 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
   const optom = (id) => { const t = listById(id); return t ? (Number(t.optom) || 0) : 0; };
   const eff = (id) => { const ov = narx[id]; return (ov != null && ov !== '') ? (Number(ov) || 0) : optom(id); };
 
-  const per = new Map(); // listId -> metr (patalok + paloska birga)
+  const per = new Map(); // listId -> { metr, pat:Set(eni), pal:Set(eni) } (patalok + paloska birga)
   let totalDona = 0;
   for (const g of groups) {
     for (const kind of ['pat', 'pal']) {
       const it = g[kind];
       if (!it) continue;
       totalDona += it.count;
-      per.set(it.listId || '', (per.get(it.listId || '') || 0) + it.meters);
+      const id = it.listId || '';
+      let e = per.get(id);
+      if (!e) { e = { metr: 0, pat: new Set(), pal: new Set() }; per.set(id, e); }
+      e.metr += it.meters;
+      e[kind].add(+it.eni);
     }
   }
-  const rows = [...per.entries()].map(([id, metr]) => {
+  // Eni o'lchamlari yorlig'i: masalan "Patalok 62.5 lik · Paloska 7.75 lik"
+  const sizeStr = (set) => [...set].sort((a, b) => b - a).map((v) => (+v.toFixed(2)) + ' lik').join(', ');
+  const rows = [...per.entries()].map(([id, e]) => {
     const t = listById(id);
     const price = eff(id);
-    const material = metr * price;
+    const material = e.metr * price;
+    const segs = [];
+    if (e.pat.size) segs.push('Patalok ' + sizeStr(e.pat));
+    if (e.pal.size) segs.push('Paloska ' + sizeStr(e.pal));
     return {
-      id, listNom: t ? t.nomi : 'List tanlanmagan', rang: t ? (t.rang || rangTozala(t.nomi)) : '', metr, price,
+      id, listNom: t ? t.nomi : 'List tanlanmagan', rang: t ? (t.rang || rangTozala(t.nomi)) : '',
+      sizeLabel: segs.join(' · '), metr: e.metr, price,
       material, xizmat: material * KAZ_SERVICE, jami: material * (1 + KAZ_SERVICE),
     };
   });
@@ -90,7 +100,7 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
           <span className="min-w-0 flex-1">
             <span className="block font-semibold text-sm text-slate-800 leading-tight">{nomi}</span>
             <span className="block text-[11px] text-slate-500 truncate">
-              Offset {g.offCm} sm · {it.count} dona · {listNom(it.listId)} · eni {it.eni} sm
+              Chiqishi {g.offCm} sm · {it.count} dona · {listNom(it.listId)} · eni {it.eni} sm
             </span>
           </span>
           <span className="text-[11px] text-slate-400 tabular-nums hidden sm:inline mr-1">{it.meters.toFixed(2)} m</span>
@@ -129,7 +139,7 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
         </span>
         <div className="min-w-0 flex-1">
           <div className="font-bold text-sm text-slate-800 leading-tight">Kazirok</div>
-          <div className="text-[11px] text-slate-500">Chizmadan avtomatik · {totalDona} dona · {groups.length} offset</div>
+          <div className="text-[11px] text-slate-500">Chizmadan avtomatik · {totalDona} dona · {groups.length} chiqish</div>
         </div>
         <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 rounded-full px-2 py-0.5 flex-shrink-0">
           avtomatik
@@ -151,7 +161,10 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
           {rows.map((r) => (
             <div key={r.id || '—'} className="px-3 py-2.5">
               <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="font-semibold text-xs text-slate-800 truncate">{r.listNom}</span>
+                <span className="min-w-0">
+                  <span className="block font-semibold text-xs text-slate-800 truncate">{r.listNom}</span>
+                  {r.sizeLabel && <span className="block text-[10px] text-slate-400 truncate">{r.sizeLabel}</span>}
+                </span>
                 <span className="text-[11px] text-slate-500 tabular-nums flex-shrink-0">{r.metr.toFixed(2)} m</span>
               </div>
               <div className="flex items-center gap-2">
