@@ -45,6 +45,15 @@ export function readChizmaQozon() {
   catch (e) { return { inner: 0, outer: 0 }; }
 }
 
+const KAZIROK_KEY = 'xona-chizma-kazirok'; // Savdo "Tovarlar" bo'limi uchun to'liq Kazirok ma'lumoti
+// Kazirok (Patalok/Paloska) to'liq ma'lumoti: har offset guruhi bo'yicha dona,
+// razmerlar, tanlangan List, chizma (SVG) va sarflanadigan list metri. Savdo
+// bo'limi shu yerdan o'qiydi (chizma yopiq bo'lsa ham localStorage'dan).
+export function readChizmaKazirok() {
+  try { const o = JSON.parse(localStorage.getItem(KAZIROK_KEY)); return (o && Array.isArray(o.groups)) ? o : { groups: [] }; }
+  catch (e) { return { groups: [] }; }
+}
+
 const STORAGE_KEY = 'xona-chizma-v1';
 const REF_KEY = 'xona-chizma-ref-v1';   // import xom nusxasi (DXF birligida) — birlik o'zgarsa chiziqlar qayta quriladi
 
@@ -949,6 +958,7 @@ export function mountChizma(root, opts) {
     }
     saveKazList(); saveKazByOffset();
     renderKazirokBolim();
+    publishKazirok();   // savdo "Tovarlar" bloki ham yangi List bo'yicha o'zgaradi
   }
   // Offsetni guruhlash kaliti — santimetrga yaxlitlangan (bir xil offset = bitta guruh).
   function offKey(offDistMm) { return Math.round(offDistMm / 10); }
@@ -1133,6 +1143,7 @@ export function mountChizma(root, opts) {
         btn.classList.toggle('on', Math.abs(parseFloat(btn.getAttribute('data-eni')) - v.eni) < 0.05);
       });
     });
+    publishKazirok();   // har razmer tahriridan keyin savdo blokini ham yangilaymiz
   }
   // Bitta detal kartasi (Patalok yoki Paloska) — bitta offset guruhida.
   function kazCard(offCm, kind, b, count) {
@@ -1218,6 +1229,7 @@ export function mountChizma(root, opts) {
         setKazByOffset(off, { patFold: !cur });
         btn.classList.toggle('on', !cur);
         redrawKazDet(body, off, 'pat');
+        publishKazirok();
       });
     });
     // "Kerak emas" — butun offset guruhini (patalok+paloska) o'chiradi/yoqadi:
@@ -1237,6 +1249,7 @@ export function mountChizma(root, opts) {
         const off = +sel.getAttribute('data-off');
         const kind = sel.getAttribute('data-chz-list');
         setKazByOffset(off, kind === 'pat' ? { patList: sel.value } : { palList: sel.value });
+        publishKazirok();
       });
     });
   }
@@ -2319,6 +2332,56 @@ export function mountChizma(root, opts) {
     try { window.dispatchEvent(new CustomEvent('chizma:qozon', { detail: { inner, outer } })); } catch (e) { /* noop */ }
   }
 
+  // ----- KAZIROK ma'lumotini savdo "Tovarlar" bo'limiga chiqarish -----
+  // Bir bo'lak eni (sm) → 1.25 m (1250 mm) listga sig'adigan bo'lak soni.
+  // "Asosiy" preset bo'lsa o'shaning bo'lak soni; bo'lmasa round(1250/eni_mm).
+  function kazBolak(kind, eniCm) {
+    const p = kazActivePreset(kind, eniCm);
+    if (p) return p.bolak;
+    return Math.max(1, Math.round(1250 / (Math.max(1, eniCm) * 10)));
+  }
+  // Har offset guruhi bo'yicha to'liq payload (savdo bo'limi uchun). "Kerak emas"
+  // guruhlar va dona = 0 bo'laklar chiqarilmaydi. List metri:
+  //   metr = dona × (bir bo'lak uzunligi, m) ÷ (listga sig'adigan bo'lak soni).
+  // Bir bo'lak uzunligi = kazGeom balandligi (peshona+razmeri+jiya, qayrilsa +1.5).
+  function buildKazPayload() {
+    const groups = [];
+    for (const g of kazGroups()) {
+      const b = kazBlock(g.offCm);
+      if (b.off) continue;   // "Kerak emas" — savdoga ham chiqmaydi
+      const mk = (kind, count) => {
+        if (!(count > 0)) return null;
+        const v = b[kind];
+        const folded = kind === 'pat' && !!v.fold;
+        const geom = kazGeom(kind, Math.max(2, v.peshona), Math.max(2, v.razmeri), v.eni, folded);
+        const bolak = kazBolak(kind, v.eni);
+        const pieceLenCm = geom.H;                          // bir bo'lak uzunligi (rulon bo'ylab), sm
+        const meters = (count * (pieceLenCm / 100)) / bolak; // list metri (1.25 m enga bo'linib)
+        return {
+          count, eni: +(+v.eni).toFixed(2), peshona: +(+v.peshona).toFixed(2),
+          razmeri: +(+v.razmeri).toFixed(2), fold: folded,
+          listId: effList(g.offCm, kind) || '', bolak,
+          pieceLenCm: +pieceLenCm.toFixed(1), meters: +meters.toFixed(3),
+          svg: kazSvg(kind, v.eni, v.peshona, v.razmeri, v.fold),
+        };
+      };
+      const pat = mk('pat', g.patCount);
+      const pal = mk('pal', g.palCount);
+      if (!pat && !pal) continue;
+      groups.push({ offCm: g.offCm, pat, pal });
+    }
+    return { groups };
+  }
+  let lastKaz = null;
+  function publishKazirok() {
+    const payload = buildKazPayload();
+    const key = JSON.stringify(payload);
+    if (key === lastKaz) return;
+    lastKaz = key;
+    try { localStorage.setItem(KAZIROK_KEY, key); } catch (e) { /* noop */ }
+    try { window.dispatchEvent(new CustomEvent('chizma:kazirok', { detail: payload })); } catch (e) { /* noop */ }
+  }
+
   /* ---------------- RENDER ---------------- */
   function svgEl(tag, attrs) {
     const el = document.createElementNS(SVG_NS, tag);
@@ -2699,6 +2762,7 @@ export function mountChizma(root, opts) {
     q('qozonCount').textContent = visCorners.length + ' dona';
     const innerN = visCorners.filter((c) => c.concave).length;
     publishQozon(innerN, visCorners.length - innerN); // ichki (botiq) va oddiy (tashqi) qozon soni
+    publishKazirok(); // Kazirok (Patalok/Paloska) — savdo "Tovarlar" bo'limiga to'liq ma'lumot
 
     const list = q('lineList');
     list.innerHTML = '';

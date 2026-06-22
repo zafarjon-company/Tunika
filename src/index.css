@@ -885,3 +885,171 @@ html.themed .bg-white.rounded-xl {
 }
 /* Faol tab matni biroz yorqinroq (kontrast) */
 html.themed nav button.bg-slate-900 { text-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+
+/* ============================================================
+   YANGI HEADER EFFEKTLARI — boyitilgan, har mavzuga xilma-xil
+   (App.jsx: TEMA_FX/FX_CFG turlari bilan mos)
+   ============================================================ */
+
+/* Firefly — yumshoq nur orbi, sayrab + pulslab */
+.fx-firefly { filter: blur(.3px); animation: fxFirefly ease-in-out infinite; }
+@keyframes fxFirefly {
+  0%, 100% { opacity: 0; transform: translate(0, 0) scale(.5); }
+  25% { opacity: .95; }
+  50% { transform: translate(9px, -12px) scale(1); }
+  75% { opacity: .55; transform: translate(-7px, -5px) scale(.85); }
+}
+
+/* Confetti — tumbalab tushuvchi rangli kvadratchalar */
+.fx-confetti { border-radius: 1.5px; box-shadow: none !important; animation: fxConfetti linear infinite; }
+@keyframes fxConfetti {
+  0% { transform: translateY(-10px) rotate(0); opacity: 0; }
+  10% { opacity: 1; } 90% { opacity: 1; }
+  100% { transform: translateY(98px) rotate(560deg); opacity: 0; }
+}
+
+/* Drift — yumshoq orblar pastdan chayqalib suzib chiqadi */
+.fx-drift { top: auto; bottom: -8px; filter: blur(.2px); animation: fxDrift ease-in-out infinite; }
+@keyframes fxDrift {
+  0% { transform: translate(0, 0) scale(.6); opacity: 0; }
+  20% { opacity: .9; }
+  50% { transform: translate(11px, -34px) scale(1); }
+  80% { opacity: .5; }
+  100% { transform: translate(-7px, -70px) scale(1.1); opacity: 0; }
+}
+
+/* Glint — aylanuvchi olmos uchquni (zarhal/qimmatbaho) */
+.fx-glint { border-radius: 1px; animation: fxGlint ease-in-out infinite; }
+@keyframes fxGlint {
+  0%, 100% { opacity: 0; transform: rotate(45deg) scale(.2); }
+  42% { opacity: 1; transform: rotate(45deg) scale(1); }
+  60% { opacity: 1; }
+}
+
+/* Meteor — tez diagonal yulduzcha (yorug' iz) */
+.fx-meteor { animation: fxMeteor linear infinite; }
+@keyframes fxMeteor {
+  0% { transform: translate(-32px, -22px) scale(.4); opacity: 0; }
+  15% { opacity: 1; } 70% { opacity: 1; }
+  100% { transform: translate(64px, 64px) scale(.6); opacity: 0; }
+}
+
+/* Bokeh — katta, mayin xira orblar (premium ambient) */
+.fx-bokeh { top: auto; bottom: -14px; filter: blur(2.4px); box-shadow: none !important; animation: fxBokeh ease-in infinite; }
+@keyframes fxBokeh {
+  0% { transform: translateY(0) scale(.6); opacity: 0; }
+  25% { opacity: .5; }
+  100% { transform: translateY(-92px) scale(1.25); opacity: 0; }
+}
+
+/* Petal — aylanib tushuvchi gulbarglar */
+.fx-petal { border-radius: 50% 0 50% 0; box-shadow: none !important; opacity: .9; animation: fxPetal ease-in-out infinite; }
+@keyframes fxPetal {
+  0% { transform: translateY(-12px) rotate(0); opacity: 0; }
+  12% { opacity: 1; }
+  50% { transform: translateY(46px) translateX(16px) rotate(180deg); }
+  100% { transform: translateY(100px) translateX(-8px) rotate(345deg); opacity: 0; }
+}
+
+/* ============================================================
+   NAFIS DETALLAR — header aurasi, sarlavha jilosi, karta aksenti
+   ============================================================ */
+/* Sarlavha orqasida sekin suzuvchi mavzu-rangli aura (chuqurlik) */
+.hdr-aura {
+  position: absolute; inset: -50% -12% auto -12%; height: 220%; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(55% 80% at 22% 35%, color-mix(in srgb, var(--c-btn, #0f172a) 22%, transparent), transparent 70%),
+    radial-gradient(48% 70% at 78% 45%, color-mix(in srgb, var(--c-btnh, #1e293b) 18%, transparent), transparent 72%);
+  filter: blur(22px); opacity: .85; animation: auraDrift 16s ease-in-out infinite;
+}
+@keyframes auraDrift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(3%, 1.5%) scale(1.06); }
+  66% { transform: translate(-2.5%, -1%) scale(1.04); }
+}
+
+/* Firma nomi — BARCHA mavzuда mavzu-rangli "jilo" sweep */
+html.themed .firma-nomi {
+  background: linear-gradient(100deg, var(--c-t1, #f1f5f9) 24%, var(--c-btn, #64748b) 48%, var(--c-t1, #f1f5f9) 72%);
+  background-size: 220% auto;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+  animation: firmaFloat 4s ease-in-out infinite, firmaShine 7s linear infinite;
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, .5));
+}
+
+/* Kartalar tepasida nozik mavzu-rangli aksent chizig'i */
+.bg-white.rounded-xl { position: relative; }
+.bg-white.rounded-xl::before {
+  content: ''; position: absolute; top: 0; left: 16px; right: 16px; height: 2px; border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c-btn, #0f172a) 50%, transparent) 50%, transparent);
+  opacity: .5; pointer-events: none; z-index: 1;
+}
+/* To'liq-ekran chizma kartasida aksent chizig'i kerak emas */
+.bg-white.rounded-xl:has(.chz-full-wrap)::before { display: none; }
+
+@media (prefers-reduced-motion: reduce) { .hdr-aura { animation: none !important; } }
+
+/* ============================================================
+   EMOJI-ORNAMENT HARAKATLARI — har mavzuga xos belgi
+   (floaty: suzib ko'tariladi · spinfall: aylanib tushadi · twinkle2: joyida porlaydi)
+   ============================================================ */
+.fx-floaty { top: auto; bottom: -18px; animation: fxFloaty ease-in-out infinite; }
+@keyframes fxFloaty {
+  0% { transform: translate(0, 0) rotate(-6deg) scale(.85); opacity: 0; }
+  15% { opacity: 1; } 85% { opacity: 1; }
+  50% { transform: translate(12px, -56px) rotate(6deg) scale(1); }
+  100% { transform: translate(-8px, -112px) rotate(-4deg) scale(.9); opacity: 0; }
+}
+.fx-spinfall { animation: fxSpinfall linear infinite; }
+@keyframes fxSpinfall {
+  0% { transform: translateY(-12px) rotate(0); opacity: 0; }
+  12% { opacity: 1; } 88% { opacity: 1; }
+  100% { transform: translateY(100px) rotate(430deg); opacity: 0; }
+}
+.fx-twinkle2 { animation: fxTwinkle2 ease-in-out infinite; }
+@keyframes fxTwinkle2 {
+  0%, 100% { opacity: 0; transform: scale(.4) rotate(0); }
+  40% { opacity: 1; transform: scale(1.08) rotate(18deg); }
+  60% { opacity: .9; transform: scale(1) rotate(-10deg); }
+}
+
+/* ============================================================
+   IKON-BELGILAR — emoji o'rniga professional lucide ikonalari.
+   currentColor = mavzu rangi; nozik to'ldirish + ikki qatlam glow
+   "model" his beradi (yassi emoji emas, hajmli, nurli belgi).
+   ============================================================ */
+.hdr-fx .fx-ico {
+  background: none !important; box-shadow: none !important; border-radius: 0;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 0;
+  filter: drop-shadow(0 0 5px currentColor) drop-shadow(0 0 1.5px currentColor);
+}
+.fx-ico svg {
+  fill: currentColor; fill-opacity: .16;
+  stroke-linecap: round; stroke-linejoin: round;
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-ico { animation-duration: .001s !important; opacity: .55; }
+}
+
+/* ============================================================
+   HERO ORNAMENTLAR — Higgs photoreal PNG (toj, gavhar, qor...).
+   Suzuvchi premium "charm"; matn o'qilishi uchun yumshoq shaffof.
+   ============================================================ */
+.hdr-fx .fx-orn {
+  background: none !important; box-shadow: none !important; border-radius: 0;
+  object-fit: contain; opacity: .6; pointer-events: none;
+  -webkit-user-drag: none; user-select: none;
+}
+/* photoreal charm uchun sokinroq suzish (cho'qqida .7 shaffoflik — matnni bosmaydi) */
+.hdr-fx .fx-orn.fx-floaty { animation-name: ornFloat; }
+@keyframes ornFloat {
+  0%   { transform: translate(0, 0) rotate(-5deg) scale(.7);   opacity: 0; }
+  18%  { opacity: .72; } 82% { opacity: .72; }
+  50%  { transform: translate(10px, -50px) rotate(5deg) scale(.92); }
+  100% { transform: translate(-6px, -104px) rotate(-3deg) scale(.8); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-orn { animation: none !important; opacity: .4; }
+}

@@ -57,6 +57,7 @@ function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan kat
 }
 import { DynamicPaymentsSection } from './Tolovlar.jsx';
 import { ChizmaCard } from './Chizma.jsx';
+import { KazirokSavdo } from './KazirokSavdo.jsx';
 import { readChizmaLatokMeters, readChizmaQozon } from './chizmaEngine.js';
 
 // O'lchov ustuni: latok(metrli) → faqat metr; list/profnastil → metr × dona; aksessuar → dona/kg
@@ -72,11 +73,14 @@ export function olchovDisp(it) {
 }
 
 export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar, products, ranglar = [],
+                              kazData, kazNarx = {}, onKazPrice,
                               onOpenProductPicker, onOpenClientPicker, onOpenMasterPicker, onSave, usdRate, usdOlish,
                               onCopyLast, canCopyLast = false, editing = false, onCancelEdit, editNumber = null,
                               saqlashKey = 'Ctrl+S' }) {
   const colorOptions = barchaRanglar(tunikaBaza, ranglar);
   const hasItems = draft.items.length > 0;
+  const kazRows = draftCalc.kazRows || [];
+  const hasKaz = kazRows.length > 0;   // chizmadan kazirok bor — hisob-kitobda ham ko'rinadi
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved
   const [removingIds, setRemovingIds] = useState(() => new Set());
   const [confirmClearAll, setConfirmClearAll] = useState(false); // "Hammasini o'chirish" tasdig'i
@@ -275,6 +279,10 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                 )
               )}
             </div>
+
+            {/* KAZIROK — chizmadan avtomatik (read-only); doim eng tepada */}
+            <KazirokSavdo data={kazData} rows={draftCalc.kazRows || []} tunikaBaza={tunikaBaza} narx={kazNarx} onPrice={onKazPrice} />
+
             {!hasItems ? (
               <div className="text-center py-7 border-2 border-dashed border-slate-200 rounded-lg">
                 <Package className="w-12 h-12 mx-auto mb-2 text-slate-300" />
@@ -315,7 +323,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
 
         {/* ===================== O'NG USTUN (sticky) ===================== */}
         <aside className="lg:sticky lg:top-36 space-y-4 min-w-0">
-          {!hasItems ? (
+          {!hasItems && !hasKaz ? (
             <Card>
               <SectionTitle icon={Wallet}>Hisob-kitob</SectionTitle>
               <div className="text-center py-8 text-slate-400 text-sm">
@@ -341,6 +349,23 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                     </tr>
                   </thead>
                   <tbody>
+                    {/* KAZIROK — chizmadan avtomatik, eng tepada (List → razmer, list rangi → rang, metr → o'lchov, narx+25% → narx, jami = +25%) */}
+                    {kazRows.map((r) => (
+                      <tr key={'kaz-' + (r.id || 'x')} className="border-b border-slate-100">
+                        <td className="py-1.5 pr-2">
+                          <div className="font-medium text-slate-800">Kazirok</div>
+                        </td>
+                        <td className="py-1.5 px-1 text-center text-[11px] text-slate-600">{r.listNom}</td>
+                        <td className="py-1.5 px-1">
+                          {r.rang
+                            ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold border border-black/10 whitespace-nowrap" style={rangChipStyle(r.rang)}>{r.rang}</span>
+                            : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="py-1.5 px-1 text-right tabular-nums text-slate-700 whitespace-nowrap">{r.metr.toFixed(2)} m</td>
+                        <td className="py-1.5 px-1 text-right tabular-nums text-slate-700 whitespace-nowrap">{fmt(r.price)}+25%</td>
+                        <td className="py-1.5 pl-1 text-right tabular-nums font-semibold text-slate-900 whitespace-nowrap">{fmt(r.jami)}</td>
+                      </tr>
+                    ))}
                     {draftCalc.items.map((it) => (
                       <tr key={it.id} className="border-b border-slate-100">
                         <td className="py-1.5 pr-2">
@@ -392,16 +417,26 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
 
               {/* Umumiy summa — real vaqtda yangilanadi */}
               <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
-                {draftCalc.dastafkaSumma > 0 && (
+                {(draftCalc.dastafkaSumma > 0 || draftCalc.kazTotalJami > 0) && (
                   <>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">Tovarlar</span>
-                      <span className="tabular-nums text-slate-700">{fmt(draftCalc.tovarSum)} so'm</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500 flex items-center gap-1"><Truck className="w-3 h-3" /> Dastafka</span>
-                      <span className="tabular-nums text-slate-700">+ {fmt(draftCalc.dastafkaSumma)} so'm</span>
-                    </div>
+                    {draftCalc.tovarSum > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Tovarlar</span>
+                        <span className="tabular-nums text-slate-700">{fmt(draftCalc.tovarSum)} so'm</span>
+                      </div>
+                    )}
+                    {draftCalc.kazTotalJami > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Kazirok (material + 25%)</span>
+                        <span className="tabular-nums text-slate-700">+ {fmt(draftCalc.kazTotalJami)} so'm</span>
+                      </div>
+                    )}
+                    {draftCalc.dastafkaSumma > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500 flex items-center gap-1"><Truck className="w-3 h-3" /> Dastafka</span>
+                        <span className="tabular-nums text-slate-700">+ {fmt(draftCalc.dastafkaSumma)} so'm</span>
+                      </div>
+                    )}
                   </>
                 )}
                 <div className="flex justify-between items-center">
@@ -460,7 +495,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
       </div>
 
       {/* ===================== PASTKI STICKY PANEL (mobil/planshet) ===================== */}
-      {hasItems && (
+      {(hasItems || hasKaz) && (
         <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 no-print bg-white border-t-2 border-slate-900 px-4 py-2.5 flex items-center gap-3"
           style={{ boxShadow: '0 -4px 18px rgba(15, 23, 42, .14)' }}>
           <div className="min-w-0 flex-1">

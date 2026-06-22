@@ -28,3 +28,6 @@ DXF/
 
 # Marketing manba media (xom/tayyor promo video, audio) — ilova asseti emas, deployga kerak emas
 public/brand/marketing/
+
+# Ornament xom (backup) nusxalari — ishlatilmaydi (toza versiya public/ornaments/ da), deployga kerak emas
+public/brand/ornaments/

@@ -9,6 +9,39 @@ import {
   Plus, Settings, FileText, Check, AlertCircle, Loader2, Users,
   CalendarCheck, HardHat, ClipboardList, Tags, Dices, Pin, History, Languages, WifiOff, Search,
 } from 'lucide-react';
+// Header effekt belgilari — mavzu-detallari uchun professional ikonalar (emoji emas)
+import {
+  Crown, Gem, Star, Sparkles, Snowflake, Leaf, Flame, Droplet, Flower, Flower2,
+  Wine, WandSparkles, Bot, Fish, Bird, Ghost, Cherry, Citrus, Grape, Apple,
+  Hexagon, Biohazard, TreePalm, Coins, Sprout,
+  Sun, Moon, Contrast, Waves, MoonStar, Binary, Coffee, Sunset, Zap, Cpu,
+  Atom, Wrench, CloudLightning, Shirt, Candy, Orbit, Cloud, Anchor, Hammer, Shell,
+} from 'lucide-react';
+
+// Sprite kaliti -> lucide komponenti (header'da suzuvchi mavzu-belgilari)
+const FX_ICON = {
+  crown: Crown, gem: Gem, star: Star, sparkles: Sparkles, snowflake: Snowflake,
+  leaf: Leaf, flame: Flame, droplet: Droplet, flower: Flower, flower2: Flower2,
+  wine: Wine, wand: WandSparkles, bot: Bot, fish: Fish, bird: Bird, ghost: Ghost,
+  cherry: Cherry, citrus: Citrus, grape: Grape, apple: Apple, hexagon: Hexagon,
+  biohazard: Biohazard, palm: TreePalm, coins: Coins, sprout: Sprout,
+  sun: Sun, moon: Moon, contrast: Contrast, waves: Waves, moonstar: MoonStar,
+  binary: Binary, coffee: Coffee, sunset: Sunset, zap: Zap, cpu: Cpu, atom: Atom,
+  wrench: Wrench, cloudbolt: CloudLightning, shirt: Shirt, candy: Candy,
+  orbit: Orbit, cloud: Cloud, anchor: Anchor, hammer: Hammer, shell: Shell,
+};
+
+// HERO mavzular — premium photoreal ornament (Higgs nano_banana, shaffof PNG).
+// Bularda ikona o'rniga haqiqiy 3D-render charm suzadi. /ornaments/<fayl>.png
+// MUHIM: public/brand/** vite.config watch.ignored ichida (OneDrive EBUSY) — dev'da
+// berilmaydi; shu sabab ornamentlar public/ornaments/ da (brand'dan tashqari).
+const TEMA_ORN = {
+  royal: 'crown', ruby: 'ruby',
+  ice: 'snow', arctic: 'snow', glacier: 'snow',
+  rose: 'rose', blush: 'rose',
+  gold: 'coin', pirate: 'coin', bronze: 'coin',
+  dracula: 'bat',
+};
 
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase.js';
@@ -28,6 +61,8 @@ import { SmallModal } from './components/ui.jsx';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
 import { LiveClock } from './components/LiveClock.jsx';
 import { NewOrderTab } from './modullar/sotuv/YangiZakaz.jsx';
+import { computeKazRows, readKazNarx, saveKazNarx } from './modullar/sotuv/KazirokSavdo.jsx';
+import { readChizmaKazirok } from './modullar/sotuv/chizmaEngine.js';
 import { OrdersTab } from './modullar/sotuv/Zakazlar.jsx';
 import { MijozlarTab } from './modullar/sotuv/Mijozlar.jsx';
 import { ProductPickerModal, ClientPickerModal, MasterPickerModal } from './modullar/sotuv/pickers.jsx';
@@ -45,96 +80,96 @@ import { getKeys, saveKeys, matchCombo } from './lib/keybind.js';
 
 const FOUNDER = { id: 'founder', login: 'Brutal', parol: '4252600ZZ', role: 'founder' };
 
-// Har mavzu — o'ziga xos effekt {t: harakat turi, c: rang, g: emoji}
+// Har mavzu — o'ziga xos effekt {t: harakat turi, c: rang, s: ikon-belgi (lucide)}
 const TEMA_FX = {
-  light:     { t: 'mote', c: '#c9a865' },
-  dark:      { t: 'snow', c: '#ffffff' },
-  nord:      { t: 'snow', c: '#dbeafe' },
-  mono:      { t: 'snow', c: '#e5e5e5' },
-  dracula:   { t: 'sparkle', c: '#bd93f9' },
-  ocean:     { t: 'bubble', c: '#7dd3fc' },
-  midnight:  { t: 'stars', c: '#cdd6ff' },
-  matrix:    { t: 'rain', c: '#86efac' },
-  aurora:    { t: 'sparkle', c: '#34d399' },
-  forest:    { t: 'leaf', c: '#86efac', g: '🍃' },
-  coral:     { t: 'bubble', c: '#ff9e8a' },
-  coffee:    { t: 'steam', c: '#e4d6be' },
-  volcano:   { t: 'fire', c: '#ff5a1f', g: '🔥' },
-  sunset:    { t: 'ember', c: '#ff9e6b' },
-  crimson:   { t: 'ember', c: '#ff7a8a' },
-  rose:      { t: 'leaf', c: '#ff8ac0', g: '🌸' },
-  gold:      { t: 'sparkle', c: '#ffd770' },
-  neon:      { t: 'sparkle', c: '#ff2d95' },
-  synthwave: { t: 'sparkle', c: '#ff4ecd' },
-  cyber:     { t: 'sparkle', c: '#22d3ee' },
-  galaxy:    { t: 'stars', c: '#c4b5ff' },
-  amethyst:  { t: 'sparkle', c: '#b07bff' },
-  plum:      { t: 'sparkle', c: '#9b6bff' },
-  indigo:    { t: 'sparkle', c: '#8b93ff' },
+  light:     { t: 'mote', c: '#c9a865', s: 'sun' },
+  dark:      { t: 'snow', c: '#ffffff', s: 'moon' },
+  nord:      { t: 'snow', c: '#dbeafe', s: 'snowflake' },
+  mono:      { t: 'bokeh', c: '#e5e5e5', s: 'contrast' },
+  dracula:   { t: 'floaty', c: '#bd93f9', s: 'ghost' },
+  ocean:     { t: 'drift', c: '#7dd3fc', s: 'waves' },
+  midnight:  { t: 'meteor', c: '#cdd6ff', s: 'moonstar' },
+  matrix:    { t: 'rain', c: '#86efac', s: 'binary' },
+  aurora:    { t: 'firefly', c: '#34d399', s: 'sparkles' },
+  forest:    { t: 'leaf', c: '#86efac', s: 'leaf' },
+  coral:     { t: 'floaty', c: '#ff9e8a', s: 'fish' },
+  coffee:    { t: 'steam', c: '#e4d6be', s: 'coffee' },
+  volcano:   { t: 'fire', c: '#ff5a1f', s: 'flame' },
+  sunset:    { t: 'ember', c: '#ff9e6b', s: 'sunset' },
+  crimson:   { t: 'ember', c: '#ff7a8a', s: 'flame' },
+  rose:      { t: 'petal', c: '#ff8ac0', s: 'flower2' },
+  gold:      { t: 'glint', c: '#ffd770', s: 'coins' },
+  neon:      { t: 'confetti', c: '#ff2d95', s: 'zap' },
+  synthwave: { t: 'glint', c: '#ff4ecd', s: 'sunset' },
+  cyber:     { t: 'meteor', c: '#22d3ee', s: 'cpu' },
+  galaxy:    { t: 'twinkle2', c: '#c4b5ff', s: 'sparkles' },
+  amethyst:  { t: 'floaty', c: '#b07bff', s: 'gem' },
+  plum:      { t: 'bokeh', c: '#9b6bff', s: 'gem' },
+  indigo:    { t: 'meteor', c: '#8b93ff', s: 'star' },
   // ----- yangi 21 mavzu -----
-  emerald:   { t: 'leaf', c: '#34d399', g: '🍃' },
-  ruby:      { t: 'sparkle', c: '#fb2c5a' },
-  sapphire:  { t: 'bubble', c: '#60a5fa' },
-  jade:      { t: 'leaf', c: '#5eead4', g: '🍃' },
-  bronze:    { t: 'ember', c: '#e0954a' },
-  steel:     { t: 'rain', c: '#cbd5e1' },
-  magma:     { t: 'fire', c: '#ff6a00', g: '🔥' },
-  arctic:    { t: 'snow', c: '#bae6fd' },
-  jungle:    { t: 'leaf', c: '#a3e635', g: '🌿' },
-  desert:    { t: 'ember', c: '#eab676' },
-  wine:      { t: 'bubble', c: '#e64980' },
-  cobalt:    { t: 'stars', c: '#60a5fa' },
-  magenta:   { t: 'sparkle', c: '#f472b6' },
-  lime:      { t: 'sparkle', c: '#d6f04f' },
-  turquoise: { t: 'bubble', c: '#22d3ee' },
-  sakura:    { t: 'leaf', c: '#fda4c4', g: '🌸' },
-  storm:     { t: 'rain', c: '#90caf9' },
-  pirate:    { t: 'stars', c: '#e8b923' },
-  wizard:    { t: 'sparkle', c: '#c084fc' },
-  robot:     { t: 'stars', c: '#67e8f9' },
-  comet:     { t: 'stars', c: '#c7d2fe' },
+  emerald:   { t: 'firefly', c: '#34d399', s: 'gem' },
+  ruby:      { t: 'glint', c: '#fb2c5a', s: 'gem' },
+  sapphire:  { t: 'drift', c: '#60a5fa', s: 'gem' },
+  jade:      { t: 'firefly', c: '#5eead4', s: 'gem' },
+  bronze:    { t: 'glint', c: '#e0954a', s: 'coins' },
+  steel:     { t: 'rain', c: '#cbd5e1', s: 'wrench' },
+  magma:     { t: 'fire', c: '#ff6a00', s: 'flame' },
+  arctic:    { t: 'spinfall', c: '#bae6fd', s: 'snowflake' },
+  jungle:    { t: 'leaf', c: '#a3e635', s: 'sprout' },
+  desert:    { t: 'floaty', c: '#eab676', s: 'palm' },
+  wine:      { t: 'floaty', c: '#e64980', s: 'wine' },
+  cobalt:    { t: 'meteor', c: '#60a5fa', s: 'atom' },
+  magenta:   { t: 'confetti', c: '#f472b6', s: 'flower' },
+  lime:      { t: 'confetti', c: '#d6f04f', s: 'citrus' },
+  turquoise: { t: 'drift', c: '#22d3ee', s: 'gem' },
+  sakura:    { t: 'petal', c: '#fda4c4', s: 'flower' },
+  storm:     { t: 'rain', c: '#90caf9', s: 'cloudbolt' },
+  pirate:    { t: 'twinkle2', c: '#e8b923', s: 'coins' },
+  wizard:    { t: 'floaty', c: '#c084fc', s: 'wand' },
+  robot:     { t: 'floaty', c: '#67e8f9', s: 'bot' },
+  comet:     { t: 'meteor', c: '#c7d2fe', s: 'star' },
   // ----- yana 20 mavzu -----
-  obsidian:  { t: 'sparkle', c: '#a78bfa' },
-  sunflower: { t: 'leaf', c: '#ffd23f', g: '🌻' },
-  flamingo:  { t: 'bubble', c: '#fb6f92' },
-  mint:      { t: 'leaf', c: '#6eedbb', g: '🍃' },
-  blood:     { t: 'ember', c: '#e63950' },
-  ice:       { t: 'snow', c: '#9bdcfb' },
-  honey:     { t: 'ember', c: '#ffbe2e' },
-  orchid:    { t: 'sparkle', c: '#d946ef' },
-  denim:     { t: 'rain', c: '#6f9bd8' },
-  caramel:   { t: 'ember', c: '#d49a52' },
-  seafoam:   { t: 'bubble', c: '#5cf0d2' },
-  plasma:    { t: 'sparkle', c: '#ec70ff' },
-  autumn:    { t: 'leaf', c: '#e8702e', g: '🍂' },
-  spring:    { t: 'leaf', c: '#86e8af', g: '🌷' },
-  mocha:     { t: 'steam', c: '#a67d57' },
-  nebula:    { t: 'stars', c: '#aa9eff' },
-  toxic:     { t: 'sparkle', c: '#c6f63f' },
-  royal:     { t: 'sparkle', c: '#9333ea' },
-  peach:     { t: 'bubble', c: '#ffb89a' },
-  lagoon:    { t: 'bubble', c: '#34d0de' },
+  obsidian:  { t: 'bokeh', c: '#a78bfa', s: 'gem' },
+  sunflower: { t: 'leaf', c: '#ffd23f', s: 'flower' },
+  flamingo:  { t: 'floaty', c: '#fb6f92', s: 'bird' },
+  mint:      { t: 'firefly', c: '#6eedbb', s: 'leaf' },
+  blood:     { t: 'spinfall', c: '#e63950', s: 'droplet' },
+  ice:       { t: 'spinfall', c: '#9bdcfb', s: 'snowflake' },
+  honey:     { t: 'floaty', c: '#ffbe2e', s: 'hexagon' },
+  orchid:    { t: 'petal', c: '#d946ef', s: 'flower' },
+  denim:     { t: 'rain', c: '#6f9bd8', s: 'shirt' },
+  caramel:   { t: 'ember', c: '#d49a52', s: 'candy' },
+  seafoam:   { t: 'firefly', c: '#5cf0d2', s: 'shell' },
+  plasma:    { t: 'confetti', c: '#ec70ff', s: 'atom' },
+  autumn:    { t: 'leaf', c: '#e8702e', s: 'leaf' },
+  spring:    { t: 'leaf', c: '#86e8af', s: 'flower2' },
+  mocha:     { t: 'steam', c: '#a67d57', s: 'coffee' },
+  nebula:    { t: 'meteor', c: '#aa9eff', s: 'orbit' },
+  toxic:     { t: 'twinkle2', c: '#c6f63f', s: 'biohazard' },
+  royal:     { t: 'floaty', c: '#9333ea', s: 'crown' },
+  peach:     { t: 'floaty', c: '#ffb89a', s: 'apple' },
+  lagoon:    { t: 'drift', c: '#34d0de', s: 'waves' },
   // ----- yana 20 mavzu -----
-  lavender:  { t: 'sparkle', c: '#c9b8e8' },
-  tangerine: { t: 'ember', c: '#ff944d' },
-  moss:      { t: 'leaf', c: '#8aab3e', g: '🍃' },
-  berry:     { t: 'sparkle', c: '#d63bbf' },
-  slate:     { t: 'rain', c: '#94a3b8' },
-  raspberry: { t: 'sparkle', c: '#f24aa6' },
-  olive:     { t: 'leaf', c: '#a0a020', g: '🫒' },
-  cinnamon:  { t: 'ember', c: '#cd7f33' },
-  azure:     { t: 'bubble', c: '#4da6ff' },
-  grape:     { t: 'sparkle', c: '#9b4ddb' },
-  pistachio: { t: 'leaf', c: '#acd492', g: '🌰' },
-  cherryred: { t: 'ember', c: '#f0223f' },
-  marina:    { t: 'bubble', c: '#2f8fad' },
-  blush:     { t: 'leaf', c: '#ffb3c6', g: '🌸' },
-  charcoal:  { t: 'rain', c: '#9ca3af' },
-  starlight: { t: 'stars', c: '#fff0a0' },
-  mango:     { t: 'ember', c: '#ffc94d' },
-  lilac:     { t: 'sparkle', c: '#d9b9d9' },
-  carbon:    { t: 'rain', c: '#7d9bc0' },
-  glacier:   { t: 'snow', c: '#b3ecff' },
+  lavender:  { t: 'drift', c: '#c9b8e8', s: 'flower2' },
+  tangerine: { t: 'floaty', c: '#ff944d', s: 'citrus' },
+  moss:      { t: 'leaf', c: '#8aab3e', s: 'leaf' },
+  berry:     { t: 'confetti', c: '#d63bbf', s: 'grape' },
+  slate:     { t: 'rain', c: '#94a3b8', s: 'hammer' },
+  raspberry: { t: 'floaty', c: '#f24aa6', s: 'cherry' },
+  olive:     { t: 'leaf', c: '#a0a020', s: 'leaf' },
+  cinnamon:  { t: 'ember', c: '#cd7f33', s: 'flame' },
+  azure:     { t: 'drift', c: '#4da6ff', s: 'cloud' },
+  grape:     { t: 'floaty', c: '#9b4ddb', s: 'grape' },
+  pistachio: { t: 'leaf', c: '#acd492', s: 'leaf' },
+  cherryred: { t: 'floaty', c: '#f0223f', s: 'cherry' },
+  marina:    { t: 'drift', c: '#2f8fad', s: 'anchor' },
+  blush:     { t: 'petal', c: '#ffb3c6', s: 'flower' },
+  charcoal:  { t: 'rain', c: '#9ca3af', s: 'hexagon' },
+  starlight: { t: 'twinkle2', c: '#fff0a0', s: 'sparkles' },
+  mango:     { t: 'floaty', c: '#ffc94d', s: 'citrus' },
+  lilac:     { t: 'drift', c: '#d9b9d9', s: 'flower' },
+  carbon:    { t: 'meteor', c: '#7d9bc0', s: 'hexagon' },
+  glacier:   { t: 'spinfall', c: '#b3ecff', s: 'snowflake' },
 };
 // Tasodifiy tanlash uchun mavzu kalitlari — 'light' (oddiy oq) chiqmaydi
 const TEMA_KEYS = Object.keys(TEMA_FX).filter((k) => k !== 'light');
@@ -150,6 +185,18 @@ const FX_CFG = {
   bubble:  { n: 18, durMin: 3.5, durMax: 7,   size: [5, 12] },
   fire:    { n: 26, durMin: 1.4, durMax: 3,   size: [13, 24], glow: true },
   leaf:    { n: 14, durMin: 5,   durMax: 10,  size: [13, 19] },
+  // ----- yangi, boyitilgan turlar -----
+  firefly: { n: 18, durMin: 4,   durMax: 8,   size: [3, 6],  scatter: true },
+  confetti:{ n: 22, durMin: 3,   durMax: 6,   size: [4, 8] },
+  drift:   { n: 18, durMin: 5,   durMax: 9,   size: [4, 8] },
+  glint:   { n: 18, durMin: 1.8, durMax: 3.6, size: [4, 9],  scatter: true },
+  meteor:  { n: 18, durMin: 2,   durMax: 4.5, size: [2, 3],  scatter: true },
+  bokeh:   { n: 12, durMin: 6,   durMax: 11,  size: [10, 22] },
+  petal:   { n: 14, durMin: 5,   durMax: 9,   size: [12, 18] },
+  // ----- emoji-ornament harakatlari (har mavzuga xos belgi) -----
+  floaty:  { n: 12, durMin: 5,   durMax: 9,   size: [13, 20] },
+  spinfall:{ n: 15, durMin: 4,   durMax: 8,   size: [13, 19] },
+  twinkle2:{ n: 13, durMin: 2,   durMax: 4,   size: [13, 20], scatter: true },
 };
 
 function HeaderFx({ tema }) {
@@ -166,12 +213,40 @@ function HeaderFx({ tema }) {
     }));
   }, [tema]); // eslint-disable-line
   if (!cfg) return null;
+  const orn = TEMA_ORN[tema];
   return (
     <div className="hdr-fx" aria-hidden="true">
       {cfg.glow && <div className="hdr-glow-fire" />}
       {parts.map((p, i) => {
+        // HERO mavzu — premium photoreal ornament (shaffof PNG, suzuvchi charm)
+        if (orn) {
+          if (i >= 9) return null; // 9 ta nafis charm — ortig'i yo'q
+          const osz = 24 + ((i * 7) % 16); // 24..38px, xilma-xil
+          const odur = (6 + (i % 5)).toFixed(2); // 6..10s, sokin suzish
+          const ornMotion = conf.t === 'spinfall' || conf.t === 'petal' ? conf.t : 'floaty';
+          const est = {
+            left: `${p.left}%`, width: `${osz}px`, height: `${osz}px`,
+            animationDelay: `${p.delay}s`, animationDuration: `${odur}s`,
+            filter: `drop-shadow(0 0 6px ${conf.c})`,
+          };
+          return <img key={i} src={`/ornaments/${orn}.png`} alt="" className={`fx fx-orn fx-${ornMotion}`} style={est} />;
+        }
+        const Ico = conf.s ? FX_ICON[conf.s] : null;
+        if (Ico) {
+          if (i >= 14) return null; // ko'pi bilan 14 ikona — tartibli
+          const sz = Math.max(p.size, 13);
+          const est = { left: `${p.left}%`, color: conf.c, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s` };
+          if (cfg.scatter) est.top = `${p.top}px`;
+          return (
+            <span key={i} className={`fx fx-ico fx-${conf.t}`} style={est}>
+              <Ico size={sz} strokeWidth={2.1} absoluteStrokeWidth />
+            </span>
+          );
+        }
         if (conf.g) {
-          return <span key={i} className={`fx fx-${conf.t}`} style={{ left: `${p.left}%`, fontSize: `${p.size}px`, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s` }}>{conf.g}</span>;
+          const est = { left: `${p.left}%`, fontSize: `${p.size}px`, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s` };
+          if (cfg.scatter) est.top = `${p.top}px`;
+          return <span key={i} className={`fx fx-${conf.t}`} style={est}>{conf.g}</span>;
         }
         const st = { left: `${p.left}%`, width: `${p.size}px`, height: `${p.size}px`, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s` };
         if (conf.t === 'bubble') { st.borderColor = conf.c; } else { st.background = conf.c; st.boxShadow = `0 0 6px ${conf.c}`; }
@@ -536,6 +611,19 @@ export default function App() {
   function updateYoqlama(v)    { setYoqlama(v);    persist('yoqlama', v); }
   function updateAvanslar(v)   { setAvanslar(v);   persist('avanslar', v); }
 
+  // ----- Kazirok (chizmadan, avtomatik) — savdo hisobiga ulanadi -----
+  // Chizma `chizma:kazirok` hodisasidan kelgan ma'lumot + qo'lda tahrirlangan
+  // 1 metr narxi. Hisob-kitob (umumiy summa/qarz) shu yerdan ham oziqlanadi.
+  const [kazData, setKazData] = useState(() => readChizmaKazirok());
+  const [kazNarx, setKazNarx] = useState(() => readKazNarx());
+  useEffect(() => {
+    const on = (e) => setKazData(e?.detail?.groups ? e.detail : readChizmaKazirok());
+    window.addEventListener('chizma:kazirok', on);
+    setKazData(readChizmaKazirok());
+    return () => window.removeEventListener('chizma:kazirok', on);
+  }, []);
+  function setKazPrice(id, v) { const next = { ...kazNarx, [id]: v }; setKazNarx(next); saveKazNarx(next); }
+
   // ----- Draft buyurtma hisob-kitoblari -----
   const draftCalc = useMemo(() => {
     const ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products };
@@ -550,18 +638,24 @@ export default function App() {
     }
 
     const tovarSum = items.reduce((s, x) => s + x.jamiSumma, 0);
+    // Kazirok (chizmadan, avtomatik) — har List bo'yicha material + 25% xizmat.
+    // jami (= material × 1.25) umumiy summaga qo'shiladi.
+    const kaz = computeKazRows(kazData, tunikaBaza, kazNarx);
     // Dastafka: "ichida" bo'lsa narxga kiritilgan (qo'shilmaydi), aks holda summa qo'shiladi
     const dastafkaIchida = !!draft.dastafka?.ichida;
     const dastafkaSumma = dastafkaIchida ? 0 : (parseFloat(draft.dastafka?.summa) || 0);
-    const totalSum = tovarSum + dastafkaSumma;
+    const totalSum = tovarSum + kaz.totalJami + dastafkaSumma;
     const totalPaid = draft.payments.reduce((sum, p) => {
       const amt = parseFloat(p.amount) || 0;
       return sum + (p.method === 'Dollorda' ? amt * p.rate : amt);
     }, 0);
 
     const debt = Math.max(0, totalSum - totalPaid);
-    return { items, tovarSum, dastafkaIchida, dastafkaSumma, totalSum, totalPaid, debt };
-  }, [draft, tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products]);
+    return {
+      items, tovarSum, dastafkaIchida, dastafkaSumma, totalSum, totalPaid, debt,
+      kazRows: kaz.rows, kazTotalJami: kaz.totalJami, kazTotalMaterial: kaz.totalMaterial, kazTotalXizmat: kaz.totalXizmat,
+    };
+  }, [draft, tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products, kazData, kazNarx]);
 
   // ----- Zakas saqlash -----
   function saveOrder() {
@@ -932,6 +1026,7 @@ export default function App() {
           <LiveClock />
         </div>
         <div className="max-w-7xl mx-auto px-4 pb-3 relative overflow-hidden">
+          <div className="hdr-aura" aria-hidden="true" />
           <HeaderFx tema={tema} />
           <div className="relative z-[1] flex items-center gap-3">
             <img src="/icon-192.png" alt="Logo"
@@ -972,6 +1067,7 @@ export default function App() {
         {tab === 'new' && (
           <NewOrderTab
             draft={draft} setDraft={setDraft} draftCalc={draftCalc}
+            kazData={kazData} kazNarx={kazNarx} onKazPrice={setKazPrice}
             tunikaBaza={tunikaBaza} metrlilar={metrlilar} products={products} ranglar={ranglar}
             onOpenProductPicker={() => setProductPicker(true)}
             onOpenClientPicker={() => setClientPicker(true)}
