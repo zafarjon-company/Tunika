@@ -89,6 +89,29 @@ const PAL_SEG = [
   [0, 62.10, 7.75, 62.10],
 ];
 
+/* ---- KAZIROK variant ro'yxatlari ----
+   Har bir detal (Patalok / Paloska) bir nechta TURga ega bo'lishi mumkin.
+   Yangi variant qo'shish uchun shu ro'yxatga bitta obyekt qo'shing — boshqa
+   joyni o'zgartirish shart emas (panel + selector + chizma avtomatik):
+     id    — yagona kalit (localStorage shu bo'yicha eslab qoladi)
+     label — selektorda ko'rinadigan nom
+     W     — detal eni (sm)
+     def   — standart razmerlar { peshona, razmeri } (sm)
+     seg   — DXF konturi segmentlari (sm, y = yuqoridan past)
+     yb    — peshona o'yig'i chegaralari [yuqori, past]: y<=yb0 qotiq,
+             yb0<y<=yb1 peshona bilan siljiydi, y>yb1 peshona+razmeri bilan
+     baseH — bazaviy balandlik (sm)
+     gap   — chapdagi razmer o'qida peshona/razmeri orasidagi bo'shliq */
+const PAT_VARIANTS = [
+  { id: 'pat-90-625', label: "90° — 62.5 lik", W: PAT_W, def: PAT_DEF, seg: PAT_SEG, yb: [9.0, 13.15], baseH: 61.50, gap: 1.5 },
+];
+const PAL_VARIANTS = [
+  { id: 'pal-775-16', label: "7.75 lik — 16 bo'lak", W: PAL_W, def: PAL_DEF, seg: PAL_SEG, yb: [9.0, 10.7], baseH: 62.10, gap: 0.5 },
+];
+const KAZ_LISTS = { pat: PAT_VARIANTS, pal: PAL_VARIANTS };
+const KAZ_SEL_KEY = 'kazirok-sel-v1';    // tanlangan variantlar { pat, pal }
+const KAZ_VALS_KEY = 'kazirok-vals-v1';  // variant bo'yicha razmerlar { [id]: {peshona,razmeri} }
+
 /* ---------------- MAVZUGA MOS RANG PALITRASI ----------------
    --c-btn (mavzu asosiy rangi) tusidan boshlab, rang doirasida
    teng oraliqlar bilan 6 ta vazifaviy rang hosil qilinadi.
@@ -367,8 +390,8 @@ export function mountChizma(root) {
     refWorld: [],          // import world mm (vaqtinchalik) — ref'dan hosil qilinadi, saqlanmaydi
     showRef: false,        // (eskirgan) kulrang fon — endi import to'g'ridan-to'g'ri tahrirlanadi
     impUnit: null,         // import qilingan chiziqlarning birligi (birlik o'zgarsa joyida masshtablash uchun)
-    kaz: { ...PAT_DEF },   // Kazirok > Patalok razmerlari (peshona / razmeri, sm)
-    kazPal: { ...PAL_DEF }, // Kazirok > Paloska razmerlari (peshona / razmeri, sm)
+    kazSel: { pat: PAT_VARIANTS[0].id, pal: PAL_VARIANTS[0].id }, // Kazirok: tanlangan variantlar
+    kazVals: {},           // Kazirok: variant id -> { peshona, razmeri } (default'dan farq qilsa)
     // ----- TAHRIR (AutoCAD uslubidagi mustaqil tahrir qatlami) -----
     // Bu qatlam devor/qosh/kazirok hisobiga TEGMAYDI — erkin geometriya.
     editEntities: [],      // {id,type:'line'|'polyline'|'circle'|'arc', ...world mm, layer}
@@ -843,48 +866,63 @@ export function mountChizma(root) {
      Parametrik chizma: peshona (yuqori) + razmeri (tana). Simmetrik —
      chetdagi o'yiq (peshona burmasi) ikki tomonda bir xil. Razmerlar
      chapda sm da. Qiymatlar localStorage'da saqlanadi. */
+  // --- Saqlash/yuklash (yangi tuzilma: tanlangan variant + variant razmerlari) ---
   function loadKazLS() {
     try {
-      const o = JSON.parse(localStorage.getItem(KAZ_KEY));
-      if (o && o.peshona > 0 && o.razmeri > 0) state.kaz = { peshona: +o.peshona, razmeri: +o.razmeri };
+      const s = JSON.parse(localStorage.getItem(KAZ_SEL_KEY));
+      if (s) {
+        if (PAT_VARIANTS.some((v) => v.id === s.pat)) state.kazSel.pat = s.pat;
+        if (PAL_VARIANTS.some((v) => v.id === s.pal)) state.kazSel.pal = s.pal;
+      }
     } catch (e) { /* noop */ }
-  }
-  function saveKazLS() {
-    try { localStorage.setItem(KAZ_KEY, JSON.stringify(state.kaz)); } catch (e) { /* noop */ }
-  }
-  function loadKazPalLS() {
     try {
-      const o = JSON.parse(localStorage.getItem(KAZ_PAL_KEY));
-      if (o && o.peshona > 0 && o.razmeri > 0) state.kazPal = { peshona: +o.peshona, razmeri: +o.razmeri };
+      const m = JSON.parse(localStorage.getItem(KAZ_VALS_KEY));
+      if (m && typeof m === 'object') state.kazVals = m;
     } catch (e) { /* noop */ }
+    migrateOldKazLS();
   }
-  function saveKazPalLS() {
-    try { localStorage.setItem(KAZ_PAL_KEY, JSON.stringify(state.kazPal)); } catch (e) { /* noop */ }
+  // Eski (bitta variant) saqlangan razmerlarni birinchi variant ostiga ko'chiramiz.
+  function migrateOldKazLS() {
+    const seed = (oldKey, id) => {
+      if (state.kazVals[id]) return;
+      try {
+        const o = JSON.parse(localStorage.getItem(oldKey));
+        if (o && o.peshona > 0 && o.razmeri > 0) state.kazVals[id] = { peshona: +o.peshona, razmeri: +o.razmeri };
+      } catch (e) { /* noop */ }
+    };
+    seed(KAZ_KEY, PAT_VARIANTS[0].id);
+    seed(KAZ_PAL_KEY, PAL_VARIANTS[0].id);
+  }
+  function saveKazSelLS() { try { localStorage.setItem(KAZ_SEL_KEY, JSON.stringify(state.kazSel)); } catch (e) { /* noop */ } }
+  function saveKazValsLS() { try { localStorage.setItem(KAZ_VALS_KEY, JSON.stringify(state.kazVals)); } catch (e) { /* noop */ } }
+
+  // Tanlangan variant obyekti (kind = 'pat' | 'pal').
+  function kazVariant(kind) {
+    const list = KAZ_LISTS[kind];
+    return list.find((v) => v.id === state.kazSel[kind]) || list[0];
+  }
+  // Maydonda ko'rsatiladigan qiymat: saqlangan bo'lsa o'sha, aks holda default.
+  function kazFieldVal(kind, k) {
+    const v = kazVariant(kind);
+    const saved = state.kazVals[v.id];
+    const raw = saved ? saved[k] : undefined;
+    return raw > 0 ? raw : v.def[k];
   }
   // Chizish uchun qiymat: 0/bo'sh -> default; juda kichik (<2 sm) -> 2 ga bog'lanadi
   // (peshona/tana cheti uzunligi qisqarib, shakl teskari bo'lib ketmasligi uchun).
-  function detVal(store, def, k) {
-    const v = store[k];
-    if (!(v > 0)) return def[k];
-    return Math.max(2, v);
+  function kazDrawVal(kind, k) {
+    const v = kazVariant(kind);
+    const saved = state.kazVals[v.id];
+    const raw = saved ? saved[k] : undefined;
+    if (!(raw > 0)) return v.def[k];
+    return Math.max(2, raw);
   }
-  function kazVal(k) { return detVal(state.kaz, PAT_DEF, k); }
-  function palVal(k) { return detVal(state.kazPal, PAL_DEF, k); }
 
-  // y-koordinatani parametrlarga ko'ra siljitadi: peshona (dP) tana ustini,
-  // razmeri (dR) tanani cho'zadi. Vertexlar faqat ko'rsatilgan darajalarda
-  // bo'lgani uchun chegaralar toza ajratadi.
-  // Patalok: o'yiq 9.9–13.1 -> chegaralar 9.0 / 13.15.
-  function patY(y, dP, dR) {
-    if (y <= 9.0) return y;            // yuqori chet + qatlama + peshona edge ustki uchi (qat'iy)
-    if (y <= 13.15) return y + dP;     // peshona edge pastki uchi + o'yiq (dP ga siljiydi)
-    return y + dP + dR;                // tana pasti + pastki qatlama (dP+dR ga siljiydi)
-  }
-  // Paloska: o'yiq 10.1–10.6 -> chegaralar 9.0 / 10.7.
-  function palY(y, dP, dR) {
-    if (y <= 9.0) return y;            // yuqori chet + tabcha + peshona edge ustki uchi (qat'iy)
-    if (y <= 10.7) return y + dP;      // peshona edge pastki uchi + o'yiq (dP ga siljiydi)
-    return y + dP + dR;                // tana pasti + pastki tabchalar (dP+dR ga siljiydi)
+  // Variantning peshona o'yiq chegaralaridan y-siljitish funksiyasi.
+  // peshona (dP) tana ustini, razmeri (dR) tanani cho'zadi. Vertexlar faqat
+  // ko'rsatilgan darajalarda bo'lgani uchun chegaralar toza ajratadi.
+  function makeYfn(b0, b1) {
+    return (y, dP, dR) => (y <= b0 ? y : (y <= b1 ? y + dP : y + dP + dR));
   }
   // Detal konturi (sm) — DXF segmentlarini parametrlarga ko'ra siljitadi.
   function detGeom(SEG, DEF, yfn, baseH, P, R) {
@@ -892,8 +930,8 @@ export function mountChizma(root) {
     const segs = SEG.map(([x1, y1, x2, y2]) => [x1, yfn(y1, dP, dR), x2, yfn(y2, dP, dR)]);
     return { segs, H: yfn(baseH, dP, dR) };
   }
-  function patalokGeom(P, R) { return detGeom(PAT_SEG, PAT_DEF, patY, 61.50, P, R); }
-  function paloskaGeom(P, R) { return detGeom(PAL_SEG, PAL_DEF, palY, 62.10, P, R); }
+  // Variant konturi (sm) — uning seg/def/yb/baseH'idan parametrik hosil bo'ladi.
+  function variantGeom(v, P, R) { return detGeom(v.seg, v.def, makeYfn(v.yb[0], v.yb[1]), v.baseH, P, R); }
   // Chapdagi vertikal razmer (o'q + strelkalar + sm yozuvi) — SVG matni.
   function vdimMarkup(x, y1, y2, label, col) {
     const a = 1.9, hw = 0.85, mid = (y1 + y2) / 2, fs = 3.8;
@@ -931,24 +969,27 @@ export function mountChizma(root) {
       ${vdimMarkup(dimX, P + gap, P + gap + R, '' + (+R.toFixed(1)), GREEN)}
     </svg>`;
   }
-  function kazSvgMarkup(P, R) { return detSvgMarkup(patalokGeom(P, R), PAT_W, P, R, 1.5); }
-  function palSvgMarkup(P, R) { return detSvgMarkup(paloskaGeom(P, R), PAL_W, P, R, 0.5); }
-  function redrawKazDet(body, det) {
-    const draw = (body || root).querySelector('.chz-kaz-draw[data-chz-det="' + det + '"]');
+  // Variant chizmasi (SVG) — tanlangan variant + joriy razmerlar bilan.
+  function variantSvg(v, P, R) { return detSvgMarkup(variantGeom(v, P, R), v.W, P, R, v.gap); }
+  function redrawKazDet(body, kind) {
+    const draw = (body || root).querySelector('.chz-kaz-draw[data-chz-det="' + kind + '"]');
     if (!draw) return;
-    draw.innerHTML = det === 'pal'
-      ? palSvgMarkup(palVal('peshona'), palVal('razmeri'))
-      : kazSvgMarkup(kazVal('peshona'), kazVal('razmeri'));
+    draw.innerHTML = variantSvg(kazVariant(kind), kazDrawVal(kind, 'peshona'), kazDrawVal(kind, 'razmeri'));
   }
-  // Bitta detal bloki (sarlavha + 2 maydon + chizma + izoh). det = 'pat' | 'pal'.
-  function kazDetailBlock(title, W, vals, svg, det) {
+  // Bitta detal bloki (sarlavha + tur selektori + 2 maydon + chizma + izoh). kind = 'pat' | 'pal'.
+  function kazDetailBlock(kind, title) {
+    const list = KAZ_LISTS[kind];
+    const v = kazVariant(kind);
+    const opts = list.map((o) =>
+      `<option value="${o.id}"${o.id === v.id ? ' selected' : ''}>${o.label}</option>`).join('');
     return `
-      <div class="chz-kaz-head"><b>${title}</b><span>eni ${W} sm</span></div>
+      <div class="chz-kaz-head"><b>${title}</b><span>eni ${v.W} sm</span></div>
+      <select class="chz-kaz-sel" data-chz-det="${kind}" title="${title} turini tanlash">${opts}</select>
       <div class="chz-kaz-fields">
-        <label>Peshona<input type="number" min="2" step="0.5" data-chz-det="${det}" data-chz-k="peshona" value="${vals.peshona}" /><i>sm</i></label>
-        <label>Razmeri<input type="number" min="2" step="0.5" data-chz-det="${det}" data-chz-k="razmeri" value="${vals.razmeri}" /><i>sm</i></label>
+        <label>Peshona<input type="number" min="2" step="0.5" data-chz-det="${kind}" data-chz-k="peshona" value="${kazFieldVal(kind, 'peshona')}" /><i>sm</i></label>
+        <label>Razmeri<input type="number" min="2" step="0.5" data-chz-det="${kind}" data-chz-k="razmeri" value="${kazFieldVal(kind, 'razmeri')}" /><i>sm</i></label>
       </div>
-      <div class="chz-kaz-draw" data-chz-det="${det}">${svg}</div>
+      <div class="chz-kaz-draw" data-chz-det="${kind}">${variantSvg(v, kazDrawVal(kind, 'peshona'), kazDrawVal(kind, 'razmeri'))}</div>
       <div class="chz-kaz-note">Simmetrik — chap razmer o'zgarsa, o'ng ham aynan o'zgaradi.</div>`;
   }
   function renderKazirokBolim() {
@@ -956,16 +997,29 @@ export function mountChizma(root) {
     if (!body) return;
     body.classList.remove('chz-kbolim-empty');
     body.innerHTML =
-      kazDetailBlock('Patalok', PAT_W, state.kaz, kazSvgMarkup(kazVal('peshona'), kazVal('razmeri')), 'pat')
+      kazDetailBlock('pat', 'Patalok')
       + `<div class="chz-kaz-sep"></div>`
-      + kazDetailBlock('Paloska', PAL_W, state.kazPal, palSvgMarkup(palVal('peshona'), palVal('razmeri')), 'pal');
+      + kazDetailBlock('pal', 'Paloska');
+    // Razmer maydonlari — tanlangan variant ostiga yoziladi (variant bo'yicha eslab qoladi).
     body.querySelectorAll('input[data-chz-k]').forEach((inp) => {
       inp.addEventListener('input', () => {
         const k = inp.getAttribute('data-chz-k');
-        const det = inp.getAttribute('data-chz-det');
+        const kind = inp.getAttribute('data-chz-det');
         const val = inp.value === '' ? 0 : Math.max(0, parseFloat(inp.value) || 0);
-        if (det === 'pal') { state.kazPal[k] = val; saveKazPalLS(); redrawKazDet(body, 'pal'); }
-        else { state.kaz[k] = val; saveKazLS(); redrawKazDet(body, 'pat'); }
+        const v = kazVariant(kind);
+        const cur = state.kazVals[v.id] || (state.kazVals[v.id] = { ...v.def });
+        cur[k] = val;
+        saveKazValsLS();
+        redrawKazDet(body, kind);
+      });
+    });
+    // Tur (variant) selektori — almashtirilganda butun blok qayta chiziladi.
+    body.querySelectorAll('select.chz-kaz-sel').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const kind = sel.getAttribute('data-chz-det');
+        state.kazSel[kind] = sel.value;
+        saveKazSelLS();
+        renderKazirokBolim();
       });
     });
   }
@@ -2877,8 +2931,7 @@ export function mountChizma(root) {
   q('unitDevor').value = state.unitDevor;
   q('unitQosh').value = state.unitQosh;
   q('unitCorner').value = state.unitCorner;
-  loadKazLS();             // Kazirok > Patalok razmerlari (saqlangan bo'lsa)
-  loadKazPalLS();          // Kazirok > Paloska razmerlari (saqlangan bo'lsa)
+  loadKazLS();             // Kazirok: tanlangan variantlar + variant razmerlari (saqlangan bo'lsa)
   renderKazirokBolim();    // panel "Kazirok" bo'limiga patalok + paloska chizmasini joylaymiz
   syncToggleButtons();
   syncRefUI();
