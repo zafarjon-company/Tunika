@@ -10,7 +10,7 @@ import {
   Store, Database, Palette, Type, RotateCw,
   TreePine, Diamond, Hexagon, Sprout, Award, Anchor, Mountain, MountainSnow,
   TreePalm, Sunrise, Grape, Compass, Disc3, Citrus, Fish, Cherry, Wind,
-  Skull, Wand2, Bot, Orbit,
+  Skull, Wand2, Bot, Orbit, FolderOpen,
   Pyramid, Flower, Bird, Trees, Droplet, CloudSnow, Croissant, Brush, Shirt,
   Cookie, Sailboat, Atom, TreeDeciduous, Rabbit, IceCream, Telescope,
   FlaskConical, Castle, PartyPopper, Ship, Feather, Carrot,
@@ -24,6 +24,7 @@ import { ROLLAR, rolNomi } from '../../lib/ruxsat.js';
 import { TILLAR } from '../../lib/til.js';
 import { Languages, Keyboard } from 'lucide-react';
 import { KEY_ACTIONS, comboFromEvent, comboValid } from '../../lib/keybind.js';
+import { NazoratBot } from './NazoratBot.jsx';
 
 const MAVZULAR = [
   { id: 'light',     nom: "Yorug'",     icon: Sun,       rang: '#0f172a' },
@@ -155,9 +156,11 @@ function KeybindRow({ action, combo, onSet }) {
   );
 }
 
-export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, currentUser, users = [], updateUsers, tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, onLogout, logAction = () => {}, showToast }) {
+export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], updateUsers, tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
   const [shopDraft, setShopDraft] = useState(shopName);
   const [phoneDraft, setPhoneDraft] = useState(shopPhone);
+  const [tgTokenDraft, setTgTokenDraft] = useState(tgToken);
+  const [tgChatDraft, setTgChatDraft] = useState(tgChatId);
   const [olishDraft, setOlishDraft] = useState(usdOlish);
   const [sotishDraft, setSotishDraft] = useState(usdRate);
   const [nLogin, setNLogin] = useState('');
@@ -171,6 +174,8 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
 
   useEffect(() => { setShopDraft(shopName); }, [shopName]);
   useEffect(() => { setPhoneDraft(shopPhone); }, [shopPhone]);
+  useEffect(() => { setTgTokenDraft(tgToken); }, [tgToken]);
+  useEffect(() => { setTgChatDraft(tgChatId); }, [tgChatId]);
   useEffect(() => { setOlishDraft(usdOlish); }, [usdOlish]);
   useEffect(() => { setSotishDraft(usdRate); }, [usdRate]);
 
@@ -258,6 +263,83 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
 
   return (
     <div className="space-y-4 text-sm">
+      <Card>
+        <SectionTitle icon={FolderOpen}>Mijozlar kutubxonasi joylashuvi</SectionTitle>
+        <p className="text-xs text-slate-500 mb-3 -mt-1">
+          Kazirok DXF va chek fayllari shu papkaga saqlanadi. Har mijoz zakasiga papka ichida
+          <b> alohida papka</b> (Ism Familiya + sana-soat) avtomatik ochiladi.
+        </p>
+        {!libSupported ? (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+            Bu brauzer papkaga to'g'ridan-to'g'ri yozishni qo'llamaydi (Chrome yoki Edge kerak).
+            Hozircha fayllar oddiy "yuklab olish" orqali saqlanadi.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className={`flex-1 min-w-0 px-3 py-2 rounded-lg border-2 text-xs truncate ${libName ? 'border-emerald-200 bg-emerald-50 text-emerald-800 font-semibold' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                {libName ? `📁 ${libName}` : 'Papka tanlanmagan'}
+              </div>
+              <button onClick={onPickLib}
+                className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 flex-shrink-0 whitespace-nowrap">
+                {libName ? "O'zgartirish" : 'Papka tanlash'}
+              </button>
+              {libName && (
+                <button onClick={onClearLib} title="Bog'lanishni o'chirish"
+                  className="px-2.5 py-2 rounded-lg border-2 border-slate-200 text-slate-500 hover:bg-slate-50 flex-shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {libName
+                ? "✓ Tanlangan. Chekdan DXF bosilganda fayllar shu papkaga avtomatik yoziladi."
+                : "Papka tanlanmasa, fayllar oddiy yuklab olish orqali saqlanadi."}
+            </p>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <SectionTitle icon={Bot}>Telegram bot (Kazirok DXF)</SectionTitle>
+        <p className="text-xs text-slate-500 mb-3 -mt-1">
+          Chekdan "Botga DXF (4m/6m)" bosilganda sartirovka qilingan DXF fayllar shu botga yuboriladi.
+          Token <b>@BotFather</b>dan; Chat ID — bot yuboradigan guruh/kanal yoki shaxsiy chat IDsi
+          (botni o'sha chatga qo'shing, admin qiling).
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Bot token</label>
+            <div className="flex gap-2">
+              <input value={tgTokenDraft} onChange={(e) => setTgTokenDraft(e.target.value)} placeholder="123456789:AAH..."
+                autoComplete="off" spellCheck={false}
+                className="flex-1 min-w-0 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none font-mono text-xs" />
+              <button onClick={() => { updateTgToken(tgTokenDraft.trim()); showToast('Token saqlandi'); }}
+                className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 flex-shrink-0">Saqlash</button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Chat ID (guruh/kanal/shaxsiy)</label>
+            <div className="flex gap-2">
+              <input value={tgChatDraft} onChange={(e) => setTgChatDraft(e.target.value)} placeholder="-1001234567890"
+                autoComplete="off" spellCheck={false}
+                className="flex-1 min-w-0 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none font-mono text-xs tabular-nums" />
+              <button onClick={() => { updateTgChatId(tgChatDraft.trim()); showToast('Chat ID saqlandi'); }}
+                className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 flex-shrink-0">Saqlash</button>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            {tgToken && tgChatId
+              ? <span className="text-emerald-600 font-semibold">✓ Telegram sozlangan — chekdan DXF yuborish mumkin</span>
+              : <span>Token va Chat ID to'ldirilsa, chekdan DXF avtomatik botga ketadi.</span>}
+          </div>
+        </div>
+      </Card>
+
+      {currentUser?.role !== 'ishchi' && (
+        <NazoratBot ishchilar={ishchilar} currentUser={currentUser} showToast={showToast} />
+      )}
+
       <Card>
         <SectionTitle icon={Store}>Asosiy Sozlamalar</SectionTitle>
         <div className="space-y-3">

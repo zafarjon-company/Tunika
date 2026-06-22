@@ -27,7 +27,7 @@ function oyLabel(oy) {
   return `${OY_NOMLARI[m - 1]} ${y}`;
 }
 
-export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, updateYoqlama }) {
+export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, setYoqlamaKun }) {
   const [oy, setOy] = useState(toMonthInput());
   const bugun = toDateInput();
   const pad = (n) => String(n).padStart(2, '0');
@@ -42,9 +42,7 @@ export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, updateYoqlama })
     const cur = yoqlama[sana]?.[ishchiId];
     const idx = CYCLE.indexOf(cur);
     const next = idx === -1 ? 'keldi' : (idx >= CYCLE.length - 1 ? null : CYCLE[idx + 1]);
-    const day = { ...(yoqlama[sana] || {}) };
-    if (next === null) delete day[ishchiId]; else day[ishchiId] = next;
-    updateYoqlama({ ...yoqlama, [sana]: day });
+    setYoqlamaKun(sana, ishchiId, next);
   }
 
   return (

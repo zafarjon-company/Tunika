@@ -45,7 +45,7 @@ const TEMA_ORN = {
 
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase.js';
-import { storage } from './lib/storage.js';
+import { storage, O_CHIR } from './lib/storage.js';
 import { fetchKurslar } from './lib/kurs.js';
 import { LoginScreen } from './components/LoginScreen.jsx';
 import {
@@ -63,6 +63,7 @@ import { LiveClock } from './components/LiveClock.jsx';
 import { NewOrderTab } from './modullar/sotuv/YangiZakaz.jsx';
 import { computeKazRows, readKazNarx, saveKazNarx } from './modullar/sotuv/KazirokSavdo.jsx';
 import { readChizmaKazirok } from './modullar/sotuv/chizmaEngine.js';
+import { fsSupported, pickLibrary, getLibrary, clearLibrary } from './lib/fsLibrary.js';
 import { OrdersTab } from './modullar/sotuv/Zakazlar.jsx';
 import { MijozlarTab } from './modullar/sotuv/Mijozlar.jsx';
 import { ProductPickerModal, ClientPickerModal, MasterPickerModal } from './modullar/sotuv/pickers.jsx';
@@ -313,6 +314,9 @@ export default function App() {
   const [latokData, setLatokData]   = useState(DEFAULT_LATOK);
   const [shopName, setShopName]     = useState(DEFAULT_SHOP_NAME);
   const [shopPhone, setShopPhone]   = useState('');
+  const [tgToken, setTgToken]       = useState('');   // Telegram bot token (Kazirok DXF yuborish)
+  const [tgChatId, setTgChatId]     = useState('');   // Telegram chat/kanal IDsi
+  const [libHandle, setLibHandle]   = useState(null); // Mijozlar kutubxonasi root papka (File System Access)
   const [usdRate, setUsdRate]       = useState(DEFAULT_USD_RATE);
   const [usdOlish, setUsdOlish]     = useState(DEFAULT_USD_RATE);
   const [products, setProducts]     = useState(DEFAULT_PRODUCTS);
@@ -374,6 +378,8 @@ export default function App() {
       ['orders', setOrders],
       ['shop-name', setShopName],
       ['shop-phone', setShopPhone],
+      ['telegram-bot-token', setTgToken],
+      ['telegram-chat-id', setTgChatId],
       ['ustalar', setUstalar],
       ['klentlar', setKlentlar],
       ['usd-rate', (v) => setUsdRate(Number(v) || DEFAULT_USD_RATE)],
@@ -553,6 +559,12 @@ export default function App() {
     catch (e) { console.error('Saqlashda xatolik:', e); showToast('Saqlashda xatolik'); }
   }
 
+  // Faqat o'zgargan katakni yozadi (merge) — kamera/bot bilan to'qnashmaydi.
+  async function persistField(key, partial) {
+    try { await storage.saveField(key, partial); }
+    catch (e) { console.error('Saqlashda xatolik:', e); showToast('Saqlashda xatolik'); }
+  }
+
   // ----- Amallar jurnali (audit log): kim nima qildi -----
   const jurnalRef = useRef(jurnal);
   useEffect(() => { jurnalRef.current = jurnal; }, [jurnal]);
@@ -594,6 +606,20 @@ export default function App() {
   function updateLatokData(v)  { setLatokData(v);  persist('latok-data', v); }
   function updateShopName(v)   { setShopName(v);   persist('shop-name', v); }
   function updateShopPhone(v)  { setShopPhone(v);  persist('shop-phone', v); }
+  function updateTgToken(v)    { setTgToken(v);    persist('telegram-bot-token', v); }
+  function updateTgChatId(v)   { setTgChatId(v);   persist('telegram-chat-id', v); }
+  // Mijozlar kutubxonasi (File System Access) — handle IndexedDB'da (Firestore emas, qurilmada)
+  async function pickLibraryFolder() {
+    try {
+      const h = await pickLibrary();
+      if (h) { setLibHandle(h); showToast('Kutubxona papkasi tanlandi: ' + h.name); }
+      else showToast('Papka tanlanmadi');
+    } catch (e) {
+      if (e && e.name !== 'AbortError') showToast('Papka tanlanmadi: ' + (e.message || e.name || 'xato'));
+    }
+  }
+  async function clearLibraryFolder() { await clearLibrary(); setLibHandle(null); showToast('Kutubxona bog\'lanishi o\'chirildi'); }
+  useEffect(() => { getLibrary().then((h) => { if (h) setLibHandle(h); }).catch(() => {}); }, []);
   function updateUsdRate(v)    { setUsdRate(v);    persist('usd-rate', v); }
   function updateUsdOlish(v)   { setUsdOlish(v);   persist('usd-olish', v); }
   function updateProducts(v)   { setProducts(v);   persist('dynamic-products', v); }
@@ -609,6 +635,21 @@ export default function App() {
   function updateQobiliyatlar(v) { setQobiliyatlar(v); persist('qobiliyatlar', v); }
   function updateKamchiliklar(v) { setKamchiliklar(v); persist('kamchiliklar', v); }
   function updateYoqlama(v)    { setYoqlama(v);    persist('yoqlama', v); }
+  // Yo'qlama — bitta ishchining bitta kunini yozadi (merge). Butun hujjatni
+  // qayta yozmaydi, shu sabab kamera avto-yozuvi bilan to'qnashmaydi.
+  function setYoqlamaKun(sana, ishchiId, holat) {
+    setYoqlama((prev) => {
+      const kun = { ...(prev[sana] || {}) };
+      if (holat == null) delete kun[ishchiId]; else kun[ishchiId] = holat;
+      return { ...prev, [sana]: kun };
+    });
+    persistField('yoqlama', { [sana]: { [ishchiId]: holat == null ? O_CHIR : holat } });
+  }
+  // Bir kunda bir nechta ishchini birdaniga belgilash ("Hammasi keldi").
+  function setYoqlamaBulk(sana, map) {
+    setYoqlama((prev) => ({ ...prev, [sana]: { ...(prev[sana] || {}), ...map } }));
+    persistField('yoqlama', { [sana]: map });
+  }
   function updateAvanslar(v)   { setAvanslar(v);   persist('avanslar', v); }
 
   // ----- Kazirok (chizmadan, avtomatik) — savdo hisobiga ulanadi -----
@@ -665,6 +706,13 @@ export default function App() {
 
     const status = draftCalc.debt === 0 ? 'paid' : draftCalc.totalPaid > 0 ? 'partial' : 'unpaid';
 
+    // Kazirok payloadini zakas bilan saqlash uchun ixchamlash (svg matnini olib
+    // tashlaymiz — chek/DXF uchun faqat segs va o'lchamlar kerak).
+    const kazSlim = (kd) => {
+      const drop = (it) => { if (!it) return it; const { svg, ...rest } = it; return rest; };
+      return { groups: ((kd && kd.groups) || []).map((g) => ({ offCm: g.offCm, pat: drop(g.pat), pal: drop(g.pal) })) };
+    };
+
     // Yangi va tahrirlangan zakasga umumiy maydonlar (raqam/sana/holat alohida)
     const common = {
       customer: { ...draft.customer },
@@ -692,6 +740,9 @@ export default function App() {
       totalSum: draftCalc.totalSum,
       totalPaid: draftCalc.totalPaid,
       debt: draftCalc.debt,
+      // Kazirok (chizmadan) — zakas bilan saqlanadi; chek/Zakaslarda DXF (4m/6m) shu yerdan
+      kazData: kazSlim(kazData),
+      kazRows: draftCalc.kazRows || [],
       notes: draft.notes,
       status,
       // Tahrirlash/nusxa uchun — xom qatorlar (katalog id, narx turi, variant saqlanadi)
@@ -1100,7 +1151,8 @@ export default function App() {
         )}
         {tab === 'yoqlama' && (
           <YoqlamaModule
-            ishchilar={ishchilar} yoqlama={yoqlama} updateYoqlama={updateYoqlama}
+            ishchilar={ishchilar} yoqlama={yoqlama}
+            setYoqlamaKun={setYoqlamaKun} setYoqlamaBulk={setYoqlamaBulk}
             avanslar={avanslar} updateAvanslar={updateAvanslar}
             usdRate={usdRate} showToast={showToast}
           />
@@ -1141,11 +1193,16 @@ export default function App() {
             usdRate={usdRate}       updateUsdRate={updateUsdRate}
             usdOlish={usdOlish}     updateUsdOlish={updateUsdOlish}
             tunikaBaza={tunikaBaza} ranglar={ranglar} updateRanglar={updateRanglar}
+            ishchilar={ishchilar}
             currentUser={currentUser} users={users} updateUsers={updateUsers}
             tema={tema} setTema={(t) => { setTema(t); setTemaMode('fixed'); }}
             shrift={shrift} setShrift={setShrift}
             til={til} setTil={setTil}
             keys={keys} updateKeys={updateKeys}
+            tgToken={tgToken} updateTgToken={updateTgToken}
+            tgChatId={tgChatId} updateTgChatId={updateTgChatId}
+            libName={libHandle ? libHandle.name : null} libSupported={fsSupported()}
+            onPickLib={pickLibraryFolder} onClearLib={clearLibraryFolder}
             onLogout={doLogout}
             logAction={logAction}
             showToast={showToast}
@@ -1174,7 +1231,10 @@ export default function App() {
       )}
 
       {receiptOrder && (
-        <ReceiptModal order={receiptOrder} shopName={shopName} shopPhone={shopPhone} usdRate={usdRate} usdOlish={usdOlish} onClose={() => setReceiptOrder(null)} />
+        <ReceiptModal order={receiptOrder} shopName={shopName} shopPhone={shopPhone} usdRate={usdRate} usdOlish={usdOlish}
+          kazData={kazData} kazRows={draftCalc.kazRows || []} tunikaBaza={tunikaBaza}
+          telegram={{ token: tgToken, chatId: tgChatId }} libRoot={libHandle}
+          onClose={() => setReceiptOrder(null)} />
       )}
 
       {searchOpen && (

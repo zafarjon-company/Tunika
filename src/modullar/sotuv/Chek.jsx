@@ -6,22 +6,105 @@
 //  ko'rinadi (index.css dagi @media print qoidalariga qarang).
 // ============================================================
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, Receipt, MapPin, Phone, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check } from 'lucide-react';
+import { Printer, Receipt, MapPin, Phone, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check, Scissors, Loader2 } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fmt, formatDate, rangHex, rangMatn } from '../../lib/helpers.js';
 import { applyTil, getTil } from '../../lib/til.js';
 import { KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
 import { itemDisp } from './Zakazlar.jsx';
+import { nestKazirok, SHEET_LENGTHS } from '../../lib/nesting.js';
+import { nestsToDxfFiles, downloadDxf } from '../../lib/dxfExport.js';
+import { sendDxfFilesToTelegram, telegramSozlangan } from '../../lib/telegram.js';
+import { fsSupported, ensurePermission, getOrderFolder, writeFile, orderFolderName } from '../../lib/fsLibrary.js';
 
 function RangChip({ rang }) {
   if (!rang) return <span>—</span>;
   return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold border border-black/10 whitespace-nowrap" style={rangChipStyle(rang)}>{rang}</span>;
 }
 
-export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, onClose }) {
+// Chek rasmi fayl nomi uchun vaqt belgisi (soniyagacha — har safar yangi)
+function chekStamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+
+export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, kazData = { groups: [] }, kazRows = [], tunikaBaza = [], telegram = {}, libRoot = null, onClose }) {
   const printRef = useRef(null);
   const [narxsiz, setNarxsiz] = useState(false);   // narxsiz rejim — narxlarni yashiradi (oldindan yoqiladi)
   const [busy, setBusy] = useState(false);          // rasm tayyorlanmoqda
+  const [dxfBusy, setDxfBusy] = useState('');       // '' | '4m' | '6m' — DXF tayyorlanyapti
+  const [dxfMsg, setDxfMsg] = useState(null);       // { ok, t } — natija xabari
+
+  // Kazirok manbai: AVVAL zakasникidan (saqlangan), bo'lmasa joriy chizmadan (jonli).
+  // Shu sabab Zakaslar bo'limidagi (eski/saqlangan) zakaslarda ham kazirok qatorlari
+  // va DXF (4m/6m) tugmalari chiqadi.
+  const kData = (order && order.kazData && order.kazData.groups && order.kazData.groups.length)
+    ? order.kazData : kazData;
+  const kRows = (order && order.kazRows && order.kazRows.length) ? order.kazRows : kazRows;
+  const kazGroups = (kData && kData.groups) || [];
+  const hasKaz = kazGroups.length > 0;
+  const listNameById = (id) => {
+    const t = tunikaBaza.find((x) => String(x.id) === String(id));
+    return t ? t.nomi : (id ? String(id) : 'List');
+  };
+  const libReady = !!(libRoot && fsSupported());
+  const dxfBtnLabel = libReady ? 'Papkaga DXF' : telegramSozlangan(telegram) ? 'Botga DXF' : 'DXF';
+  const dxfWhere = libReady ? ' mijoz papkasiga saqlanadi' : telegramSozlangan(telegram) ? ' botga yuboriladi' : ' yuklab olinadi';
+
+  // Kazirok bo'laklarini listga aqlli joylab (1245 mm × 4/6 m) har List uchun
+  // alohida DXF yasaydi; Telegram sozlangan bo'lsa botga yuboradi, aks holda yuklab oladi.
+  async function makeAndSendDxf(lengthKey) {
+    if (dxfBusy || !hasKaz) return;
+    setDxfBusy(lengthKey); setDxfMsg(null);
+    try {
+      const sheetL = SHEET_LENGTHS[lengthKey];
+      const nests = nestKazirok(kData, { sheetL });
+      if (!nests.length) { setDxfMsg({ ok: false, t: 'Kazirok bo\'laklari topilmadi' }); return; }
+      const custName = (order.customer && order.customer.name) || '';
+      // Har sheet alohida fayl: patalok/paloska_List_6m_Ism_Familiya_N.dxf
+      const files = nestsToDxfFiles(nests, listNameById, lengthKey, custName).map((f) => ({
+        ...f,
+        caption: `${shopName} · Zakas №${order.number} · ${custName} · ${f.name}`,
+      }));
+      const done = [];
+
+      // 1) Mijozlar kutubxonasi — papkaga yozish (Ism Familiya + sana-soat papkasi)
+      if (libRoot && fsSupported()) {
+        if (await ensurePermission(libRoot)) {
+          const folderName = orderFolderName(custName, order.createdAt);
+          const dir = await getOrderFolder(libRoot, folderName);
+          for (const f of files) await writeFile(dir, f.name, f.text);
+          // Chek rasmini ham shu papkaga (har safar yangi — to'lov tarixi uchun)
+          try {
+            const blob = await toBlob(printRef.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
+            if (blob) await writeFile(dir, 'chek_' + chekStamp() + '.png', blob);
+          } catch (e) { /* chek rasmi ixtiyoriy */ }
+          done.push('papka: ' + folderName);
+        } else {
+          setDxfMsg({ ok: false, t: 'Papkaga yozishga ruxsat berilmadi' }); return;
+        }
+      }
+
+      // 2) Telegram bot
+      if (telegramSozlangan(telegram)) {
+        await sendDxfFilesToTelegram(telegram, files);
+        done.push('botga yuborildi');
+      }
+
+      // 3) Hech biri sozlanmagan — oddiy yuklab olish
+      if (!done.length) {
+        files.forEach((f) => downloadDxf(f.name, f.text));
+        done.push('yuklab olindi');
+      }
+
+      setDxfMsg({ ok: true, t: `${files.length} ta DXF (${lengthKey}) — ${done.join(' · ')}` });
+    } catch (e) {
+      setDxfMsg({ ok: false, t: (e && e.message) || 'Xatolik yuz berdi' });
+    } finally {
+      setDxfBusy('');
+    }
+  }
 
   // Chek ochilganda / narxsiz o'zgarganda — interfeys tilini chekka ham qo'llaymiz
   // (chek/PDF/rasm tanlangan tilda chiqsin)
@@ -48,6 +131,7 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, on
       L.push(`• ${d.nomi}${it.rang ? ` (${it.rang})` : ''} — ${d.olchov}${narxsiz ? '' : ` = ${fmt(d.jami)} so'm`}`);
     });
     (order.aksessuarlar || []).forEach((a) => L.push(`• ${a.nomi} — ${a.soni} ${a.birlik || 'dona'}${narxsiz ? '' : ` = ${fmt(a.jami)} so'm`}`));
+    kRows.forEach((r) => L.push(`• Kazirok (${r.listNom}) — ${r.metr.toFixed(2)} m${narxsiz ? '' : ` = ${fmt(r.jami)} so'm`}`));
     if (!narxsiz) {
       if (order.dastafka?.ichida) L.push('Dastafka xizmati: ichida (narxga kiritilgan)');
       else if (order.dastafka?.summa > 0) L.push(`Dastafka xizmati: ${fmt(order.dastafka.summa)} so'm`);
@@ -176,6 +260,19 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, on
                     {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(a.jami)}</td>}
                   </tr>
                 ))}
+                {/* KAZIROK — chizmadan avtomatik (material + 25% xizmat) */}
+                {kRows.map((r, i) => (
+                  <tr key={'kaz' + i} className="border-b border-slate-200 align-top">
+                    <td className="py-1.5 px-2">
+                      <div className="font-medium">Kazirok</div>
+                      <div className="text-slate-500">{r.listNom}{r.sizeLabel ? ` · ${r.sizeLabel}` : ''}</div>
+                    </td>
+                    <td className="py-1.5 px-1"><RangChip rang={r.rang} /></td>
+                    <td className="py-1.5 px-1 text-right tabular-nums">{r.metr.toFixed(2)} m</td>
+                    {!narxsiz && <td className="py-1.5 px-1 text-right tabular-nums">{fmt(r.price)}+25%</td>}
+                    {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(r.jami)}</td>}
+                  </tr>
+                ))}
               </tbody>
             </table>
 
@@ -261,6 +358,33 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, on
               <Send className="w-4 h-4" /> {busy ? 'Tayyorlanmoqda…' : 'Telegram'}
             </button>
           </div>
+          {/* KAZIROK — aqlli sartirovka + DXF (Telegram botga yoki yuklab olish) */}
+          {hasKaz && (
+            <div className="pt-2 mt-1 border-t border-slate-100">
+              <p className="text-[11px] text-slate-500 text-center mb-1.5 flex items-center justify-center gap-1 flex-wrap">
+                <Scissors className="w-3 h-3 flex-shrink-0" /> Patalok/Paloska 1245&nbsp;mm listga zich joylanib, har sheet uchun alohida DXF{dxfWhere}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => makeAndSendDxf('4m')} disabled={!!dxfBusy} aria-label="Kazirok DXF 4 metr"
+                  className="flex-1 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {dxfBusy === '4m' ? <Loader2 className="w-4 h-4 anim-spin" /> : <Scissors className="w-4 h-4" />}
+                  {dxfBtnLabel} — 4m
+                </button>
+                <button onClick={() => makeAndSendDxf('6m')} disabled={!!dxfBusy} aria-label="Kazirok DXF 6 metr"
+                  className="flex-1 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {dxfBusy === '6m' ? <Loader2 className="w-4 h-4 anim-spin" /> : <Scissors className="w-4 h-4" />}
+                  {dxfBtnLabel} — 6m
+                </button>
+              </div>
+              {dxfMsg && (
+                <p className={`text-[11px] text-center mt-1.5 font-semibold ${dxfMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>{dxfMsg.t}</p>
+              )}
+              {!libReady && !telegramSozlangan(telegram) && (
+                <p className="text-[10px] text-slate-400 text-center mt-1">Avtomatik saqlash: Sozlamalar › Mijozlar kutubxonasi (yoki Telegram bot)</p>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button onClick={() => window.print()} aria-label="Chop etish yoki PDF saqlash"
               className="flex-1 py-3 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-800 flex items-center justify-center gap-2">

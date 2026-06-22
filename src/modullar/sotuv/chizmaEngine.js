@@ -2357,11 +2357,16 @@ export function mountChizma(root, opts) {
         const bolak = kazBolak(kind, v.eni);
         const pieceLenCm = geom.H;                          // bir bo'lak uzunligi (rulon bo'ylab), sm
         const meters = (count * (pieceLenCm / 100)) / bolak; // list metri (1.25 m enga bo'linib)
+        // Bo'lak konturi mm da (sartirovka + DXF eksport uchun). geom.segs sm da,
+        // x: 0..W, y: 0..H (yuqoridan past). bir bo'lak = bitta kontur, `count` nusxa.
+        const toMm = (val) => +(val * 10).toFixed(1);
+        const segs = geom.segs.map((s) => [toMm(s[0]), toMm(s[1]), toMm(s[2]), toMm(s[3])]);
         return {
           count, eni: +(+v.eni).toFixed(2), peshona: +(+v.peshona).toFixed(2),
           razmeri: +(+v.razmeri).toFixed(2), fold: folded,
           listId: effList(g.offCm, kind) || '', bolak,
           pieceLenCm: +pieceLenCm.toFixed(1), meters: +meters.toFixed(3),
+          wMm: toMm(geom.W), hMm: toMm(geom.H), segs,    // kontur (mm) — nesting/DXF uchun
           svg: kazSvg(kind, v.eni, v.peshona, v.razmeri, v.fold),
         };
       };

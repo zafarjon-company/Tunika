@@ -12,20 +12,19 @@ import { YOQLAMA_HOLATLAR } from '../../lib/constants.js';
 
 const OPTIONS = YOQLAMA_HOLATLAR.map((h) => ({ value: h.value, label: h.label }));
 
-export function YoqlamaBelgilash({ ishchilar, yoqlama, updateYoqlama, showToast }) {
+export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBulk, showToast }) {
   const [sana, setSana] = useState(toDateInput());
 
   const kunlik = yoqlama[sana] || {};
 
   function belgila(ishchiId, holat) {
-    const next = { ...yoqlama, [sana]: { ...kunlik, [ishchiId]: holat } };
-    updateYoqlama(next);
+    setYoqlamaKun(sana, ishchiId, holat || null);
   }
 
   function hammasiKeldi() {
-    const next = { ...kunlik };
-    ishchilar.forEach((i) => { next[i.id] = 'keldi'; });
-    updateYoqlama({ ...yoqlama, [sana]: next });
+    const map = {};
+    ishchilar.forEach((i) => { map[i.id] = 'keldi'; });
+    setYoqlamaBulk(sana, map);
     showToast('Hammasi "Keldi" deb belgilandi');
   }
 
