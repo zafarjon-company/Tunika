@@ -61,6 +61,10 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
       const sheetL = SHEET_LENGTHS[lengthKey];
       const nests = nestKazirok(kData, { sheetL });
       if (!nests.length) { setDxfMsg({ ok: false, t: 'Kazirok bo\'laklari topilmadi' }); return; }
+      // Haqiqiy sarflangan material uzunligi (1.25 m enli list bo'ylab) — bo'sh
+      // joy material emas, faqat shu uzunlik sarflanadi.
+      const totUsedMm = nests.reduce((a, n) => a + n.sheets.reduce((s, sh) => s + (sh.usedL || 0), 0), 0);
+      const usedM = (totUsedMm / 1000).toFixed(2);
       const custName = (order.customer && order.customer.name) || '';
       // Har sheet alohida fayl: patalok/paloska_List_6m_Ism_Familiya_N.dxf
       const files = nestsToDxfFiles(nests, listNameById, lengthKey, custName).map((f) => ({
@@ -98,7 +102,7 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
         done.push('yuklab olindi');
       }
 
-      setDxfMsg({ ok: true, t: `${files.length} ta DXF (${lengthKey}) — ${done.join(' · ')}` });
+      setDxfMsg({ ok: true, t: `${files.length} ta DXF (${lengthKey}) · ~${usedM} m sarflandi — ${done.join(' · ')}` });
     } catch (e) {
       setDxfMsg({ ok: false, t: (e && e.message) || 'Xatolik yuz berdi' });
     } finally {

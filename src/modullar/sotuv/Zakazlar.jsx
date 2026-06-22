@@ -281,6 +281,18 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
                     </tr>
                   );
                 })}
+                {(order.kazRows || []).map((r) => (
+                  <tr key={'kaz-' + r.id} className="border-b border-slate-100 text-xs">
+                    <td className="py-1.5 pr-2">
+                      <div className="text-slate-800 font-medium">Kazirok</div>
+                      <div className="text-slate-500">{r.listNom}{r.sizeLabel ? ' · ' + r.sizeLabel : ''}</div>
+                    </td>
+                    <td className="py-1.5 pr-2"><RangChip rang={r.rang} /></td>
+                    <td className="py-1.5 text-right tabular-nums">{(r.metr || 0).toFixed(2)} m</td>
+                    <td className="py-1.5 text-right tabular-nums">{fmt(r.price)}+25%</td>
+                    <td className="py-1.5 text-right tabular-nums font-semibold">{fmt(r.jami)}</td>
+                  </tr>
+                ))}
                 {(order.aksessuarlar || []).map((a) => (
                   <tr key={a.id} className="border-b border-slate-100 text-xs">
                     <td className="py-1.5 pr-2">
