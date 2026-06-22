@@ -6,6 +6,7 @@ import { Trash2, Printer, FileText, Search, Wallet, MapPin, Download, Calculator
 import { Card, SectionTitle, StatBox, KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
 import { fmt, formatDate, formatDuration } from '../../lib/helpers.js';
 import { downloadCSV } from '../../lib/eksport.js';
+import { kazRowNom } from './KazirokSavdo.jsx';
 
 function RangChip({ rang }) {
   if (!rang) return <span className="text-slate-400">—</span>;
@@ -284,7 +285,7 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
                 {(order.kazRows || []).map((r) => (
                   <tr key={'kaz-' + r.id} className="border-b border-slate-100 text-xs">
                     <td className="py-1.5 pr-2">
-                      <div className="text-slate-800 font-medium">Kazirok</div>
+                      <div className="text-slate-800 font-medium">{kazRowNom(r)}</div>
                       <div className="text-slate-500">{r.listNom}{r.sizeLabel ? ' · ' + r.sizeLabel : ''}</div>
                     </td>
                     <td className="py-1.5 pr-2"><RangChip rang={r.rang} /></td>

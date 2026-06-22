@@ -12,6 +12,7 @@ import { fmt, formatDate, rangHex, rangMatn } from '../../lib/helpers.js';
 import { applyTil, getTil } from '../../lib/til.js';
 import { KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
 import { itemDisp } from './Zakazlar.jsx';
+import { kazRowNom } from './KazirokSavdo.jsx';
 import { nestKazirok, SHEET_LENGTHS } from '../../lib/nesting.js';
 import { nestsToDxfFiles, downloadDxf } from '../../lib/dxfExport.js';
 import { sendDxfFilesToTelegram, telegramSozlangan } from '../../lib/telegram.js';
@@ -135,7 +136,7 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
       L.push(`• ${d.nomi}${it.rang ? ` (${it.rang})` : ''} — ${d.olchov}${narxsiz ? '' : ` = ${fmt(d.jami)} so'm`}`);
     });
     (order.aksessuarlar || []).forEach((a) => L.push(`• ${a.nomi} — ${a.soni} ${a.birlik || 'dona'}${narxsiz ? '' : ` = ${fmt(a.jami)} so'm`}`));
-    kRows.forEach((r) => L.push(`• Kazirok (${r.listNom}) — ${r.metr.toFixed(2)} m${narxsiz ? '' : ` = ${fmt(r.jami)} so'm`}`));
+    kRows.forEach((r) => L.push(`• ${kazRowNom(r)} (${r.listNom}) — ${r.metr.toFixed(2)} m${narxsiz ? '' : ` = ${fmt(r.jami)} so'm`}`));
     if (!narxsiz) {
       if (order.dastafka?.ichida) L.push('Dastafka xizmati: ichida (narxga kiritilgan)');
       else if (order.dastafka?.summa > 0) L.push(`Dastafka xizmati: ${fmt(order.dastafka.summa)} so'm`);
@@ -268,7 +269,7 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
                 {kRows.map((r, i) => (
                   <tr key={'kaz' + i} className="border-b border-slate-200 align-top">
                     <td className="py-1.5 px-2">
-                      <div className="font-medium">Kazirok</div>
+                      <div className="font-medium">{kazRowNom(r)}</div>
                       <div className="text-slate-500">{r.listNom}{r.sizeLabel ? ` · ${r.sizeLabel}` : ''}</div>
                     </td>
                     <td className="py-1.5 px-1"><RangChip rang={r.rang} /></td>

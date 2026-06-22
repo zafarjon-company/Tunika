@@ -21,6 +21,17 @@ export function saveKazNarx(o) { try { localStorage.setItem(KAZ_NARX_KEY, JSON.s
 
 export const KAZ_SERVICE = 0.25; // xizmat haqi = material qiymatining 25% i
 
+// Qator nomi: yangi qatorlarda `nom` bor ("Patalok"/"Paloska"); eski (saqlangan)
+// zakaslarda esa sizeLabel'dan aniqlaymiz (aralash bo'lsa "Kazirok").
+export function kazRowNom(r) {
+  if (r && r.nom) return r.nom;
+  const s = (r && r.sizeLabel) || '';
+  const hasPat = s.includes('Patalok'), hasPal = s.includes('Paloska');
+  if (hasPat && !hasPal) return 'Patalok';
+  if (hasPal && !hasPat) return 'Paloska';
+  return 'Kazirok';
+}
+
 // Chizmadan kelgan payloadni — bir xil List bo'yicha yig'ib — narx/xizmat
 // qatorlariga aylantiradi. Sof funksiya: App.jsx (umumiy hisob) ham, shu blok ham
 // SHUNI ishlatadi. jami = material + 25% (xizmat). Tahrirlanadigan 1 m narxi
@@ -31,7 +42,8 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
   const optom = (id) => { const t = listById(id); return t ? (Number(t.optom) || 0) : 0; };
   const eff = (id) => { const ov = narx[id]; return (ov != null && ov !== '') ? (Number(ov) || 0) : optom(id); };
 
-  const per = new Map(); // listId -> { metr, pat:Set(eni), pal:Set(eni) } (patalok + paloska birga)
+  // listId × kind bo'yicha — Patalok va Paloska ALOHIDA qatorlar (har biri o'z nomi bilan)
+  const per = new Map(); // "listId|kind" -> { listId, kind, metr, eni:Set }
   let totalDona = 0;
   for (const g of groups) {
     for (const kind of ['pat', 'pal']) {
@@ -39,27 +51,31 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
       if (!it) continue;
       totalDona += it.count;
       const id = it.listId || '';
-      let e = per.get(id);
-      if (!e) { e = { metr: 0, pat: new Set(), pal: new Set() }; per.set(id, e); }
+      const key = id + '|' + kind;
+      let e = per.get(key);
+      if (!e) { e = { listId: id, kind, metr: 0, eni: new Set() }; per.set(key, e); }
       e.metr += it.meters;
-      e[kind].add(+it.eni);
+      e.eni.add(+it.eni);
     }
   }
-  // Eni o'lchamlari yorlig'i: masalan "Patalok 62.5 lik · Paloska 7.75 lik"
+  // Eni o'lchamlari yorlig'i: masalan "62.5 lik, 41.6 lik"
   const sizeStr = (set) => [...set].sort((a, b) => b - a).map((v) => (+v.toFixed(2)) + ' lik').join(', ');
-  const rows = [...per.entries()].map(([id, e]) => {
-    const t = listById(id);
-    const price = eff(id);
+  const rows = [...per.values()].map((e) => {
+    const t = listById(e.listId);
+    const price = eff(e.listId);
     const material = e.metr * price;
-    const segs = [];
-    if (e.pat.size) segs.push('Patalok ' + sizeStr(e.pat));
-    if (e.pal.size) segs.push('Paloska ' + sizeStr(e.pal));
+    const nom = e.kind === 'pat' ? 'Patalok' : 'Paloska';
     return {
-      id, listNom: t ? t.nomi : 'List tanlanmagan', rang: t ? (t.rang || rangTozala(t.nomi)) : '',
-      sizeLabel: segs.join(' · '), metr: e.metr, price,
+      id: e.listId + '|' + e.kind, listId: e.listId, kind: e.kind, nom,
+      listNom: t ? t.nomi : 'List tanlanmagan', rang: t ? (t.rang || rangTozala(t.nomi)) : '',
+      sizeLabel: sizeStr(e.eni), metr: e.metr, price,
       material, xizmat: material * KAZ_SERVICE, jami: material * (1 + KAZ_SERVICE),
     };
   });
+  // Avval barcha Patalok, keyin barcha Paloska (list nomi bo'yicha) — tartibli ko'rinish
+  rows.sort((a, b) => (a.kind === b.kind
+    ? (a.listNom < b.listNom ? -1 : a.listNom > b.listNom ? 1 : 0)
+    : (a.kind === 'pat' ? -1 : 1)));
   return {
     rows, totalDona,
     totalMaterial: rows.reduce((s, r) => s + r.material, 0),
@@ -162,16 +178,18 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
             <div key={r.id || '—'} className="px-3 py-2.5">
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <span className="min-w-0">
-                  <span className="block font-semibold text-xs text-slate-800 truncate">{r.listNom}</span>
+                  <span className="block font-semibold text-xs text-slate-800 truncate">
+                    {r.nom || 'Kazirok'} <span className="font-normal text-slate-400">· {r.listNom}</span>
+                  </span>
                   {r.sizeLabel && <span className="block text-[10px] text-slate-400 truncate">{r.sizeLabel}</span>}
                 </span>
                 <span className="text-[11px] text-slate-500 tabular-nums flex-shrink-0">{r.metr.toFixed(2)} m</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                  <input type="text" inputMode="decimal" value={narxInputVal(r.id)}
+                  <input type="text" inputMode="decimal" value={narxInputVal(r.listId)}
                     onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                    onChange={(e) => { const v = e.target.value; if (/^\d*\.?\d*$/.test(v) || v === '') onPrice && onPrice(r.id, v); }}
+                    onChange={(e) => { const v = e.target.value; if (/^\d*\.?\d*$/.test(v) || v === '') onPrice && onPrice(r.listId, v); }}
                     className="w-28 px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-xs outline-none focus:border-slate-900 transition" />
                   <span className="text-[11px] text-slate-400 whitespace-nowrap">so'm / m</span>
                 </div>

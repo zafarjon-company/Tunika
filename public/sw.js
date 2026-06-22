@@ -8,7 +8,7 @@
 //    to'g'ridan-to'g'ri tarmoqqa ketadi.
 //  Yangi versiya chiqsa CACHE nomidagi raqamni oshiring.
 // ============================================================
-const CACHE = 'tunika-v44';
+const CACHE = 'tunika-v45';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (e) => {

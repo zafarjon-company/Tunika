@@ -57,7 +57,7 @@ function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan kat
 }
 import { DynamicPaymentsSection } from './Tolovlar.jsx';
 import { ChizmaCard } from './Chizma.jsx';
-import { KazirokSavdo } from './KazirokSavdo.jsx';
+import { KazirokSavdo, kazRowNom } from './KazirokSavdo.jsx';
 import { readChizmaLatokMeters, readChizmaQozon } from './chizmaEngine.js';
 
 // O'lchov ustuni: latok(metrli) → faqat metr; list/profnastil → metr × dona; aksessuar → dona/kg
@@ -353,7 +353,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                     {kazRows.map((r) => (
                       <tr key={'kaz-' + (r.id || 'x')} className="border-b border-slate-100">
                         <td className="py-1.5 pr-2">
-                          <div className="font-medium text-slate-800">Kazirok</div>
+                          <div className="font-medium text-slate-800">{kazRowNom(r)}</div>
                         </td>
                         <td className="py-1.5 px-1 text-center text-[11px] text-slate-600">
                           <div>{r.listNom}</div>
