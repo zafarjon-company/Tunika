@@ -95,15 +95,32 @@ const PAL_SEG = [
    joyni o'zgartirish shart emas (panel + selector + chizma avtomatik):
      id    — yagona kalit (localStorage shu bo'yicha eslab qoladi)
      label — selektorda ko'rinadigan nom
-     W     — detal eni (sm)
+     W     — chizma uchun HAQIQIY kontur eni (sm) — DXF dan o'lchangan
+     nom   — (ixtiyoriy) hisobga olinadigan NOMINAL eni (list eni, sm). Lazerda
+             kesishda xavfsizlik uchun haqiqiy kontur ~3 mm kichik; "eni" sifatida
+             shu nominal ko'rsatiladi. Berilmasa — W ko'rsatiladi.
      def   — standart razmerlar { peshona, razmeri } (sm)
      seg   — DXF konturi segmentlari (sm, y = yuqoridan past)
      yb    — peshona o'yig'i chegaralari [yuqori, past]: y<=yb0 qotiq,
              yb0<y<=yb1 peshona bilan siljiydi, y>yb1 peshona+razmeri bilan
      baseH — bazaviy balandlik (sm)
      gap   — chapdagi razmer o'qida peshona/razmeri orasidagi bo'shliq */
+// Patalok "3 bo'lak" konturi — "Kazirok 3 bolak.dxf" dan AYNAN o'lchangan.
+// 62.5 lik bilan bir xil shakl, faqat torroq: nominal 41.6, haqiqiy kontur 41.3
+// (lazer xavfsizligi uchun 3 mm kichik). Vertikal tuzilma 62.5 lik bilan aynan.
+const PAT3_SEG = [
+  [3.10, 0, 3.10, 1.50], [3.10, 0, 38.20, 0], [38.20, 0, 38.20, 1.50],
+  [0, 1.50, 0, 9.90], [0, 1.50, 1.50, 1.50], [1.50, 1.50, 1.50, 2.50], [1.50, 1.50, 3.10, 1.50],
+  [38.20, 1.50, 39.80, 1.50], [39.80, 1.50, 39.80, 2.50], [39.80, 1.50, 41.30, 1.50], [41.30, 1.50, 41.30, 9.90],
+  [0, 9.90, 1.50, 9.90], [1.50, 9.90, 1.50, 11.50], [39.80, 9.90, 39.80, 11.50], [39.80, 9.90, 41.30, 9.90],
+  [1.50, 11.50, 3.10, 11.50], [3.10, 11.50, 1.50, 13.10], [38.20, 11.50, 39.80, 11.50], [38.20, 11.50, 39.80, 13.10],
+  [0, 13.10, 0, 61.50], [0, 13.10, 1.50, 13.10], [39.80, 13.10, 41.30, 13.10], [41.30, 13.10, 41.30, 61.50],
+  [1.50, 60.50, 1.50, 61.50], [3.10, 60.50, 3.10, 61.50], [38.20, 60.50, 38.20, 61.50], [39.80, 60.50, 39.80, 61.50],
+  [0, 61.50, 1.50, 61.50], [1.50, 61.50, 3.10, 61.50], [3.10, 61.50, 38.20, 61.50], [38.20, 61.50, 39.80, 61.50], [39.80, 61.50, 41.30, 61.50],
+];
 const PAT_VARIANTS = [
-  { id: 'pat-90-625', label: "90° — 62.5 lik", W: PAT_W, def: PAT_DEF, seg: PAT_SEG, yb: [9.0, 13.15], baseH: 61.50, gap: 1.5 },
+  { id: 'pat-90-625', label: "90° — 62.5 lik", W: PAT_W, nom: 62.5, def: PAT_DEF, seg: PAT_SEG, yb: [9.0, 13.15], baseH: 61.50, gap: 1.5 },
+  { id: 'pat-3bolak-416', label: "41.6 lik — 3 bo'lak", W: 41.30, nom: 41.6, def: { peshona: 10, razmeri: 50 }, seg: PAT3_SEG, yb: [9.0, 13.15], baseH: 61.50, gap: 1.5 },
 ];
 const PAL_VARIANTS = [
   { id: 'pal-775-16', label: "7.75 lik — 16 bo'lak", W: PAL_W, def: PAL_DEF, seg: PAL_SEG, yb: [9.0, 10.7], baseH: 62.10, gap: 0.5 },
@@ -983,7 +1000,7 @@ export function mountChizma(root) {
     const opts = list.map((o) =>
       `<option value="${o.id}"${o.id === v.id ? ' selected' : ''}>${o.label}</option>`).join('');
     return `
-      <div class="chz-kaz-head"><b>${title}</b><span>eni ${v.W} sm</span></div>
+      <div class="chz-kaz-head"><b>${title}</b><span>eni ${v.nom != null ? v.nom : v.W} sm</span></div>
       <select class="chz-kaz-sel" data-chz-det="${kind}" title="${title} turini tanlash">${opts}</select>
       <div class="chz-kaz-fields">
         <label>Peshona<input type="number" min="2" step="0.5" data-chz-det="${kind}" data-chz-k="peshona" value="${kazFieldVal(kind, 'peshona')}" /><i>sm</i></label>
