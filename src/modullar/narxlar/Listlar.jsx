@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Layers, Copy, Edit3, Percent } from 'lucide-react';
 import { Card, SectionTitle, TovarIcon, RangTanla, RangBadge, SmallModal, SegmentedControl } from '../../components/ui.jsx';
-import { fmt, genId, rangHex, rangMatn, rangTozala } from '../../lib/helpers.js';
+import { fmt, genId, rangHex, rangMatn, rangTozala, rangGuruhlari } from '../../lib/helpers.js';
 
 const BLANK = { nomi: '', qalinlik: '', optom: '', chakana: '', rang: '' };
 
@@ -68,11 +68,12 @@ function OmmaviyModal({ tunikaBaza, onClose, onApply }) {
   );
 }
 
-export function ListlarTab({ tunikaBaza, updateTunikaBaza, showToast }) {
+export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToast }) {
   const [editingId, setEditingId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [bulk, setBulk] = useState(false);
   const [form, setForm] = useState(BLANK);
+  const rangGuruh = rangGuruhlari(ranglar); // Sozlamalardagi guruhlangan to'liq palitra
 
   function ommaviyApply({ tur, yon, qaysi, v }) {
     updateTunikaBaza(tunikaBaza.map((t) => ({
@@ -142,7 +143,7 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, showToast }) {
               <input type="number" value={form.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => setForm({ ...form, chakana: e.target.value })} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
             </div>
           </div>
-          <RangTanla value={form.rang} onPick={(r) => setForm({ ...form, rang: r })} />
+          <RangTanla value={form.rang} onPick={(r) => setForm({ ...form, rang: r })} groups={rangGuruh} />
           <div className="flex gap-2">
             <button onClick={() => { setAdding(false); setForm(BLANK); }} className="flex-1 py-2 border-2 border-slate-200 rounded-lg bg-white">Bekor</button>
             <button onClick={addNew} className="flex-1 py-2 bg-slate-900 text-white rounded-lg">Saqlash</button>
@@ -178,7 +179,7 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, showToast }) {
                   <input type="number" value={t.optom} onWheel={(e) => e.target.blur()} onChange={(e) => patch(t.id, { optom: parseFloat(e.target.value) || 0 })} className="px-2 py-1 border bg-white rounded" />
                   <input type="number" value={t.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => patch(t.id, { chakana: parseFloat(e.target.value) || 0 })} className="px-2 py-1 border bg-white rounded" />
                 </div>
-                <RangTanla value={t.rang || ''} onPick={(r) => patch(t.id, { rang: r })} />
+                <RangTanla value={t.rang || ''} onPick={(r) => patch(t.id, { rang: r })} groups={rangGuruh} />
                 <div className="flex gap-2">
                   <button onClick={() => remove(t.id)} className="py-1.5 px-3 border-2 border-red-200 text-red-700 rounded bg-white"><Trash2 className="w-3.5 h-3.5" /></button>
                   <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-slate-900 text-white rounded">Tayyor</button>

@@ -9,6 +9,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { X, Check, Cylinder, Spline, Triangle, Fence, Layers, Ruler, Package } from 'lucide-react';
 import { formatPhone, fmt, isKanyokTashqi, isKanyokIchki, isLatokFigurali, isLatokOddiy, isEskiNov, rangHex, rangMatn, rangFon, isMetall, rangTozala } from '../lib/helpers.js';
+import { RANG_GROUPS } from '../lib/constants.js';
 
 // Metall jilo uchun yengil ichki soya (3D his)
 const METALL_SHADOW = 'inset 0 1px 1px rgba(255,255,255,.7), inset 0 -2px 3px rgba(0,0,0,.25)';
@@ -36,21 +37,39 @@ export function TovarIcon({ nomi = '', kind = '', className = 'w-4 h-4' }) {
 }
 
 // ----- Rang tanlash (Narxlar modullarida ishlatiladi) -----
-// Qiymat = rang nomi ('' = avto/nomdan). Tanlangan rang swatch'i ajralib turadi.
-export const RANG_PALETTE = ["Oq", "Qora", "Ko'k", "Yashil", "Qizil", "Sariq", "Kulrang", "Jigarrang", "Qaymoq", "Pushti", "Binafsha", "Tilla", "Aksinkofka", "Mokriy", "Xapyor"];
-export function RangTanla({ value, onPick, avto = true }) {
+// Qiymat = rang nomi ('' = avto/nomdan). Ranglar GURUHLAB ko'rsatiladi (ko'p
+// tanlov, lekin chalkashmaslik uchun tartibli). Bu yerda faqat NAMUNALAR
+// ko'rinadi (nomlar emas — nom ustiga olib borilsa tooltip chiqadi).
+//  groups — guruhlangan palitra [{guruh, nomlar:[...]}] (Sozlamalardagi to'liq
+//  ro'yxat). Berilmasa — standart guruhlar. Joriy qiymat (value) palitrada
+//  bo'lmasa ham "Tanlangan" guruhida ko'rsatiladi — eski list rangi yo'qolmaydi.
+const normRangNom = (s) => (s || '').toLowerCase().replace(/['`’]/g, '').trim();
+export function RangTanla({ value, onPick, avto = true, groups }) {
+  const gs = (groups && groups.length)
+    ? groups
+    : RANG_GROUPS.map((g) => ({ guruh: g.guruh, nomlar: g.ranglar.map((r) => r.nom) }));
+  const nv = normRangNom(value);
+  const bor = !!value && gs.some((g) => g.nomlar.some((n) => normRangNom(n) === nv));
+  const showGroups = (value && !bor) ? [{ guruh: 'Tanlangan', nomlar: [value] }, ...gs] : gs;
   return (
     <div>
       <label className="block text-slate-500 mb-1">Rang</label>
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {avto && (
-          <button type="button" onClick={() => onPick('')}
-            className={`px-2 py-1 rounded-md border-2 text-[11px] ${!value ? 'border-slate-900 text-slate-900 font-semibold' : 'border-slate-200 text-slate-500'}`}>Avto</button>
-        )}
-        {RANG_PALETTE.map((nm) => (
-          <button key={nm} type="button" onClick={() => onPick(nm)} title={nm}
-            className={`w-6 h-6 rounded-full border-2 transition ${value === nm ? 'border-slate-900 ring-2 ring-slate-300' : 'border-black/10 hover:scale-110'}`}
-            style={{ background: rangFon(nm), boxShadow: isMetall(nm) ? METALL_SHADOW : undefined }} />
+      {avto && (
+        <button type="button" onClick={() => onPick('')}
+          className={`mb-2 px-2 py-1 rounded-md border-2 text-[11px] ${!value ? 'border-slate-900 text-slate-900 font-semibold' : 'border-slate-200 text-slate-500'}`}>Avto (nomdan)</button>
+      )}
+      <div className="space-y-2">
+        {showGroups.map((g) => (
+          <div key={g.guruh}>
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">{g.guruh}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {g.nomlar.map((nm) => (
+                <button key={nm} type="button" onClick={() => onPick(nm)} title={nm}
+                  className={`w-6 h-6 rounded-full border-2 transition ${value && normRangNom(nm) === nv ? 'border-slate-900 ring-2 ring-slate-300' : 'border-black/10 hover:scale-110'}`}
+                  style={{ background: rangFon(nm), boxShadow: METALL_SHADOW }} />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     </div>
@@ -64,7 +83,7 @@ export function rangChipStyle(rang) {
   return {
     background: rangFon(rang),
     color: metall ? '#1f2937' : rangMatn(rang),
-    boxShadow: metall ? METALL_SHADOW : undefined,
+    boxShadow: METALL_SHADOW, // hamma ranglar metall — har doim jilo soyasi
   };
 }
 
@@ -82,7 +101,7 @@ export function RangBadge({ rang = '', nomi = '', kind = '', size = 'w-9 h-9' })
   return (
     <span className={`${size} rounded-lg flex items-center justify-center flex-shrink-0 border border-black/10`}
       title={rang}
-      style={{ background: rangFon(rang), color: metall ? '#1f2937' : rangMatn(rang), boxShadow: metall ? METALL_SHADOW : undefined }}>
+      style={{ background: rangFon(rang), color: metall ? '#1f2937' : rangMatn(rang), boxShadow: METALL_SHADOW }}>
       <TovarIcon nomi={nomi} kind={kind} />
     </span>
   );

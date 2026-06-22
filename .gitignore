@@ -19,3 +19,12 @@ _*.mjs
 DXF/
 *.dwl
 *.dwl2
+
+# OneDrive konflikt nusxalari (kompyuter nomi bilan) — repoga kerak emas
+*-WIN-3JN09G15J1T.*
+
+# Tahrirlovchi (LibreOffice va h.k.) lock fayllari
+.~lock.*#
+
+# Marketing manba media (xom/tayyor promo video, audio) — ilova asseti emas, deployga kerak emas
+public/brand/marketing/

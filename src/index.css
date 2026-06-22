@@ -590,11 +590,14 @@ html.themed .chz-kbolim-empty { color: var(--c-t3); }
 .chz-kaz-head span { font-size: 10px; color: #94a3b8; }
 html.themed .chz-kaz-head b { color: var(--c-t1); }
 html.themed .chz-kaz-head span { color: var(--c-t3); }
-.chz-kaz-sel { width: 100%; margin-bottom: 8px; padding: 5px 7px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; }
-html.themed .chz-kaz-sel { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
-.chz-kaz-sel:focus { outline: none; border-color: var(--chz-kazirok); }
-.chz-kaz-fields { display: flex; gap: 6px; margin-bottom: 8px; }
-.chz-kaz-fields label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; position: relative; font-size: 10px; color: #64748b; }
+.chz-kaz-eni { white-space: nowrap; }
+/* Bitta offset guruhi — sarlavha + ichidagi Patalok/Paloska kartalari */
+.chz-kaz-group { margin-bottom: 16px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: rgba(148,163,184,.05); }
+html.themed .chz-kaz-group { border-color: var(--c-line); background: rgba(148,163,184,.07); }
+.chz-kaz-ghead { font-size: 12px; font-weight: 800; color: var(--chz-kazirok); margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dashed #cbd5e1; }
+html.themed .chz-kaz-ghead { border-bottom-color: var(--c-line); }
+.chz-kaz-fields { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.chz-kaz-fields label { flex: 1 1 40%; min-width: 0; display: flex; flex-direction: column; gap: 2px; position: relative; font-size: 10px; color: #64748b; }
 html.themed .chz-kaz-fields label { color: var(--c-t3); }
 .chz-kaz-fields input {
   width: 100%; padding: 4px 20px 4px 6px; border: 1px solid #cbd5e1; border-radius: 5px;
@@ -606,10 +609,71 @@ html.themed .chz-kaz-fields input { background: var(--c-bg); color: var(--c-t1);
 /* Orqa fonsiz — chiziqlar tema-mos rangda (och temada to'q, qorong'i temada och) */
 .chz-kaz-draw { padding: 2px 0; color: #0f172a; }
 html.themed .chz-kaz-draw { color: #cbd5e1; }
-.chz-kaz-note { font-size: 9.5px; line-height: 1.35; color: #94a3b8; margin-top: 6px; }
-html.themed .chz-kaz-note { color: var(--c-t3); }
+/* "Orqasi qayrilgan" — chizma pastini qayrilgan flapga o'tkazadigan yoq/och tugma */
+.chz-kaz-toggle { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: 6px; padding: 6px 9px; font-size: 11px; font-weight: 600; text-align: left; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
+.chz-kaz-toggle-box { flex: none; width: 14px; height: 14px; border: 1.5px solid #94a3b8; border-radius: 4px; position: relative; transition: background .12s, border-color .12s; }
+.chz-kaz-toggle.on { border-color: var(--chz-kazirok); color: var(--chz-kazirok); }
+.chz-kaz-toggle.on .chz-kaz-toggle-box { background: var(--chz-kazirok); border-color: var(--chz-kazirok); }
+.chz-kaz-toggle.on .chz-kaz-toggle-box::after { content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.chz-kaz-toggle:hover { border-color: var(--chz-kazirok); }
+html.themed .chz-kaz-toggle { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+html.themed .chz-kaz-toggle.on { border-color: var(--chz-kazirok); color: var(--chz-kazirok); }
+/* "Asosiy razmerlar" — eni'ni bir bosishda o'rnatadigan tugmalar (bo'lak + sm) */
+.chz-kaz-plabel { font-size: 9.5px; color: #94a3b8; margin: 8px 0 4px; }
+html.themed .chz-kaz-plabel { color: var(--c-t3); }
+.chz-kaz-presets { display: flex; gap: 5px; }
+.chz-kaz-preset { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 3px; line-height: 1.1; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #0f172a; cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
+.chz-kaz-preset b { font-size: 11px; font-weight: 700; white-space: nowrap; }
+.chz-kaz-preset span { font-size: 9.5px; color: #94a3b8; }
+.chz-kaz-preset:hover { border-color: var(--chz-kazirok); }
+.chz-kaz-preset.on { background: var(--chz-kazirok); border-color: var(--chz-kazirok); color: #fff; }
+.chz-kaz-preset.on span { color: rgba(255,255,255,.85); }
+html.themed .chz-kaz-preset { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+html.themed .chz-kaz-preset span { color: var(--c-t3); }
+html.themed .chz-kaz-preset.on { background: var(--chz-kazirok); border-color: var(--chz-kazirok); color: #fff; }
+html.themed .chz-kaz-preset.on span { color: rgba(255,255,255,.85); }
 .chz-kaz-sep { height: 1px; background: #e2e8f0; margin: 14px 0; }
 html.themed .chz-kaz-sep { background: var(--c-line); }
+
+/* "Kerak emas" — butun offset guruhini (patalok+paloska) o'chiradigan tugma (Patalok kartasida) */
+.chz-kaz-need { display: flex; align-items: center; gap: 7px; width: 100%; margin-bottom: 9px; padding: 6px 9px; font-size: 11px; font-weight: 700; text-align: left; border: 1px solid #fecaca; border-radius: 6px; background: #fff; color: #b91c1c; cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
+.chz-kaz-need-box { flex: none; width: 14px; height: 14px; border: 1.5px solid #f87171; border-radius: 4px; position: relative; transition: background .12s, border-color .12s; }
+.chz-kaz-need:hover { border-color: #ef4444; background: #fef2f2; }
+.chz-kaz-need.on { background: #ef4444; border-color: #ef4444; color: #fff; }
+.chz-kaz-need.on .chz-kaz-need-box { background: #fff; border-color: #fff; }
+.chz-kaz-need.on .chz-kaz-need-box::after { content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid #ef4444; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+html.themed .chz-kaz-need { background: var(--c-bg); border-color: rgba(248,113,113,.45); color: #fca5a5; }
+html.themed .chz-kaz-need.on { background: #ef4444; border-color: #ef4444; color: #fff; }
+/* O'chirilgan ("kerak emas") offset guruhi — patalok va paloska soyalanadi (tugmadan boshqasi) */
+.chz-kaz-off { border-style: dashed; }
+.chz-kaz-off .chz-kaz-ghead i { font-style: italic; font-weight: 700; color: #ef4444; }
+.chz-kaz-off .chz-kaz-head,
+.chz-kaz-off .chz-kaz-listsel,
+.chz-kaz-off .chz-kaz-fields,
+.chz-kaz-off .chz-kaz-draw,
+.chz-kaz-off .chz-kaz-toggle,
+.chz-kaz-off .chz-kaz-plabel,
+.chz-kaz-off .chz-kaz-presets,
+.chz-kaz-off .chz-kaz-sep {
+  opacity: .38;
+  filter: grayscale(.55);
+  pointer-events: none;
+}
+
+/* List (tunika) tanlovi — har bir patalok/paloska kartasida */
+.chz-kaz-listsel { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; font-size: 10px; color: #64748b; }
+.chz-kaz-listsel > span { font-weight: 600; }
+.chz-kaz-listsel select { width: 100%; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 12px; font-weight: 600; color: #0f172a; background: #fff; }
+.chz-kaz-listsel select:focus { outline: none; border-color: var(--chz-kazirok); }
+html.themed .chz-kaz-listsel { color: var(--c-t3); }
+html.themed .chz-kaz-listsel select { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+/* Umumiy (kazirok yozuvi oldidagi) List tanlovlari — chizmasiz ham ko'rinadi */
+.chz-kaz-glob { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.chz-kaz-globrow { display: flex; align-items: center; gap: 8px; }
+.chz-kaz-globrow > span { flex: none; width: 98px; font-size: 11px; font-weight: 700; color: var(--chz-kazirok); }
+.chz-kaz-globrow select { flex: 1; min-width: 0; padding: 5px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 600; color: #0f172a; background: #fff; }
+.chz-kaz-globrow select:focus { outline: none; border-color: var(--chz-kazirok); }
+html.themed .chz-kaz-globrow select { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
 
 .chz .rowUnit {
   background: #fff; color: #334155; border: 1px solid #cbd5e1;
@@ -673,3 +737,151 @@ html.themed .chz-hint { color: var(--c-t3); }
   .chz-panel { width: auto; border-left: 0; border-top: 1px solid #e2e8f0; max-height: 250px; }
   html.themed .chz-panel { border-top-color: var(--c-line); }
 }
+
+/* ============================================================
+   YORUG' MAVZU — zamonaviy sayqal (faqat standart/light)
+   Qolgan 130+ mavzu `html.themed` bilan ajraladi — ularga TEGILMAYDI.
+   ============================================================ */
+
+/* Chuqurlik beruvchi yumshoq fon — tekis rang o'rniga nozik nur dog'lari */
+html:not(.themed) .bg-app {
+  background:
+    radial-gradient(1100px 560px at 10% -10%, rgba(56, 189, 248, .10), transparent 60%),
+    radial-gradient(950px 520px at 100% -4%, rgba(99, 102, 241, .08), transparent 55%),
+    radial-gradient(820px 680px at 50% 120%, rgba(15, 23, 42, .05), transparent 62%),
+    #f5f7fb;
+  background-attachment: fixed;
+}
+
+/* Shisha (glassmorphism) sticky header — zamonaviy, hajmli */
+html:not(.themed) header.bg-white {
+  background: rgba(255, 255, 255, .72);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  box-shadow: 0 6px 28px -12px rgba(15, 23, 42, .18);
+}
+
+/* Kartalar — yorug'da yanada toza: hajmli soya + nozik halqa */
+html:not(.themed) .bg-white.rounded-xl {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 10px 26px -8px rgba(15, 23, 42, .10);
+  border-color: rgba(15, 23, 42, .07);
+}
+
+/* Firma nomi — yorug'da sekin yugurib o'tuvchi "po'lat jilosi" */
+html:not(.themed) .firma-nomi {
+  background: linear-gradient(100deg, #0f172a 28%, #5b6b86 46%, #0f172a 64%);
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: firmaFloat 4s ease-in-out infinite, firmaShine 7s linear infinite;
+}
+
+/* Yorug' uchun nozik metall "chang" zarralari (HeaderFx → mote turi) */
+.fx-mote { animation: fxMote ease-in-out infinite; }
+@keyframes fxMote {
+  0%   { transform: translateY(8px) scale(.5); opacity: 0; }
+  25%  { opacity: .75; }
+  65%  { opacity: .45; }
+  100% { transform: translateY(-32px) scale(1); opacity: 0; }
+}
+
+/* Logo paydo bo'lishi (login ekrani) — yumshoq "pop" */
+@keyframes logoIn {
+  0%   { opacity: 0; transform: scale(.6) translateY(8px); }
+  60%  { transform: scale(1.06) translateY(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.anim-logo-in { animation: logoIn .6s cubic-bezier(.2, .8, .2, 1) both; }
+
+/* ============================================================
+   UMUMIY SAYQAL — butun ilova (zamonaviy, brendga mos)
+   ============================================================ */
+
+/* Zamonaviy slim scrollbar (yorug' + mavzu) */
+* { scrollbar-width: thin; scrollbar-color: rgba(100,116,139,.45) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(100,116,139,.40); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.65); background-clip: padding-box; }
+html.themed ::-webkit-scrollbar-thumb { background: var(--c-line); background-clip: padding-box; }
+html.themed ::-webkit-scrollbar-thumb:hover { background: var(--c-t4); background-clip: padding-box; }
+
+/* Primary tugmalarda metall "jilo" o'tishi (hover) — ikonka-nishonlarga emas, faqat tugma/label */
+button.bg-slate-900, label.bg-slate-900 { position: relative; overflow: hidden; }
+button.bg-slate-900::after, label.bg-slate-900::after {
+  content: ''; position: absolute; top: 0; left: -130%; width: 55%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.38), transparent);
+  transform: skewX(-18deg); pointer-events: none; z-index: 1;
+}
+button.bg-slate-900:hover::after, label.bg-slate-900:hover::after { animation: btnSheen .7s ease; }
+@keyframes btnSheen { to { left: 130%; } }
+
+/* Header logosi — hover'da yengil jonlanish */
+header [aria-label="Logo"] { transition: transform .25s cubic-bezier(.2,.8,.2,1); cursor: default; }
+header [aria-label="Logo"]:hover { transform: scale(1.07) rotate(-2deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  button.bg-slate-900::after, label.bg-slate-900::after { display: none !important; }
+  header [aria-label="Logo"]:hover { transform: none !important; }
+}
+
+/* Shisha (glass) header — BARCHA mavzularda (nafaqat yorug'da) */
+html.themed header.bg-white {
+  background: color-mix(in srgb, var(--c-surface) 80%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+}
+/* Faol tab/tugmaga mavzu rangida yumshoq yorug'lik (barcha mavzu) */
+html.themed nav button.bg-slate-900 { box-shadow: 0 2px 14px -2px var(--c-btn); }
+
+/* ============================================================
+   HAR MAVZUGA XOS SHRIFT — yozuvlar ham mavzuga qarab o'zgaradi
+   (oldingi matrix/gold/dracula qoidalariga qo'shimcha)
+   ============================================================ */
+/* Klassik / hashamatli mavzular — serif */
+html[data-theme='royal'] body,   html[data-theme='wine'] body,    html[data-theme='bronze'] body,
+html[data-theme='coffee'] body,  html[data-theme='mocha'] body,   html[data-theme='caramel'] body,
+html[data-theme='cinnamon'] body,html[data-theme='pirate'] body,  html[data-theme='desert'] body,
+html[data-theme='amethyst'] body,html[data-theme='plum'] body,    html[data-theme='grape'] body,
+html[data-theme='wizard'] body,  html[data-theme='starlight'] body { font-family: Georgia, 'Times New Roman', serif; }
+
+/* Texno / kiber mavzular — monospace */
+html[data-theme='cyber'] body,   html[data-theme='robot'] body,   html[data-theme='carbon'] body,
+html[data-theme='steel'] body,   html[data-theme='toxic'] body,   html[data-theme='lime'] body,
+html[data-theme='charcoal'] body,html[data-theme='slate'] body,   html[data-theme='storm'] body,
+html[data-theme='comet'] body { font-family: ui-monospace, 'Courier New', monospace; }
+
+/* Kosmik / zamonaviy mavzular — kengaytirilgan harf oralig'i */
+html[data-theme='galaxy'] body,  html[data-theme='nebula'] body,  html[data-theme='cobalt'] body,
+html[data-theme='azure'] body,   html[data-theme='sapphire'] body,html[data-theme='obsidian'] body,
+html[data-theme='plasma'] body,  html[data-theme='magenta'] body { letter-spacing: .35px; }
+
+/* ============================================================
+   HIBRID LOGO — premium rasm + MAVZU rangidagi yorug'lik halqasi
+   (rasm o'zi o'zgarmaydi, atrofidagi accent yorug'lik mavzuga moslashadi)
+   ============================================================ */
+.brand-logo {
+  box-shadow:
+    0 6px 20px -6px color-mix(in srgb, var(--c-btn, #0f172a) 80%, transparent),
+    0 0 0 1.5px color-mix(in srgb, var(--c-btn, #0f172a) 38%, transparent);
+  transition: box-shadow .3s ease, transform .25s cubic-bezier(.2, .8, .2, 1);
+}
+.brand-logo:hover { transform: scale(1.07) rotate(-2deg); }
+@media (prefers-reduced-motion: reduce) { .brand-logo:hover { transform: none !important; } }
+
+/* ============================================================
+   ZAMONAVIY SAYQAL — BARCHA mavzularда (nafaqat yorug')
+   ============================================================ */
+/* Tekis (gradientsiz) mavzularga nozik chuqurlik nuri.
+   O'z gradient foni bor mavzular (galaxy, volcano...) !important bilan ustun keladi. */
+html.themed .bg-app {
+  background-image: radial-gradient(1100px 620px at 50% -8%, rgba(255, 255, 255, .05), transparent 62%);
+}
+/* Kartalarga yuqoridan nozik yorug'lik (hajm hissi) — har mavzuda */
+html.themed .bg-white.rounded-xl {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .04), transparent 42%);
+}
+/* Faol tab matni biroz yorqinroq (kontrast) */
+html.themed nav button.bg-slate-900 { text-shadow: 0 1px 2px rgba(0, 0, 0, .35); }

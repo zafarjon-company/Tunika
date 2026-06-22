@@ -2,9 +2,8 @@
 //  KIRISH EKRANI (lokal login/parol)
 // ============================================================
 import React, { useState } from 'react';
-import { Lock } from 'lucide-react';
 
-export function LoginScreen({ onLogin }) {
+export function LoginScreen({ onLogin, shopName = 'Zafarjon Payariq metall' }) {
   const [loginVal, setLoginVal] = useState('');
   const [parol, setParol] = useState('');
   const [xato, setXato] = useState('');
@@ -19,10 +18,9 @@ export function LoginScreen({ onLogin }) {
     <div className="min-h-screen flex items-center justify-center p-4 bg-app">
       <form onSubmit={kirish} className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6 space-y-4">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto rounded-full bg-slate-900 flex items-center justify-center mb-2">
-            <Lock className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>Tunika</h1>
+          <img src="/icon-512.png" alt="Logo"
+            className="w-20 h-20 mx-auto mb-3 rounded-2xl shadow-lg shadow-slate-900/25 anim-logo-in" />
+          <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>{shopName}</h1>
           <p className="text-xs text-slate-500">Kirish uchun login va parolni kiriting</p>
         </div>
 

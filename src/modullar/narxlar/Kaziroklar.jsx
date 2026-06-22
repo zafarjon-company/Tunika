@@ -8,9 +8,10 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Triangle, Edit3, Copy } from 'lucide-react';
 import { Card, SectionTitle, RangTanla, RangBadge } from '../../components/ui.jsx';
-import { genId, fmt } from '../../lib/helpers.js';
+import { genId, fmt, rangGuruhlari } from '../../lib/helpers.js';
 
-export function KazirokTab({ kaziroklar, updateKaziroklar, showToast }) {
+export function KazirokTab({ kaziroklar, updateKaziroklar, ranglar = [], showToast }) {
+  const rangGuruh = rangGuruhlari(ranglar); // Sozlamalardagi guruhlangan to'liq palitra
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ nomi: '', narx: '', birlik: 'dona', rang: '' });
@@ -76,7 +77,7 @@ export function KazirokTab({ kaziroklar, updateKaziroklar, showToast }) {
               </select>
             </div>
           </div>
-          <RangTanla value={form.rang} onPick={(r) => setForm({ ...form, rang: r })} />
+          <RangTanla value={form.rang} onPick={(r) => setForm({ ...form, rang: r })} groups={rangGuruh} />
           <div className="flex gap-2">
             <button onClick={() => { setAdding(false); setForm({ nomi: '', narx: '', birlik: 'dona', rang: '' }); }} className="flex-1 py-2 border-2 border-slate-200 rounded-lg bg-white">Bekor</button>
             <button onClick={addNew} className="flex-1 py-2 bg-slate-900 text-white rounded-lg">Saqlash</button>
@@ -115,7 +116,7 @@ export function KazirokTab({ kaziroklar, updateKaziroklar, showToast }) {
                     </select>
                   </div>
                 </div>
-                <RangTanla value={k.rang || ''} onPick={(r) => patch(k.id, { rang: r })} />
+                <RangTanla value={k.rang || ''} onPick={(r) => patch(k.id, { rang: r })} groups={rangGuruh} />
                 <div className="flex gap-2">
                   <button onClick={() => remove(k.id)} className="py-1.5 px-3 border-2 border-red-200 text-red-700 rounded bg-white"><Trash2 className="w-3.5 h-3.5" /></button>
                   <button onClick={() => { if (!k.nomi.trim()) { showToast('Nom kiriting'); return; } setEditingId(null); showToast('Saqlandi'); }} className="flex-1 py-1.5 bg-slate-900 text-white rounded font-medium">Tayyor</button>

@@ -1,7 +1,7 @@
 // ============================================================
 //  YORDAMCHI FUNKSIYALAR
 // ============================================================
-import { DEFAULT_USD_RATE, STANOK_OPTIONS } from './constants.js';
+import { DEFAULT_USD_RATE, STANOK_OPTIONS, RANG_PALETTE, RANG_GROUPS } from './constants.js';
 
 export const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('uz-UZ');
 
@@ -73,9 +73,17 @@ export function rangTozala(nom) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+// Rang nomini taqqoslash uchun normallashtirish (kichik harf, apostrofsiz, trim).
+const normRang = (s) => (s || '').toLowerCase().replace(/['`’]/g, '').trim();
+// Standart palitradagi aniq nom → hex (eng ishonchli moslik)
+const PALETTE_HEX = new Map(RANG_PALETTE.map((r) => [normRang(r.nom), r.hex]));
+
 // Rang nomidan haqiqiy rang (swatch uchun). Noma'lum bo'lsa — nomdan barqaror rang.
 export function rangHex(nom) {
   const s = (nom || '').toLowerCase().replace(/['`’]/g, '');
+  // 1) Standart palitradagi aniq nom (masalan "To'q ko'k", "Marjon")
+  const aniq = PALETTE_HEX.get(s.trim());
+  if (aniq) return aniq;
   const map = [
     [/qaymoq|krem|cream|bej|beige/, '#f4ecd2'],
     [/oppoq|\boq\b|white/, '#f8fafc'],
@@ -118,11 +126,18 @@ export function rangMatn(nom) {
 
 // Bu rang metallmi? (jilo effekti uchun)
 export function isMetall(nom) {
-  return /aksink|aktsink|otsink|atsink|sinkof|sinkov|оцинк|galvan|kumush|xrom|silver|metall|alyumin|alumin|tilla|oltin|gold|zolot|\bmis\b|copper|bronza|bronz/i
+  return /aksink|aktsink|otsink|atsink|sinkof|sinkov|оцинк|galvan|kumush|xrom|silver|metall|alyumin|alumin|polat|tilla|oltin|gold|zolot|\bmis\b|copper|bronza|bronz/i
     .test((nom || '').replace(/['`’]/g, ''));
 }
 
-// Rang foni — metall ranglar uchun "jilo" (gradient), aks holda oddiy rang.
+// Bo'yalgan metall list uchun yengil jilo — har qanday rang ustiga qo'yiladigan
+// yaltirash qatlami (tepa-chapda nur, pastda yengil soya). Hamma ranglar metall
+// list bo'lgani uchun yassi emas, metalldek ko'rinadi.
+const PAINT_GLOSS = 'linear-gradient(145deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.18) 18%, rgba(255,255,255,0) 40%, rgba(0,0,0,.05) 66%, rgba(0,0,0,.18) 100%)';
+
+// Rang foni — barcha ranglar metall (list) bo'lgani uchun jilo bilan.
+//  - Sof metallar (tilla/mis/kumush/xrom/po'lat...) — kuchli metall gradient.
+//  - Bo'yalgan ranglar — asl rang ustida yengil metall yaltirashi (PAINT_GLOSS).
 // Faqat ko'rinish (swatch/badge) uchun — backgroundColor talab qiladigan joylarda rangHex ishlating.
 export function rangFon(nom) {
   const s = (nom || '').toLowerCase().replace(/['`’]/g, '');
@@ -130,9 +145,10 @@ export function rangFon(nom) {
     return 'linear-gradient(135deg,#fbf0c4 0%,#e6c25a 26%,#b8902f 50%,#f3d885 72%,#d4af37 100%)';
   if (/\bmis\b|copper|bronza|bronz/.test(s)) // mis/bronza jilo
     return 'linear-gradient(135deg,#f7d3b3 0%,#c87a45 28%,#9c5a2c 52%,#e0996a 74%,#b87333 100%)';
-  if (/aksink|aktsink|otsink|atsink|sinkof|sinkov|оцинк|galvan|kumush|xrom|silver|metall|alyumin|alumin/.test(s)) // alyuminiy/otsinkovka jilo
+  if (/aksink|aktsink|otsink|atsink|sinkof|sinkov|оцинк|galvan|kumush|xrom|silver|metall|alyumin|alumin|polat/.test(s)) // alyuminiy/otsinkovka/po'lat jilo
     return 'linear-gradient(135deg,#f2f5f8 0%,#bcc3cc 22%,#828b97 46%,#c6cdd5 64%,#9aa3ad 82%,#eef1f4 100%)';
-  return rangHex(nom);
+  // Bo'yalgan metall — asl rang + yengil yaltirash
+  return `${PAINT_GLOSS}, ${rangHex(nom)}`;
 }
 
 // "Oq" har doim eng tepada
@@ -146,6 +162,25 @@ export function barchaRanglar(tunikaBaza = [], ranglar = []) {
   const fromList = tunikaBaza.map((t) => (t.rang || rangTozala(t.nomi))).filter(Boolean);
   const custom = (ranglar || []).map((r) => (r.nom || '').trim()).filter(Boolean);
   return [...new Set([...fromList, ...custom])].sort(oqTepadaCmp);
+}
+
+// Rang tanlash uchun GURUHLANGAN palitra: standart guruhlar (RANG_GROUPS) +
+// Sozlamalardagi qo'shimcha ranglar oxirida "Qo'shimcha" guruhi sifatida.
+// Har guruh: { guruh, nomlar: [...] }. Standart palitrada bo'lgan qo'shimcha
+// nomlar takrorlanmaydi (katta-kichik harf farqi e'tiborga olinmaydi).
+export function rangGuruhlari(ranglar = []) {
+  const builtinSet = new Set(RANG_PALETTE.map((r) => r.nom.toLowerCase()));
+  const groups = RANG_GROUPS.map((g) => ({ guruh: g.guruh, nomlar: g.ranglar.map((r) => r.nom) }));
+  const extra = [];
+  const seen = new Set();
+  for (const r of (ranglar || [])) {
+    const nom = (r.nom || '').trim();
+    const k = nom.toLowerCase();
+    if (!nom || builtinSet.has(k) || seen.has(k)) continue;
+    seen.add(k); extra.push(nom);
+  }
+  if (extra.length) groups.push({ guruh: "Qo'shimcha", nomlar: extra });
+  return groups;
 }
 // Bu aksessuarga rang kerakmi? (qoziq lenta va germetikaga kerak emas)
 export function aksRangKerak(nom) {

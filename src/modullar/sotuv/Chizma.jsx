@@ -12,20 +12,27 @@ import { ChevronDown, Maximize2, Minimize2, Ruler } from 'lucide-react';
 import { Card, SectionTitle } from '../../components/ui.jsx';
 import { mountChizma } from './chizmaEngine.js';
 
-export function ChizmaCard() {
+export function ChizmaCard({ tunikaBaza = [] }) {
   const [open, setOpen] = useState(() => localStorage.getItem('chizma-open') === '1');
   const [full, setFull] = useState(false);
   const rootRef = useRef(null);
   const apiRef = useRef(null);
+  const tunikaRef = useRef(tunikaBaza);
+  tunikaRef.current = tunikaBaza;
 
   // Ochilganda dvigatelni o'rnatamiz, yopilganda butunlay olib tashlaymiz
   // (chizmaning o'zi localStorage'da saqlanadi — hech narsa yo'qolmaydi).
   useEffect(() => {
     if (!open || !rootRef.current) return undefined;
-    const api = mountChizma(rootRef.current);
+    const api = mountChizma(rootRef.current, { tunikaBaza: tunikaRef.current });
     apiRef.current = api;
     return () => { api.destroy(); apiRef.current = null; };
   }, [open]);
+
+  // Listlar (tunikalar) ro'yxati o'zgarsa — Kazirok panelidagi List selektorlarini yangilaymiz.
+  useEffect(() => {
+    apiRef.current?.setTunikaBaza?.(tunikaBaza);
+  }, [tunikaBaza]);
 
   // Ochiq/yopiq holatni eslab qolamiz.
   useEffect(() => {

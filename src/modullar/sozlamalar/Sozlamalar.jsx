@@ -15,10 +15,10 @@ import {
   Cookie, Sailboat, Atom, TreeDeciduous, Rabbit, IceCream, Telescope,
   FlaskConical, Castle, PartyPopper, Ship, Feather, Carrot,
 } from 'lucide-react';
-import { Card, SectionTitle, SegmentedControl } from '../../components/ui.jsx';
-import { DEFAULT_USD_RATE } from '../../lib/constants.js';
+import { Card, SectionTitle, SegmentedControl, rangChipStyle } from '../../components/ui.jsx';
+import { DEFAULT_USD_RATE, RANG_PALETTE, RANG_GROUPS } from '../../lib/constants.js';
 import { eksportZaxira, importZaxira } from '../../lib/zaxira.js';
-import { genId, rangTozala, rangHex, rangMatn } from '../../lib/helpers.js';
+import { genId, rangTozala } from '../../lib/helpers.js';
 import { fetchKurslar } from '../../lib/kurs.js';
 import { ROLLAR, rolNomi } from '../../lib/ruxsat.js';
 import { TILLAR } from '../../lib/til.js';
@@ -207,13 +207,17 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
     showToast('Kurs saqlandi');
   }
 
-  // Listlardan avtomatik ranglar (nomlar, takrorsiz) + qo'shimcha ranglar
-  const listRanglar = [...new Set(tunikaBaza.map((t) => rangTozala(t.nomi)).filter(Boolean))].sort(oqTepada);
+  // Standart palitrada bormi? (katta-kichik harf farqi e'tiborga olinmaydi)
+  const standartda = (nom) => RANG_PALETTE.some((r) => r.nom.toLowerCase() === (nom || '').toLowerCase());
+  // Listlardan avtomatik ranglar — faqat standart palitrada YO'Q bo'lganlari (takrorni oldini olish)
+  const listRanglar = [...new Set(tunikaBaza.map((t) => rangTozala(t.nomi)).filter(Boolean))]
+    .filter((n) => !standartda(n)).sort(oqTepada);
 
   function addRang() {
     const v = nRang.trim();
     if (!v) { showToast('Rang nomini kiriting'); return; }
-    const bor = listRanglar.some((n) => n.toLowerCase() === v.toLowerCase())
+    const bor = standartda(v)
+      || listRanglar.some((n) => n.toLowerCase() === v.toLowerCase())
       || ranglar.some((r) => (r.nom || '').toLowerCase() === v.toLowerCase());
     if (bor) { showToast('Bu rang allaqachon bor'); return; }
     updateRanglar([...ranglar, { id: genId(), nom: v }]);
@@ -290,43 +294,6 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
               "Avtomatik" yoqilsa — ilova ochilganda kurslar internetdan o'zi yangilanadi.
             </p>
           </div>
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle icon={Palette}>Ranglar</SectionTitle>
-        <p className="text-xs text-slate-500 mb-3">
-          Savdoda aksessuarlarning rangi shu ro'yxatdan tanlanadi. Listlar avtomatik qo'shiladi; qo'shimcha rang (masalan "xrom") qo'lda qo'shing.
-        </p>
-
-        <label className="block text-[11px] uppercase tracking-wider text-slate-400 mb-1">Listlardan (avtomatik)</label>
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {listRanglar.length === 0 ? (
-            <span className="text-xs text-slate-400">Listlar yo'q</span>
-          ) : listRanglar.map((nom) => (
-            <span key={nom} className="px-3 py-1 rounded-full text-xs font-semibold border border-black/10 shadow-sm"
-              style={{ background: rangHex(nom), color: rangMatn(nom) }}>
-              {nom}
-            </span>
-          ))}
-        </div>
-
-        <label className="block text-[11px] uppercase tracking-wider text-slate-400 mb-1">Qo'shimcha ranglar</label>
-        <div className="flex gap-2 mb-2">
-          <input value={nRang} onChange={(e) => setNRang(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addRang(); }}
-            placeholder="masalan: xrom" className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none text-sm" />
-          <button onClick={addRang} className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 flex items-center gap-1"><Plus className="w-4 h-4" /> Qo'shish</button>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {ranglar.length === 0 ? (
-            <span className="text-xs text-slate-400">Qo'shimcha rang yo'q</span>
-          ) : [...ranglar].sort((a, b) => oqTepada(a.nom || '', b.nom || '')).map((r) => (
-            <span key={r.id} className="pl-3 pr-2 py-1 rounded-full text-xs font-semibold border border-black/10 shadow-sm flex items-center gap-1.5"
-              style={{ background: rangHex(r.nom), color: rangMatn(r.nom) }}>
-              {r.nom}
-              <button onClick={() => removeRang(r.id)} className="opacity-70 hover:opacity-100" style={{ color: 'inherit' }}><Trash2 className="w-3 h-3" /></button>
-            </span>
-          ))}
         </div>
       </Card>
 
@@ -455,6 +422,65 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
           </div>
         </Card>
       )}
+
+      <Card>
+        <SectionTitle icon={Palette}>Ranglar</SectionTitle>
+        <p className="text-xs text-slate-500 mb-3">
+          List, aksessuar, kazirok va savdoda ranglar shu yerdagi ro'yxatdan tanlanadi.
+          Hammasi <b>metall list</b> ranglari — namunalar metalldek jilo bilan ko'rsatiladi.
+          Quyidagi <b>standart ranglar</b> har doim mavjud. O'zingizniki bo'lsa (masalan "xrom")
+          pastdan qo'shing — u ham hamma joyda tanlovga chiqadi.
+        </p>
+
+        <label className="block text-[11px] uppercase tracking-wider text-slate-400 mb-2">Standart ranglar ({RANG_PALETTE.length}) — guruhlab</label>
+        <div className="space-y-2.5 mb-4">
+          {RANG_GROUPS.map((g) => (
+            <div key={g.guruh}>
+              <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-1">{g.guruh}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {g.ranglar.map((r) => (
+                  <span key={r.nom} className="px-3 py-1 rounded-full text-xs font-semibold border border-black/10 shadow-sm"
+                    style={rangChipStyle(r.nom)}>
+                    {r.nom}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {listRanglar.length > 0 && (
+          <>
+            <label className="block text-[11px] uppercase tracking-wider text-slate-400 mb-1">Listlardan (avtomatik)</label>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {listRanglar.map((nom) => (
+                <span key={nom} className="px-3 py-1 rounded-full text-xs font-semibold border border-black/10 shadow-sm"
+                  style={rangChipStyle(nom)}>
+                  {nom}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+
+        <label className="block text-[11px] uppercase tracking-wider text-slate-400 mb-1">Qo'shimcha ranglar</label>
+        <div className="flex gap-2 mb-2">
+          <input value={nRang} onChange={(e) => setNRang(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addRang(); }}
+            placeholder="masalan: xrom" className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none text-sm" />
+          <button onClick={addRang} className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 flex items-center gap-1"><Plus className="w-4 h-4" /> Qo'shish</button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {ranglar.length === 0 ? (
+            <span className="text-xs text-slate-400">Qo'shimcha rang yo'q</span>
+          ) : [...ranglar].sort((a, b) => oqTepada(a.nom || '', b.nom || '')).map((r) => (
+            <span key={r.id} className="pl-3 pr-2 py-1 rounded-full text-xs font-semibold border border-black/10 shadow-sm flex items-center gap-1.5"
+              style={rangChipStyle(r.nom)}>
+              {r.nom}
+              <button onClick={() => removeRang(r.id)} className="opacity-70 hover:opacity-100" style={{ color: 'inherit' }}><Trash2 className="w-3 h-3" /></button>
+            </span>
+          ))}
+        </div>
+      </Card>
 
       <button onClick={onLogout}
         className="w-full py-2.5 rounded-lg border-2 border-red-200 text-red-700 font-medium hover:bg-red-50 flex items-center justify-center gap-2">

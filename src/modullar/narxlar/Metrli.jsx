@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Ruler, Edit3, Copy } from 'lucide-react';
 import { Card, SectionTitle, TovarIcon, RangTanla, RangBadge } from '../../components/ui.jsx';
-import { fmt, genId, metrliVariantlar, metrliAddon } from '../../lib/helpers.js';
+import { fmt, genId, metrliVariantlar, metrliAddon, rangGuruhlari } from '../../lib/helpers.js';
 
 function toSlots(m) {
   let arr = [];
@@ -24,7 +24,8 @@ function toSlots(m) {
 
 const BLANK = { nomi: '', metriNarx: '', rang: '', variantlar: [{ son: '', razmer: '' }, { son: '', razmer: '' }, { son: '', razmer: '' }, { son: '', razmer: '' }] };
 
-export function MetrliTab({ metrlilar, updateMetrlilar, showToast }) {
+export function MetrliTab({ metrlilar, updateMetrlilar, ranglar = [], showToast }) {
+  const rangGuruh = rangGuruhlari(ranglar); // Sozlamalardagi guruhlangan to'liq palitra
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(BLANK);
@@ -114,7 +115,7 @@ export function MetrliTab({ metrlilar, updateMetrlilar, showToast }) {
             </div>
           ))}
 
-          <RangTanla value={form.rang} onPick={(r) => setForm({ ...form, rang: r })} />
+          <RangTanla value={form.rang} onPick={(r) => setForm({ ...form, rang: r })} groups={rangGuruh} />
 
           <div className="flex gap-2 pt-1">
             <button onClick={() => { setAdding(false); setEditingId(null); }} className="flex-1 py-2 border-2 border-slate-200 rounded-lg bg-white">Bekor</button>

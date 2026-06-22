@@ -47,7 +47,7 @@ const FOUNDER = { id: 'founder', login: 'Brutal', parol: '4252600ZZ', role: 'fou
 
 // Har mavzu — o'ziga xos effekt {t: harakat turi, c: rang, g: emoji}
 const TEMA_FX = {
-  light:     null,
+  light:     { t: 'mote', c: '#c9a865' },
   dark:      { t: 'snow', c: '#ffffff' },
   nord:      { t: 'snow', c: '#dbeafe' },
   mono:      { t: 'snow', c: '#e5e5e5' },
@@ -140,6 +140,7 @@ const TEMA_FX = {
 const TEMA_KEYS = Object.keys(TEMA_FX).filter((k) => k !== 'light');
 // Harakat sozlamalari: zarracha soni, tezligi, o'lchami
 const FX_CFG = {
+  mote:    { n: 10, durMin: 6,   durMax: 10,  size: [2, 4], scatter: true },
   snow:    { n: 34, durMin: 6,   durMax: 11,  size: [3, 7] },
   rain:    { n: 24, durMin: 3.5, durMax: 7,   size: [2, 3] },
   sparkle: { n: 16, durMin: 1.6, durMax: 3.4, size: [3, 6], scatter: true },
@@ -845,7 +846,7 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <LoginScreen onLogin={doLogin} />;
+    return <LoginScreen onLogin={doLogin} shopName={shopName} />;
   }
 
   if (loading) {
@@ -932,10 +933,16 @@ export default function App() {
         </div>
         <div className="max-w-7xl mx-auto px-4 pb-3 relative overflow-hidden">
           <HeaderFx tema={tema} />
-          <h1 className="firma-nomi relative z-[1] text-xl sm:text-2xl font-extrabold tracking-tight inline-block text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>
-            {shopName}
-          </h1>
-          <p className="relative z-[1] text-xs text-slate-500">Savdo boshqaruv bazasi</p>
+          <div className="relative z-[1] flex items-center gap-3">
+            <img src="/icon-192.png" alt="Logo"
+              className="brand-logo w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex-shrink-0" />
+            <div>
+              <h1 className="firma-nomi text-xl sm:text-2xl font-extrabold tracking-tight inline-block text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>
+                {shopName}
+              </h1>
+              <p className="text-xs text-slate-500">Savdo boshqaruv bazasi</p>
+            </div>
+          </div>
         </div>
 
         <nav className="max-w-7xl mx-auto px-2 pt-2 pb-2.5 flex gap-1 border-t border-slate-100 overflow-x-auto">
@@ -1023,6 +1030,7 @@ export default function App() {
             metrlilar={metrlilar} updateMetrlilar={updateMetrlilar}
             aksessuarlar={aksessuarlar} updateAksessuarlar={updateAksessuarlar}
             kaziroklar={kaziroklar} updateKaziroklar={updateKaziroklar}
+            ranglar={ranglar}
             showToast={showToast}
           />
         )}
