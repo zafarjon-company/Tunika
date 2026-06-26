@@ -2,6 +2,12 @@
 //  FIREBASE — bulut baza (Firestore) + anonim Auth
 //  Offline kesh (persistentLocalCache) yoqilgan: ma'lumot darhol
 //  keshdan ko'rinadi, keyin fonda sinxronlanadi (tez + offline).
+//
+//  MUHIM: experimentalForceLongPolling yoqilgan. Aks holda ba'zi
+//  kompyuterlarda (antivirus — Dr.Web, korporativ proksi, VPN, firewall)
+//  Firestore'ning oddiy streaming (WebChannel) ulanishi TO'SILADI →
+//  o'qish keshdan ko'rinadi-yu, YOZUVLAR bulutga chiqmaydi (boshqa
+//  qurilmada yangi zakaslar ko'rinmaydi). Long-polling shu to'siqdan o'tadi.
 // ============================================================
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
@@ -20,6 +26,7 @@ const app = initializeApp(firebaseConfig);
 
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  experimentalForceLongPolling: true,
 });
 
 export const auth = getAuth(app);
