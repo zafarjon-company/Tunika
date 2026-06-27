@@ -21,6 +21,10 @@ import { fsSupported, ensurePermission, getOrderFolder, writeFile, orderFolderNa
 
 const HOLAT_LABEL = { jarayon: 'Jarayonda', tayyor: 'Tayyor', yopilgan: 'Yopilgan' };
 
+// Chek RASM bo'lib yuborilganda (Telegram/WhatsApp/albom) to'q fon rangi —
+// `.receipt-dark` (index.css) bilan bir xil. Chop etish (print) OQ qoladi.
+const RECEIPT_DARK_BG = '#0f172a';
+
 // DXF list uzunliklari (tugmalar) — uzunligi bo'yicha tartiblangan: 3m,4m,6m,8m,10m,12m
 const DXF_LENGTHS = Object.keys(SHEET_LENGTHS).sort((a, b) => SHEET_LENGTHS[a] - SHEET_LENGTHS[b]);
 
@@ -46,7 +50,7 @@ async function captureReceipt(node) {
   let blob = null;
   for (let i = 0; i < 3 && !blob; i++) {
     try {
-      blob = await toBlob(node, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
+      blob = await toBlob(node, { pixelRatio: 2, backgroundColor: RECEIPT_DARK_BG, cacheBust: true });
     } catch (e) { blob = null; }
   }
   return blob;
@@ -61,6 +65,15 @@ function chekStamp() {
 
 // ===== CHEK TANASI — narxsiz prop bilan boshqariladi (narxlar yashirinadi) =====
 function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd, sotishUsd, kRows, ustaTel = [] }) {
+  // Summa TARKIBI — Umumiy summa qaysi bo'laklardan yig'ilganini ochiq ko'rsatamiz
+  // (mijoz "bu summa qayerdan keldi" deb so'ramasin). Manba: zakasning o'zi.
+  const bMahsulot = (order.items || []).reduce((s, it) => s + (it.kind === 'aksessuar' ? 0 : (it.jamiSumma || 0)), 0);
+  const bAksessuar = (order.items || []).reduce((s, it) => s + (it.kind === 'aksessuar' ? (it.jamiSumma || 0) : 0), 0)
+    + (order.aksessuarlar || []).reduce((s, a) => s + (Number(a.jami) || 0), 0);
+  const bKaz = (kRows || []).reduce((s, r) => s + (Number(r.jami) || 0), 0);
+  const bDastafka = (order.dastafka && !order.dastafka.ichida) ? (parseFloat(order.dastafka.summa) || 0) : 0;
+  const bParts = [bMahsulot, bAksessuar, bKaz, bDastafka].filter((v) => v > 0);
+  const showBreakdown = bParts.length >= 2;   // bitta bo'lak bo'lsa — jami = o'zi, takrorlamaymiz
   return (
     <>
       {/* Accent sarlavha tasmasi (mavzu rangida) */}
@@ -141,10 +154,12 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
           </tbody>
         </table>
 
-        {!narxsiz && order.dastafka && (order.dastafka.ichida || order.dastafka.summa > 0) && (
+        {/* Dastafka "ichida" bo'lsa — narxsiz rejimda ham ko'rinadi (mijoz dastafka bor-yo'qligini
+            bilsin); summasi bo'lsa, u quyidagi summa tarkibida (breakdown) chiqadi. */}
+        {order.dastafka?.ichida && (
           <div className="flex justify-between items-center text-xs mb-3 px-1 border border-slate-200 rounded-lg p-2 bg-slate-50">
             <span className="text-slate-600 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> Dastafka xizmati</span>
-            <span className="font-semibold text-slate-800">{order.dastafka.ichida ? 'Ichida (narxga kiritilgan)' : `${fmt(order.dastafka.summa)} so'm`}</span>
+            <span className="font-semibold text-slate-800">{narxsiz ? 'Ichida' : 'Ichida (narxga kiritilgan)'}</span>
           </div>
         )}
 
@@ -156,6 +171,23 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
 
         {!narxsiz && (
         <div className="rounded-xl border-2 border-slate-900 overflow-hidden">
+          {/* Summa TARKIBI — har bir bo'lak alohida qator (faqat bir nechta bo'lak bo'lsa) */}
+          {showBreakdown && (
+            <div className="px-3 py-2.5 space-y-1 bg-slate-50 border-b border-slate-200 text-xs">
+              {bMahsulot > 0 && (
+                <div className="flex justify-between"><span className="text-slate-500">Tovarlar</span><span className="tabular-nums text-slate-700">{fmt(bMahsulot)} so'm</span></div>
+              )}
+              {bAksessuar > 0 && (
+                <div className="flex justify-between"><span className="text-slate-500">Aksessuarlar</span><span className="tabular-nums text-slate-700">+ {fmt(bAksessuar)} so'm</span></div>
+              )}
+              {bKaz > 0 && (
+                <div className="flex justify-between"><span className="text-slate-500">Kazirok (material + 25%)</span><span className="tabular-nums text-slate-700">+ {fmt(bKaz)} so'm</span></div>
+              )}
+              {bDastafka > 0 && (
+                <div className="flex justify-between"><span className="text-slate-500">Dastafka</span><span className="tabular-nums text-slate-700">+ {fmt(bDastafka)} so'm</span></div>
+              )}
+            </div>
+          )}
           <div className="flex justify-between items-center bg-slate-900 text-white px-3 py-2.5">
             <span className="text-sm font-semibold">Umumiy summa</span>
             <b className="text-lg tabular-nums">{fmt(order.totalSum)} so'm</b>
@@ -205,7 +237,8 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
 
 export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, kazData = { groups: [] }, kazRows = [], tunikaBaza = [], ustalar = [], telegram = {}, libRoot = null, onChatMigrated = () => {}, onClose }) {
   const printRef = useRef(null);
-  const dxfImgRef = useRef(null);                   // ekrandan tashqari, DOIM narxsiz chek (albom rasmi uchun)
+  const dxfImgRef = useRef(null);                   // ekrandan tashqari, DOIM narxsiz TO'Q chek (albom rasmi uchun)
+  const darkShareRef = useRef(null);                // ekrandan tashqari, TO'Q chek — WhatsApp/Telegram rasmi (narxsiz holatga ergashadi)
   const [narxsiz, setNarxsiz] = useState(false);   // narxsiz rejim — narxlarni yashiradi (oldindan yoqiladi)
   const [busy, setBusy] = useState(false);          // rasm tayyorlanmoqda
   const [dxfBusy, setDxfBusy] = useState('');       // '' | '4m' | '6m' — DXF tayyorlanyapti
@@ -370,12 +403,13 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
       window.open(`https://t.me/share/url?url=${text}`, '_blank', 'noopener');
     }
   }
-  // Chekning RASMINI yuborish (WhatsApp/Telegram — qurilma ulashish oynasi orqali)
+  // Chekning RASMINI yuborish (WhatsApp/Telegram — qurilma ulashish oynasi orqali).
+  // Surat TO'Q (dark) nusxadan olinadi — orqa fon to'q, yozuv/chizmalar yorqin.
   async function shareImage(app) {
-    if (!printRef.current || busy) return;
+    if (!darkShareRef.current || busy) return;
     setBusy(true);
     try {
-      const blob = await toBlob(printRef.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
+      const blob = await captureReceipt(darkShareRef.current);
       if (!blob) throw new Error('rasm yo\'q');
       const file = new File([blob], `zakas-${order.number}.png`, { type: 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -470,22 +504,35 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
         </div>
       </div>
 
-      {/* ===== EKRANDAN TASHQARI: DOIM NARXSIZ CHEK — albom rasmi shu yerdan olinadi =====
+      {/* ===== EKRANDAN TASHQARI: RASM bo'lib yuboriladigan TO'Q (dark) NUSXALAR =====
+          Telegram/WhatsApp rasmi va DXF albom rasmi shu yerdan olinadi — chek
+          har doim to'q fon, yorqin yozuv/chizmali ko'rinadi (ekrandagi chek va
+          chop etish OQ qoladi).
           MUHIM: siljish (left:-99999px) faqat TASHQI o'ramda. Suratga olinadigan
           ICHKI tugunda hech qanday position/offset yo'q — aks holda html-to-image
           kontentni SVG'dan tashqariga surib, OQ (bo'sh) rasm chiqaradi. */}
-      {hasKaz && (
-        <div aria-hidden="true"
-          onClick={(e) => e.stopPropagation()}
-          style={{ position: 'fixed', left: '-99999px', top: 0, pointerEvents: 'none', zIndex: -1 }}>
+      <div aria-hidden="true"
+        onClick={(e) => e.stopPropagation()}
+        style={{ position: 'fixed', left: '-99999px', top: 0, pointerEvents: 'none', zIndex: -1 }}>
+        {/* WhatsApp/Telegram surati — joriy "narxsiz" holatga ergashadi.
+            Inline `background` — html-to-image ba'zan scoped CSS fonini o'tkazib yuboradi,
+            shuning uchun to'q fonni inline ham beramiz (RECEIPT_DARK_BG bilan bir xil). */}
+        <div ref={darkShareRef}
+          style={{ width: '448px', fontFamily: 'Georgia, serif', background: RECEIPT_DARK_BG }}
+          className="receipt-dark">
+          <ReceiptBody order={order} shopName={shopName} shopPhone={shopPhone} narxsiz={narxsiz}
+            statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel} />
+        </div>
+        {/* DXF albom surati — DOIM narxsiz (mijozga narxsiz ketadi) */}
+        {hasKaz && (
           <div ref={dxfImgRef}
-            style={{ width: '448px', background: '#ffffff', fontFamily: 'Georgia, serif' }}
-            className="text-slate-900">
+            style={{ width: '448px', fontFamily: 'Georgia, serif', background: RECEIPT_DARK_BG }}
+            className="receipt-dark">
             <ReceiptBody order={order} shopName={shopName} shopPhone={shopPhone} narxsiz={true}
               statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel} />
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

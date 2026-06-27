@@ -27,6 +27,47 @@
   .receipt-print * { background: #fff !important; color: #000 !important; box-shadow: none !important; }
 }
 
+/* ============================================================
+   CHEKNING TO'Q (DARK) NUSXASI — faqat RASM bo'lib yuborishda
+   (Telegram / WhatsApp / DXF albom). Ekranda ko'rinadigan chek va
+   chop etish (print) OQ qoladi; rasmga olinadigan offscreen nusxa
+   shu klass bilan to'q fonga o'tadi. Mavzudan (light/dark) mustaqil —
+   har doim bir xil to'q, yorqin yozuvli ko'rinadi.
+   ============================================================ */
+.receipt-dark { background: #0f172a; color: #e2e8f0; }
+.receipt-dark .bg-white { background-color: #1e293b !important; }
+.receipt-dark .bg-slate-50 { background-color: #1e293b !important; }
+.receipt-dark .bg-slate-100 { background-color: #334155 !important; }
+/* Accent panel (sarlavha tasmasi, "Umumiy summa" boshi) — to'q fonda yorug' ajralib tursin */
+.receipt-dark .bg-slate-900 { background-color: #475569 !important; background-image: none !important; }
+/* Sarlavhadagi yarim-shaffof oq ikonka konteyneri (bg-white/15) — to'q panelda ko'rinsin */
+.receipt-dark .bg-white\/15 { background-color: rgba(255, 255, 255, .22) !important; }
+.receipt-dark .text-slate-900 { color: #f1f5f9 !important; }
+.receipt-dark .text-slate-800,
+.receipt-dark .text-slate-700,
+.receipt-dark .text-slate-600 { color: #e2e8f0 !important; }
+.receipt-dark .text-slate-500,
+.receipt-dark .text-slate-400,
+.receipt-dark .text-slate-300 { color: #94a3b8 !important; }
+.receipt-dark .border-slate-100,
+.receipt-dark .border-slate-200,
+.receipt-dark .border-slate-300 { border-color: #334155 !important; }
+.receipt-dark .border-slate-900 { border-color: #64748b !important; }
+/* Holat/qarz accentlari — to'q fonda yorqin */
+.receipt-dark .text-emerald-800 { color: #34d399 !important; }
+.receipt-dark .text-amber-800 { color: #fbbf24 !important; }
+.receipt-dark .text-red-800 { color: #f87171 !important; }
+.receipt-dark .text-rose-500 { color: #fb7185 !important; }
+.receipt-dark .bg-emerald-100 { background-color: rgba(52, 211, 153, .22) !important; }
+.receipt-dark .bg-amber-100 { background-color: rgba(251, 191, 36, .22) !important; }
+.receipt-dark .bg-red-100 { background-color: rgba(248, 113, 113, .22) !important; }
+.receipt-dark .border-emerald-300 { border-color: rgba(52, 211, 153, .5) !important; }
+.receipt-dark .border-amber-300 { border-color: rgba(251, 191, 36, .5) !important; }
+.receipt-dark .border-red-300 { border-color: rgba(248, 113, 113, .5) !important; }
+/* Kanyok/Latok profil rasmlari — qora kontur to'q fonda ko'rinmaydi → oqartiramiz.
+   Rangli offset (material rangi) <span> da bo'lgani uchun o'zgarmaydi. */
+.receipt-dark img { filter: invert(1); }
+
 /* ===== Raqamli inputlardagi strelkalarni yashirish ===== */
 input[type='number']::-webkit-inner-spin-button,
 input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -691,6 +732,44 @@ html.themed .chz-kaz-need.on { background: #ef4444; border-color: #ef4444; color
 .chz-kaz-listsel select { width: 100%; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 12px; font-weight: 600; color: #0f172a; background: #fff; }
 .chz-kaz-listsel select:focus { outline: none; border-color: var(--chz-kazirok); }
 html.themed .chz-kaz-listsel { color: var(--c-t3); }
+
+/* ===== Kazirok kartalari — har biri alohida yoyiladi/yig'iladi (collapse) ===== */
+.chz-kaz-item { position: relative; }
+.chz-kaz-ihead { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+.chz-kaz-ihead .chz-kaz-head { flex: 1; min-width: 0; margin-bottom: 0; }
+/* Yoyish/yig'ish tugmasi (chevron) */
+.chz-kaz-itoggle {
+  flex: none; width: 20px; height: 20px; padding: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #475569;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.chz-kaz-itoggle::before { content: '▾'; font-size: 10px; line-height: 1; }
+.chz-kaz-item.closed .chz-kaz-itoggle::before { content: '▸'; }
+.chz-kaz-itoggle:hover { border-color: var(--chz-kazirok); color: var(--chz-kazirok); }
+html.themed .chz-kaz-itoggle { background: var(--c-bg); border-color: var(--c-line); color: var(--c-t2); }
+/* Yig'ilganda — batafsil sozlamalar yashirin; sarlavha (razmer+dona) va KICHIK chizma qoladi */
+.chz-kaz-item.closed .chz-kaz-ibody { display: none; }
+.chz-kaz-item.closed .chz-kaz-draw { max-width: 150px; margin: 0 0 2px; }
+/* Guruh tepasidagi sarlavha ("Kazirok" / "Tashqi burchak qozon") + "Hammasini" tugmasi */
+.chz-kaz-superhead {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--chz-kazirok);
+}
+.chz-kaz-superhead > span { font-size: 13px; font-weight: 800; color: var(--chz-kazirok); }
+.chz-kaz-superhead-top { margin: 2px 0 12px; }
+.chz-kaz-allbtn {
+  flex: none; padding: 5px 11px; font-size: 10.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--chz-kazirok); border-radius: 6px; background: #fff; color: var(--chz-kazirok);
+  transition: background .12s, color .12s;
+}
+.chz-kaz-allbtn:hover { background: var(--chz-kazirok); color: #fff; }
+html.themed .chz-kaz-allbtn { background: var(--c-bg); }
+html.themed .chz-kaz-allbtn:hover { background: var(--chz-kazirok); color: #fff; }
+/* "Kerak emas" qilingan guruh — yig'ish o'chiriladi (qaytarish tugmasi doim ko'rinsin) */
+.chz-kaz-off .chz-kaz-itoggle { display: none; }
+.chz-kaz-off .chz-kaz-item.closed .chz-kaz-ibody { display: block; }
+.chz-kaz-off .chz-kaz-item.closed .chz-kaz-draw { max-width: none; }
 html.themed .chz-kaz-listsel select { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
 /* Burchak qozon — List ko'rsatkichi (read-only; Pataloklar Listiga ergashadi) */
 .chz-kaz-listro { width: 100%; padding: 4px 6px; border: 1px dashed #cbd5e1; border-radius: 5px; font-size: 12px; font-weight: 600; color: #0f172a; background: #f8fafc; }

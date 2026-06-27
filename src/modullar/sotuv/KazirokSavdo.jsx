@@ -69,7 +69,7 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
     let e = per.get(key);
     if (!e) { e = { listId: id, kind: 'qoz', metr: 0, eni: new Set() }; per.set(key, e); }
     e.metr += it.meters;
-    e.eni.add(it.wcm + '×' + it.hcm);
+    e.eni.add((it.razX ?? it.wcm) + '×' + (it.razY ?? it.hcm));
   }
   // Eni o'lchamlari yorlig'i: pat/pal uchun "62.5 lik, 41.6 lik"; qoz uchun "62×40, ...".
   const sizeStr = (set) => [...set].sort((a, b) => b - a).map((v) => (+v.toFixed(2)) + ' lik').join(', ');
@@ -176,7 +176,7 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
           <span className="min-w-0 flex-1">
             <span className="block font-semibold text-sm text-slate-800 leading-tight">Tashqi burchak qozon</span>
             <span className="block text-[11px] text-slate-500 truncate">
-              {it.wcm} × {it.hcm} sm · {it.count} dona · {listNom(it.listId)}
+              {(it.razX ?? it.wcm)} × {(it.razY ?? it.hcm)} sm · {it.count} dona · {listNom(it.listId)}
             </span>
           </span>
           <span className="text-[11px] text-slate-400 tabular-nums hidden sm:inline mr-1">{it.meters.toFixed(2)} m</span>
@@ -188,8 +188,8 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
             <div className="bg-slate-50 rounded-lg border border-slate-200 p-2 flex justify-center text-slate-700 max-h-[300px] overflow-auto"
               dangerouslySetInnerHTML={{ __html: it.svg }} />
             <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-              <Fact label="Tomon A (eni)" val={it.wcm + ' sm'} />
-              <Fact label="Tomon B (bo'yi)" val={it.hcm + ' sm'} />
+              <Fact label="Razmeri (tepa)" val={(it.razX ?? it.wcm) + ' sm'} />
+              <Fact label="Razmeri (chap)" val={(it.razY ?? it.hcm) + ' sm'} />
               <Fact label="Bo'lak" val={it.bolak + ' ta'} />
               <Fact label="1 bo'lak" val={(it.pieceLenCm / 100).toFixed(2) + ' m'} />
               <Fact label="List metri" val={it.meters.toFixed(2) + ' m'} />

@@ -1,17 +1,262 @@
 // ============================================================
 //  NARXLAR → KAZIROKLAR
 // ------------------------------------------------------------
-//  Kaziroklar ro'yxati: narxini o'zgartirish, qo'shish,
-//  o'chirish va TARTIBINI o'zgartirish (yuqori/past).
-//  Element: { id, nomi, narx, birlik, rang }
+//  Ikki qism:
+//   1) KAZIROK TURLARI (fasonlar) — masalan "Qosh 90 gradus". Turga
+//      kirilganda Patalok va Paloska detallari har biri JONLI CHIZMASI,
+//      chizilish/hisoblash mantig'i va list metridan hisoblangan narxi
+//      bilan ko'rinadi. Foyda foizi (%) — o'zgartirsa bo'ladigan parametr.
+//   2) Oddiy KAZIROKLAR narx ro'yxati (nomi/narx/birlik/rang) — eski xulq.
+//  Geometriya/hisob: src/lib/kazirokGeom.js (savdo Chizma engine bilan bir xil).
 // ============================================================
 import React, { useState } from 'react';
-import { Plus, Trash2, ChevronUp, ChevronDown, Triangle, Edit3, Copy } from 'lucide-react';
+import { Plus, Trash2, ChevronUp, ChevronDown, Triangle, Edit3, Copy, ChevronRight, ArrowLeft, Ruler } from 'lucide-react';
 import { Card, SectionTitle, RangTanla, RangBadge } from '../../components/ui.jsx';
 import { genId, fmt, rangGuruhlari } from '../../lib/helpers.js';
+import { KAZ_DETS, kazSvg, kazItemCalc } from '../../lib/kazirokGeom.js';
 
-export function KazirokTab({ kaziroklar, updateKaziroklar, ranglar = [], showToast }) {
-  const rangGuruh = rangGuruhlari(ranglar); // Sozlamalardagi guruhlangan to'liq palitra
+export function KazirokTab({ kaziroklar, updateKaziroklar, kazTurlari = [], updateKazTurlari, ranglar = [], showToast }) {
+  const [openTuriId, setOpenTuriId] = useState(null);
+  const openTuri = kazTurlari.find((t) => t.id === openTuriId) || null;
+
+  // Tur ichidagi o'zgarishni (foyda / pataloklar / paloskalar) saqlaydi.
+  function patchTuri(id, patch) {
+    if (!updateKazTurlari) return;
+    updateKazTurlari(kazTurlari.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }
+
+  if (openTuri) {
+    return <TuriDetail turi={openTuri} onBack={() => setOpenTuriId(null)} onPatch={(p) => patchTuri(openTuri.id, p)} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <TurlarSection kazTurlari={kazTurlari} onOpen={setOpenTuriId} />
+      <FlatKazirokList kaziroklar={kaziroklar} updateKaziroklar={updateKaziroklar} ranglar={ranglar} showToast={showToast} />
+    </div>
+  );
+}
+
+/* ============================================================
+   1-QISM: Kazirok turlari ro'yxati (fasonlar)
+   ============================================================ */
+function TurlarSection({ kazTurlari, onOpen }) {
+  return (
+    <Card>
+      <SectionTitle icon={Triangle}>Kazirok turlari ({kazTurlari.length})</SectionTitle>
+      {kazTurlari.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-4">Tur mavjud emas</p>
+      ) : (
+        <div className="space-y-1.5">
+          {kazTurlari.map((t) => {
+            const np = (t.pataloklar || []).length, nl = (t.paloskalar || []).length;
+            return (
+              <button key={t.id} onClick={() => onOpen(t.id)}
+                className="w-full flex items-center gap-3 p-3 border border-slate-200 rounded-xl bg-white hover:border-slate-900 transition text-left">
+                <span className="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center flex-shrink-0">
+                  <Ruler className="w-4.5 h-4.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-sm text-slate-800 truncate">{t.nomi}</span>
+                  <span className="block text-[11px] text-slate-500">
+                    {np} patalok · {nl} paloska · foyda {Number(t.foyda) || 0}%
+                  </span>
+                </span>
+                <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-[11px] text-slate-400 mt-3">
+        Turga bosing — pataloklar va paloskalar chizmasi, hisobi va narxi ochiladi.
+        Hozircha bitta tur ("Qosh 90 gradus"); kelajakda boshqa fasonlar qo'shiladi.
+      </p>
+    </Card>
+  );
+}
+
+/* ============================================================
+   2-QISM: Tur batafsil — pataloklar + paloskalar + foyda %
+   ============================================================ */
+function TuriDetail({ turi, onBack, onPatch }) {
+  const foyda = Number(turi.foyda) || 0;
+  const items = (kind) => (kind === 'pat' ? turi.pataloklar : turi.paloskalar) || [];
+  const key = (kind) => (kind === 'pat' ? 'pataloklar' : 'paloskalar');
+
+  const setItems = (kind, arr) => onPatch({ [key(kind)]: arr });
+  const patchItem = (kind, id, p) => setItems(kind, items(kind).map((it) => (it.id === id ? { ...it, ...p } : it)));
+  const removeItem = (kind, id) => setItems(kind, items(kind).filter((it) => it.id !== id));
+  const dupItem = (kind, it) => {
+    const arr = items(kind);
+    const i = arr.findIndex((x) => x.id === it.id);
+    const next = [...arr];
+    next.splice(i + 1, 0, { ...it, id: genId() });
+    setItems(kind, next);
+  };
+  function addItem(kind) {
+    const d = KAZ_DETS[kind].def;
+    const base = { id: genId(), eni: d.eni, peshona: d.peshona, razmeri: d.razmeri, metrNarx: 0 };
+    if (kind === 'pat') base.fold = false;
+    setItems(kind, [...items(kind), base]);
+  }
+
+  return (
+    <Card>
+      {/* Sarlavha + orqaga */}
+      <div className="flex items-center gap-2 mb-3">
+        <button onClick={onBack} className="p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex-1 min-w-0 truncate">{turi.nomi}</h2>
+      </div>
+
+      {/* Foyda foizi — umumiy parametr */}
+      <div className="mb-4 p-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/50">
+        <label className="block text-[11px] font-semibold text-emerald-800 mb-1.5">Foyda foizi (%)</label>
+        <div className="flex items-center gap-2">
+          <input type="number" inputMode="decimal" value={turi.foyda ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+            onChange={(e) => onPatch({ foyda: e.target.value })}
+            className="w-28 px-2.5 py-2 border-2 border-emerald-200 rounded-lg bg-white tabular-nums text-sm outline-none focus:border-emerald-600 transition" />
+          <span className="text-[11px] text-slate-500">
+            Sotuv narxi = material × (1 + foyda%). Har detalga shu foiz qo'llanadi.
+          </span>
+        </div>
+      </div>
+
+      <KazDetGroup kind="pat" items={items('pat')} foyda={foyda}
+        onAdd={() => addItem('pat')} onPatch={(id, p) => patchItem('pat', id, p)}
+        onRemove={(id) => removeItem('pat', id)} onDup={(it) => dupItem('pat', it)} />
+      <div className="h-4" />
+      <KazDetGroup kind="pal" items={items('pal')} foyda={foyda}
+        onAdd={() => addItem('pal')} onPatch={(id, p) => patchItem('pal', id, p)}
+        onRemove={(id) => removeItem('pal', id)} onDup={(it) => dupItem('pal', it)} />
+    </Card>
+  );
+}
+
+// Patalok yoki Paloska guruhi — har detal kartasi chizma + hisob + narx bilan.
+function KazDetGroup({ kind, items, foyda, onAdd, onPatch, onRemove, onDup }) {
+  const title = KAZ_DETS[kind].title;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">{title}lar ({items.length})</h3>
+        <button onClick={onAdd} className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-lg px-2 py-1">
+          <Plus className="w-3.5 h-3.5" /> Qo'shish
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-400 text-center py-3 border border-dashed border-slate-200 rounded-xl">Hali {title.toLowerCase()} qo'shilmagan</p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((it) => (
+            <KazDetCard key={it.id} kind={kind} it={it} foyda={foyda}
+              onPatch={(p) => onPatch(it.id, p)} onRemove={() => onRemove(it.id)} onDup={() => onDup(it)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Bitta detal kartasi — jonli chizma, tahrirlanadigan razmerlar, hisob, narx.
+function KazDetCard({ kind, it, foyda, onPatch, onRemove, onDup }) {
+  const c = kazItemCalc(kind, it);                 // bolak / pieceLenCm / listMetri (clamp qilingan)
+  const metrNarx = Number(it.metrNarx) || 0;
+  const material = c.listMetri * metrNarx;         // 1 dona material qiymati
+  const sotuv = material * (1 + foyda / 100);      // 1 dona sotuv narxi (foyda bilan)
+  const svg = kazSvg(kind, c.eni, c.peshona, c.razmeri, c.fold);
+
+  const numField = (k, lbl, val) => (
+    <label className="block">
+      <span className="block text-[10px] text-slate-400 mb-0.5">{lbl}</span>
+      <div className="flex items-center gap-1">
+        <input type="number" inputMode="decimal" step="0.5" value={val ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          onChange={(e) => onPatch({ [k]: e.target.value })}
+          className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
+        <span className="text-[10px] text-slate-400">sm</span>
+      </div>
+    </label>
+  );
+
+  return (
+    <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+      {/* Sarlavha */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+        <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${kind === 'pat' ? 'bg-emerald-600' : 'bg-sky-600'}`}>
+          {c.bolak}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-semibold text-slate-800">{KAZ_DETS[kind].title}</span>
+          <span className="block text-[10px] text-slate-400 tabular-nums">{c.bolak} bo'lak · eni {(+c.eni).toFixed(2)} sm</span>
+        </span>
+        <button title="Nusxalash" onClick={onDup} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><Copy className="w-4 h-4" /></button>
+        <button title="O'chirish" onClick={onRemove} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></button>
+      </div>
+
+      {/* Jonli chizma (kazirokGeom — savdodagidek) */}
+      <div className="bg-slate-50/70 border-b border-slate-100 p-2 flex justify-center text-slate-700 max-h-[280px] overflow-auto"
+        dangerouslySetInnerHTML={{ __html: svg }} />
+
+      <div className="p-3 space-y-3">
+        {/* Tahrirlanadigan razmerlar */}
+        <div className="grid grid-cols-3 gap-2">
+          {numField('eni', 'Eni', it.eni)}
+          {numField('peshona', 'Peshona', it.peshona)}
+          {numField('razmeri', 'Razmeri', it.razmeri)}
+        </div>
+        {KAZ_DETS[kind].foldable && (
+          <button type="button" onClick={() => onPatch({ fold: !it.fold })}
+            className={`flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border ${it.fold ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
+            <span className={`w-3.5 h-3.5 rounded-sm border ${it.fold ? 'bg-white border-white' : 'border-slate-400'}`} />
+            Orqasi qayrilgan
+          </button>
+        )}
+
+        {/* Hisoblash mantig'i */}
+        <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+          <Fact label="Bo'lak" val={c.bolak + ' ta'} />
+          <Fact label="1 bo'lak" val={c.pieceM.toFixed(2) + ' m'} />
+          <Fact label="List metri (1 dona)" val={c.listMetri.toFixed(3) + ' m'} />
+        </div>
+
+        {/* Narx: 1 metr narxi → material → sotuv (foyda bilan) */}
+        <div className="rounded-lg border border-slate-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-100">
+            <span className="text-[11px] text-slate-500 whitespace-nowrap">1 metr narxi</span>
+            <input type="number" inputMode="decimal" value={it.metrNarx ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+              onChange={(e) => onPatch({ metrNarx: e.target.value })}
+              className="w-28 px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
+            <span className="text-[11px] text-slate-400">so'm / m</span>
+          </div>
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-slate-50">
+            <span className="text-[11px] text-slate-500">
+              Material: <span className="tabular-nums font-medium text-slate-600">{fmt(material)}</span> so'm
+              <span className="text-slate-400"> · +{foyda}%</span>
+            </span>
+            <span className="text-sm font-extrabold text-emerald-700 tabular-nums">{fmt(sotuv)} so'm</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Fact({ label, val }) {
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5">
+      <div className="text-[10px] text-slate-400 leading-tight">{label}</div>
+      <div className="text-xs font-semibold text-slate-700 tabular-nums leading-tight">{val}</div>
+    </div>
+  );
+}
+
+/* ============================================================
+   3-QISM: Oddiy kaziroklar narx ro'yxati (eski xulq, o'zgarmagan)
+   ============================================================ */
+function FlatKazirokList({ kaziroklar, updateKaziroklar, ranglar = [], showToast }) {
+  const rangGuruh = rangGuruhlari(ranglar);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ nomi: '', narx: '', birlik: 'dona', rang: '' });
@@ -55,7 +300,7 @@ export function KazirokTab({ kaziroklar, updateKaziroklar, ranglar = [], showToa
 
   return (
     <Card>
-      <SectionTitle icon={Triangle}>Kaziroklar ({kaziroklar.length})</SectionTitle>
+      <SectionTitle icon={Triangle}>Kaziroklar narxi ({kaziroklar.length})</SectionTitle>
 
       {adding ? (
         <div className="p-3 bg-slate-50 border-2 border-slate-300 rounded-lg space-y-2 mb-3 text-xs">

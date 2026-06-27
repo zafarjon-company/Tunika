@@ -50,7 +50,7 @@ import { fetchKurslar } from './lib/kurs.js';
 import { LoginScreen } from './components/LoginScreen.jsx';
 import {
   DEFAULT_TUNIKA_BAZA, DEFAULT_LATOK, DEFAULT_SHOP_NAME,
-  DEFAULT_PRODUCTS, DEFAULT_USD_RATE, DEFAULT_AKSESSUARLAR, DEFAULT_KAZIROKLAR,
+  DEFAULT_PRODUCTS, DEFAULT_USD_RATE, DEFAULT_AKSESSUARLAR, DEFAULT_KAZIROKLAR, DEFAULT_KAZ_TURLARI,
 } from './lib/constants.js';
 import {
   fmt, genId, calcItem, makeBlankItem, makeBlankPayment, makeBlankDraft,
@@ -323,6 +323,7 @@ export default function App() {
   const [products, setProducts]     = useState(DEFAULT_PRODUCTS);
   const [aksessuarlar, setAksessuarlar] = useState(DEFAULT_AKSESSUARLAR);
   const [kaziroklar, setKaziroklar]   = useState(DEFAULT_KAZIROKLAR);
+  const [kazTurlari, setKazTurlari]   = useState(DEFAULT_KAZ_TURLARI); // narxlar > Kazirok turlari (fasonlar)
   const [metrlilar, setMetrlilar]   = useState([]);
   const [ranglar, setRanglar]       = useState([]);
   const [klentlar, setKlentlar]     = useState([]);
@@ -394,6 +395,7 @@ export default function App() {
         ...a, birlik: a.birlik || (/semichka|tom samarez/i.test(a.nomi) ? 'kg' : 'dona'),
       })))],
       ['kaziroklar', (v) => setKaziroklar(v || [])],
+      ['kazirok-turlari', (v) => setKazTurlari(Array.isArray(v) ? v : DEFAULT_KAZ_TURLARI)],
       ['metrlilar', setMetrlilar],
       ['ranglar', setRanglar],
       ['lavozimlar', setLavozimlar],
@@ -644,6 +646,7 @@ export default function App() {
   function updateProducts(v)   { setProducts(v);   persist('dynamic-products', v); }
   function updateAksessuarlar(v) { setAksessuarlar(v); persist('aksessuarlar', v); }
   function updateKaziroklar(v)   { setKaziroklar(v);   persist('kaziroklar', v); }
+  function updateKazTurlari(v)    { setKazTurlari(v);   persist('kazirok-turlari', v); }
   function updateMetrlilar(v)  { setMetrlilar(v);  persist('metrlilar', v); }
   function updateRanglar(v)    { setRanglar(v);    persist('ranglar', v); }
   function updateUstalar(v)    { setUstalar(v);    persist('ustalar', v); }
@@ -698,6 +701,10 @@ export default function App() {
     }
 
     const tovarSum = items.reduce((s, x) => s + x.jamiSumma, 0);
+    // Hisob-kitob "ochiq" bo'lishi uchun tovarlarni aksessuardan ajratamiz
+    // (chek va savdo paneli har bir bo'lakni alohida ko'rsatadi — summa qayerdan kelganini mijoz ko'radi).
+    const mahsulotSum = items.reduce((s, x) => s + (x.kind === 'aksessuar' ? 0 : x.jamiSumma), 0);
+    const aksessuarSum = items.reduce((s, x) => s + (x.kind === 'aksessuar' ? x.jamiSumma : 0), 0);
     // Kazirok (chizmadan, avtomatik) — har List bo'yicha material + 25% xizmat.
     // jami (= material × 1.25) umumiy summaga qo'shiladi.
     const kaz = computeKazRows(kazData, tunikaBaza, kazNarx);
@@ -712,7 +719,7 @@ export default function App() {
 
     const debt = Math.max(0, totalSum - totalPaid);
     return {
-      items, tovarSum, dastafkaIchida, dastafkaSumma, totalSum, totalPaid, debt,
+      items, tovarSum, mahsulotSum, aksessuarSum, dastafkaIchida, dastafkaSumma, totalSum, totalPaid, debt,
       kazRows: kaz.rows, kazTotalJami: kaz.totalJami, kazTotalMaterial: kaz.totalMaterial, kazTotalXizmat: kaz.totalXizmat,
     };
   }, [draft, tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products, kazData, kazNarx]);
@@ -1200,6 +1207,7 @@ export default function App() {
             metrlilar={metrlilar} updateMetrlilar={updateMetrlilar}
             aksessuarlar={aksessuarlar} updateAksessuarlar={updateAksessuarlar}
             kaziroklar={kaziroklar} updateKaziroklar={updateKaziroklar}
+            kazTurlari={kazTurlari} updateKazTurlari={updateKazTurlari}
             ranglar={ranglar}
             showToast={showToast}
           />

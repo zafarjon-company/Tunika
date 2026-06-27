@@ -76,6 +76,33 @@ export const DEFAULT_USD_RATE = 12600;
 export const DEFAULT_KAZIROKLAR = [];
 
 // ============================================================
+//  KAZIROK TURLARI (fasonlar) — narxlar > Kaziroklar
+// ------------------------------------------------------------
+//  Har tur (masalan "Qosh 90 gradus") ichida Patalok va Paloska
+//  detallari turadi. Har detal — eni/peshona/razmeri parametrlari,
+//  jonli chizmasi (kazirokGeom) va list metridan hisoblangan narxi.
+//  `foyda` — butun turga umumiy foyda foizi (sotuv = material × (1 + foyda%)).
+//  Har detal: { id, eni, peshona, razmeri, fold?, metrNarx } (sm va so'm/m).
+// ============================================================
+export const DEFAULT_KAZ_TURLARI = [
+  {
+    id: 'qosh90',
+    nomi: 'Qosh 90 gradus',
+    foyda: 30, // foyda foizi (%) — o'zgartirsa bo'ladigan parametr
+    pataloklar: [
+      { id: 'p2', eni: 62.5, peshona: 10, razmeri: 50, fold: false, metrNarx: 0 },
+      { id: 'p3', eni: 41.6, peshona: 10, razmeri: 50, fold: false, metrNarx: 0 },
+      { id: 'p4', eni: 31.6, peshona: 10, razmeri: 50, fold: false, metrNarx: 0 },
+    ],
+    paloskalar: [
+      { id: 'l16', eni: 7.75, peshona: 10.1, razmeri: 51.5, metrNarx: 0 },
+      { id: 'l15', eni: 8.3,  peshona: 10.1, razmeri: 51.5, metrNarx: 0 },
+      { id: 'l14', eni: 8.85, peshona: 10.1, razmeri: 51.5, metrNarx: 0 },
+    ],
+  },
+];
+
+// ============================================================
 //  RANGLAR PALITRASI — ASOSIY METALL RANGLAR + SOYALARI
 // ------------------------------------------------------------
 //  Ranglar metall list uchun. Noyob ranglar emas — asosiy mashhur

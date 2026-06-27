@@ -8,7 +8,7 @@ import { MetrliTab } from './Metrli.jsx';
 import { AksessuarlarTab } from './Aksessuarlar.jsx';
 import { KazirokTab } from './Kaziroklar.jsx';
 
-export function NarxlarModule({ tunikaBaza, updateTunikaBaza, metrlilar, updateMetrlilar, aksessuarlar, updateAksessuarlar, kaziroklar, updateKaziroklar, ranglar = [], showToast }) {
+export function NarxlarModule({ tunikaBaza, updateTunikaBaza, metrlilar, updateMetrlilar, aksessuarlar, updateAksessuarlar, kaziroklar, updateKaziroklar, kazTurlari = [], updateKazTurlari, ranglar = [], showToast }) {
   const [sub, setSub] = useState('listlar');
 
   return (
@@ -33,7 +33,7 @@ export function NarxlarModule({ tunikaBaza, updateTunikaBaza, metrlilar, updateM
       {sub === 'listlar' && <ListlarTab tunikaBaza={tunikaBaza} updateTunikaBaza={updateTunikaBaza} ranglar={ranglar} showToast={showToast} />}
       {sub === 'metrli' && <MetrliTab metrlilar={metrlilar} updateMetrlilar={updateMetrlilar} ranglar={ranglar} showToast={showToast} />}
       {sub === 'aksessuarlar' && <AksessuarlarTab aksessuarlar={aksessuarlar} updateAksessuarlar={updateAksessuarlar} ranglar={ranglar} showToast={showToast} />}
-      {sub === 'kaziroklar' && <KazirokTab kaziroklar={kaziroklar} updateKaziroklar={updateKaziroklar} ranglar={ranglar} showToast={showToast} />}
+      {sub === 'kaziroklar' && <KazirokTab kaziroklar={kaziroklar} updateKaziroklar={updateKaziroklar} kazTurlari={kazTurlari} updateKazTurlari={updateKazTurlari} ranglar={ranglar} showToast={showToast} />}
     </div>
   );
 }

@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Trash2, Save, ShoppingCart, User, Hammer, Wallet, Package, ChevronRight, ChevronDown,
-  Loader2, Check, X, AlertCircle, MapPin, Copy, CopyPlus, Truck, Pencil,
+  Loader2, Check, X, AlertCircle, MapPin, Copy, CopyPlus, Truck, Pencil, Scissors,
 } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, KanyokImg, TeskariBadge, CountUp, rangChipStyle } from '../../components/ui.jsx';
 import { fmt, genId, metrliVariantlar, barchaRanglar, aksRangKerak, rangHex, rangMatn, isKanyokAny, reducedMotion } from '../../lib/helpers.js';
@@ -81,6 +81,10 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
   const hasItems = draft.items.length > 0;
   const kazRows = draftCalc.kazRows || [];
   const hasKaz = kazRows.length > 0;   // chizmadan kazirok bor — hisob-kitobda ham ko'rinadi
+  // Summa tarkibi (breakdown) — faqat bir nechta bo'lak bo'lsa ko'rsatamiz
+  // (bitta bo'lakda jami = o'zi, takrorlash ortiqcha). Chek bilan bir xil mantiq.
+  const sumQismlar = [draftCalc.mahsulotSum, draftCalc.aksessuarSum, draftCalc.kazTotalJami, draftCalc.dastafkaSumma].filter((v) => v > 0);
+  const showBreakdown = sumQismlar.length >= 2;
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved
   const [removingIds, setRemovingIds] = useState(() => new Set());
   const [confirmClearAll, setConfirmClearAll] = useState(false); // "Hammasini o'chirish" tasdig'i
@@ -418,19 +422,27 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                 )}
               </div>
 
-              {/* Umumiy summa — real vaqtda yangilanadi */}
+              {/* Umumiy summa — har doim OCHIQ breakdown: summaning har bir bo'lagi
+                  alohida qator bo'lib ko'rinadi (Tovarlar + Aksessuar + Kazirok + Dastafka),
+                  pastda chiziq ostida jami — mijoz "summa qayerdan keldi" deb so'ramaydi. */}
               <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
-                {(draftCalc.dastafkaSumma > 0 || draftCalc.kazTotalJami > 0) && (
+                {showBreakdown && (
                   <>
-                    {draftCalc.tovarSum > 0 && (
+                    {draftCalc.mahsulotSum > 0 && (
                       <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Tovarlar</span>
-                        <span className="tabular-nums text-slate-700">{fmt(draftCalc.tovarSum)} so'm</span>
+                        <span className="text-slate-500 flex items-center gap-1"><Package className="w-3 h-3" /> Tovarlar</span>
+                        <span className="tabular-nums text-slate-700">{fmt(draftCalc.mahsulotSum)} so'm</span>
+                      </div>
+                    )}
+                    {draftCalc.aksessuarSum > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500 flex items-center gap-1"><Plus className="w-3 h-3" /> Aksessuarlar</span>
+                        <span className="tabular-nums text-slate-700">+ {fmt(draftCalc.aksessuarSum)} so'm</span>
                       </div>
                     )}
                     {draftCalc.kazTotalJami > 0 && (
                       <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Kazirok (material + 25%)</span>
+                        <span className="text-slate-500 flex items-center gap-1"><Scissors className="w-3 h-3" /> Kazirok (material + 25%)</span>
                         <span className="tabular-nums text-slate-700">+ {fmt(draftCalc.kazTotalJami)} so'm</span>
                       </div>
                     )}
@@ -442,7 +454,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                     )}
                   </>
                 )}
-                <div className="flex justify-between items-center">
+                <div className={`flex justify-between items-center ${showBreakdown ? 'pt-1.5 border-t border-slate-200' : ''}`}>
                   <span className="text-sm font-semibold text-slate-700">Umumiy summa</span>
                   <span className="text-lg font-bold text-slate-900 tabular-nums">
                     <CountUp value={draftCalc.totalSum} /> so'm

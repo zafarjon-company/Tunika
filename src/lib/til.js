@@ -69,6 +69,7 @@ const RU = {
   // Savdo / hisob
   'Mijoz': 'Клиент', 'Usta': 'Мастер', 'Tovarlar': 'Товары', "Tovar qo'shish": 'Добавить товар',
   'Tovar qo\'shilmagan': 'Товар не добавлен', "Hisob-kitob va To'lov": 'Расчёт и оплата',
+  'Dastafka': 'Доставка', 'Kazirok (material + 25%)': 'Резка (материал + 25%)', 'Kazirok': 'Резка',
   'Hisob-kitob': 'Расчёт', 'Umumiy summa': 'Общая сумма', 'Kiritilgan jami to\'lov': 'Внесённая оплата',
   'Qoldiq qarz summasi': 'Остаток долга', 'Izoh': 'Примечание', 'Razmeri': 'Размер',
   "O'lchov": 'Размер', 'Narx': 'Цена', 'Narxi': 'Цена', 'Rang': 'Цвет', 'Nomi': 'Название',
