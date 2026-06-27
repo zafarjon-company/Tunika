@@ -590,6 +590,29 @@ html.themed .chz-kbolim-empty { color: var(--c-t3); }
 .chz-kaz-head span { font-size: 10px; color: #94a3b8; }
 html.themed .chz-kaz-head b { color: var(--c-t1); }
 html.themed .chz-kaz-head span { color: var(--c-t3); }
+/* Dona — qo'lda tahrirlanadigan (avtomatik hisob ustidan) + avtomatga qaytarish tugmasi */
+.chz-kaz-hr { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.chz-kaz-cnt { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.chz-kaz-cntinp {
+  width: 32px; padding: 1px 2px; text-align: center; font-size: 11px; font-weight: 700; line-height: 1.3;
+  color: #0f172a; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.chz-kaz-cntinp::-webkit-outer-spin-button,
+.chz-kaz-cntinp::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.chz-kaz-cntinp:focus { outline: none; border-color: var(--chz-kazirok); }
+.chz-kaz-cntu { font-size: 10px; color: #94a3b8; }
+.chz-kaz-cntreset {
+  display: none; align-items: center; justify-content: center; flex: none;
+  width: 17px; height: 17px; padding: 0; border: 1px solid var(--chz-kazirok); border-radius: 50%;
+  background: #fff; color: var(--chz-kazirok); font-size: 11px; line-height: 1; cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.chz-kaz-cntreset.on { display: inline-flex; }
+.chz-kaz-cntreset:hover { background: var(--chz-kazirok); color: #fff; }
+html.themed .chz-kaz-cntinp { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+html.themed .chz-kaz-cntu { color: var(--c-t3); }
+html.themed .chz-kaz-cntreset { background: var(--c-bg); }
 .chz-kaz-eni { white-space: nowrap; }
 /* Bitta offset guruhi — sarlavha + ichidagi Patalok/Paloska kartalari */
 .chz-kaz-group { margin-bottom: 16px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: rgba(148,163,184,.05); }
@@ -667,6 +690,9 @@ html.themed .chz-kaz-need.on { background: #ef4444; border-color: #ef4444; color
 .chz-kaz-listsel select:focus { outline: none; border-color: var(--chz-kazirok); }
 html.themed .chz-kaz-listsel { color: var(--c-t3); }
 html.themed .chz-kaz-listsel select { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+/* Burchak qozon — List ko'rsatkichi (read-only; Pataloklar Listiga ergashadi) */
+.chz-kaz-listro { width: 100%; padding: 4px 6px; border: 1px dashed #cbd5e1; border-radius: 5px; font-size: 12px; font-weight: 600; color: #0f172a; background: #f8fafc; }
+html.themed .chz-kaz-listro { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
 /* Umumiy (kazirok yozuvi oldidagi) List tanlovlari — chizmasiz ham ko'rinadi */
 .chz-kaz-glob { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .chz-kaz-globrow { display: flex; align-items: center; gap: 8px; }

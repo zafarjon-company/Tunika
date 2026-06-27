@@ -25,6 +25,7 @@ export const KAZ_SERVICE = 0.25; // xizmat haqi = material qiymatining 25% i
 // zakaslarda esa sizeLabel'dan aniqlaymiz (aralash bo'lsa "Kazirok").
 export function kazRowNom(r) {
   if (r && r.nom) return r.nom;
+  if (r && r.kind === 'qoz') return 'Tashqi burchak qozon';
   const s = (r && r.sizeLabel) || '';
   const hasPat = s.includes('Patalok'), hasPal = s.includes('Paloska');
   if (hasPat && !hasPal) return 'Patalok';
@@ -38,11 +39,12 @@ export function kazRowNom(r) {
 // `narx[listId]` (bo'lmasa List optom narxi).
 export function computeKazRows(data, tunikaBaza = [], narx = {}) {
   const groups = (data && data.groups) || [];
+  const qoz = (data && data.qoz) || [];   // tashqi burchak qozonlar (Pataloklar Listi bilan)
   const listById = (id) => tunikaBaza.find((t) => String(t.id) === String(id)) || null;
   const optom = (id) => { const t = listById(id); return t ? (Number(t.optom) || 0) : 0; };
   const eff = (id) => { const ov = narx[id]; return (ov != null && ov !== '') ? (Number(ov) || 0) : optom(id); };
 
-  // listId × kind bo'yicha — Patalok va Paloska ALOHIDA qatorlar (har biri o'z nomi bilan)
+  // listId × kind bo'yicha — Patalok / Paloska / Burchak qozon ALOHIDA qatorlar.
   const per = new Map(); // "listId|kind" -> { listId, kind, metr, eni:Set }
   let totalDona = 0;
   for (const g of groups) {
@@ -58,24 +60,36 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
       e.eni.add(+it.eni);
     }
   }
-  // Eni o'lchamlari yorlig'i: masalan "62.5 lik, 41.6 lik"
+  // Tashqi burchak qozon — kind 'qoz' (Pataloklar Listi bilan); o'lcham yorlig'i "w × h sm".
+  for (const it of qoz) {
+    if (!it || !(it.count > 0)) continue;
+    totalDona += it.count;
+    const id = it.listId || '';
+    const key = id + '|qoz';
+    let e = per.get(key);
+    if (!e) { e = { listId: id, kind: 'qoz', metr: 0, eni: new Set() }; per.set(key, e); }
+    e.metr += it.meters;
+    e.eni.add(it.wcm + '×' + it.hcm);
+  }
+  // Eni o'lchamlari yorlig'i: pat/pal uchun "62.5 lik, 41.6 lik"; qoz uchun "62×40, ...".
   const sizeStr = (set) => [...set].sort((a, b) => b - a).map((v) => (+v.toFixed(2)) + ' lik').join(', ');
+  const ord = { pat: 0, pal: 1, qoz: 2 };
   const rows = [...per.values()].map((e) => {
     const t = listById(e.listId);
     const price = eff(e.listId);
     const material = e.metr * price;
-    const nom = e.kind === 'pat' ? 'Patalok' : 'Paloska';
+    const nom = e.kind === 'pat' ? 'Patalok' : e.kind === 'pal' ? 'Paloska' : 'Tashqi burchak qozon';
     return {
       id: e.listId + '|' + e.kind, listId: e.listId, kind: e.kind, nom,
       listNom: t ? t.nomi : 'List tanlanmagan', rang: t ? (t.rang || rangTozala(t.nomi)) : '',
-      sizeLabel: sizeStr(e.eni), metr: e.metr, price,
+      sizeLabel: e.kind === 'qoz' ? [...e.eni].join(', ') : sizeStr(e.eni), metr: e.metr, price,
       material, xizmat: material * KAZ_SERVICE, jami: material * (1 + KAZ_SERVICE),
     };
   });
-  // Avval barcha Patalok, keyin barcha Paloska (list nomi bo'yicha) — tartibli ko'rinish
+  // Tartib: Patalok → Paloska → Burchak qozon, har biri ichida List nomi bo'yicha
   rows.sort((a, b) => (a.kind === b.kind
     ? (a.listNom < b.listNom ? -1 : a.listNom > b.listNom ? 1 : 0)
-    : (a.kind === 'pat' ? -1 : 1)));
+    : (ord[a.kind] - ord[b.kind])));
   return {
     rows, totalDona,
     totalMaterial: rows.reduce((s, r) => s + r.material, 0),
@@ -87,7 +101,8 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
 export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPrice }) {
   const [open, setOpen] = useState({}); // qator kaliti -> ochiqmi
   const groups = (data && data.groups) || [];
-  if (!groups.length) return null; // chizmada kazirok yo'q — blok ham yo'q
+  const qoz = (data && data.qoz) || [];   // tashqi burchak qozonlar
+  if (!groups.length && !qoz.length) return null; // chizmada kazirok yo'q — blok ham yo'q
 
   const listById = (id) => tunikaBaza.find((t) => String(t.id) === String(id)) || null;
   const listNom = (id) => { const t = listById(id); return t ? t.nomi : 'List tanlanmagan'; };
@@ -95,7 +110,8 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
   const narxInputVal = (id) => (narx[id] !== undefined ? narx[id] : String(optom(id) || ''));
   const toggle = (k) => setOpen((o) => ({ ...o, [k]: !o[k] }));
 
-  const totalDona = groups.reduce((s, g) => s + (g.pat?.count || 0) + (g.pal?.count || 0), 0);
+  const totalDona = groups.reduce((s, g) => s + (g.pat?.count || 0) + (g.pal?.count || 0), 0)
+    + qoz.reduce((s, it) => s + (it.count || 0), 0);
   const jamiMaterial = rows.reduce((s, r) => s + r.material, 0);
   const jamiXizmat = rows.reduce((s, r) => s + r.xizmat, 0);
 
@@ -146,6 +162,45 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
     );
   };
 
+  // Tashqi burchak qozon qatori (avtomatik, o'lcham burchakdan — w × h)
+  const cornerRow = (it, i) => {
+    const k = 'qoz:' + i;
+    const isOpen = !!open[k];
+    return (
+      <div key={k} className={`border rounded-xl bg-white overflow-hidden transition-colors ${isOpen ? 'border-slate-900' : 'border-slate-200'}`}>
+        <button type="button" onClick={() => toggle(k)}
+          className="w-full flex items-center gap-2 p-2.5 text-left">
+          <span className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold flex-shrink-0 bg-amber-600 text-white">
+            {it.count}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-sm text-slate-800 leading-tight">Tashqi burchak qozon</span>
+            <span className="block text-[11px] text-slate-500 truncate">
+              {it.wcm} × {it.hcm} sm · {it.count} dona · {listNom(it.listId)}
+            </span>
+          </span>
+          <span className="text-[11px] text-slate-400 tabular-nums hidden sm:inline mr-1">{it.meters.toFixed(2)} m</span>
+          <ChevronDown className={`w-4 h-4 text-slate-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isOpen && (
+          <div className="px-3 pb-3 pt-1 border-t border-slate-200/70 space-y-2">
+            <div className="bg-slate-50 rounded-lg border border-slate-200 p-2 flex justify-center text-slate-700 max-h-[300px] overflow-auto"
+              dangerouslySetInnerHTML={{ __html: it.svg }} />
+            <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+              <Fact label="Tomon A (eni)" val={it.wcm + ' sm'} />
+              <Fact label="Tomon B (bo'yi)" val={it.hcm + ' sm'} />
+              <Fact label="Bo'lak" val={it.bolak + ' ta'} />
+              <Fact label="1 bo'lak" val={(it.pieceLenCm / 100).toFixed(2) + ' m'} />
+              <Fact label="List metri" val={it.meters.toFixed(2) + ' m'} />
+            </div>
+            <div className="text-[11px] text-slate-500">Burchakdan avtomatik · List Pataloklar Listiga ergashadi</div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="mb-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50/40 p-2.5 sm:p-3">
       {/* Sarlavha */}
@@ -162,9 +217,10 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
         </span>
       </div>
 
-      {/* Detal qatorlari (patalok + paloska) */}
+      {/* Detal qatorlari (patalok + paloska + tashqi burchak qozon) */}
       <div className="space-y-2">
         {groups.flatMap((g) => [detRow(g, 'pat'), detRow(g, 'pal')]).filter(Boolean)}
+        {qoz.map((it, i) => cornerRow(it, i))}
       </div>
 
       {/* ----- Material va xizmat hisobi (eng pastda) ----- */}

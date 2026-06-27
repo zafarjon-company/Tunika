@@ -92,8 +92,9 @@ export default async function handler(req, res) {
     const tgLinks = (await readShop(db, 'telegram-links')) || {};
     const workerTg = Object.keys(tgLinks).find((tid) => tgLinks[tid].ishchiId === ishchiId);
     if (workerTg) {
-      const tmpl = settings.welcomeText || 'Ishga xush kelibsiz, charchamang! 💪';
-      const text = `🌅 <b>${ishchi.name}</b>\n${tmpl.replace('{ism}', ishchi.name || '')}`;
+      const tmpl = settings.welcomeText
+        || "Assalomu alaykum, {ism}! 🌅\nIshga xush kelibsiz, charchamang — barakali ish kuni bo'lsin! 💪";
+      const text = tmpl.replace(/\{ism\}/g, ishchi.name || '');
       await sendMessage(workerTg, text);
     }
 

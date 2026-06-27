@@ -99,6 +99,24 @@ async function onMessage(msg) {
     await yoqlamaHisobot(db, chatId);
     return;
   }
+
+  // XAVFSIZLIK: raqam FAQAT "📱 Telefonni ulashish" tugmasi orqali qabul qilinadi
+  // (Telegram raqam aynan shu akkauntники ekanini tasdiqlaydi). Qo'lda yozilgan
+  // raqam QABUL QILINMAYDI — boshqa odamning raqamini yozib ulanib bo'lmasin.
+  const digits = text.replace(/\D/g, '');
+  const phoneLike = digits.length >= 7;
+  await sendMessage(chatId,
+    phoneLike
+      ? "🔒 Xavfsizlik uchun raqamni QO'LDA yozib bo'lmaydi.\n"
+        + "Pastdagi <b>«📱 Telefonni ulashish»</b> tugmasini bosing — Telegram raqamingizni o'zi tasdiqlaydi 👇"
+      : "Davom etish uchun pastdagi <b>«📱 Telefonni ulashish»</b> tugmasini bosing 👇",
+    {
+      reply_markup: {
+        keyboard: [[{ text: '📱 Telefonni ulashish', request_contact: true }]],
+        resize_keyboard: true, one_time_keyboard: true,
+      },
+    });
+  return;
 }
 
 // ---------------- Tuzatish tugmalari ----------------

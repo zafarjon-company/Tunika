@@ -315,7 +315,8 @@ export default function App() {
   const [shopName, setShopName]     = useState(DEFAULT_SHOP_NAME);
   const [shopPhone, setShopPhone]   = useState('');
   const [tgToken, setTgToken]       = useState('');   // Telegram bot token (Kazirok DXF yuborish)
-  const [tgChatId, setTgChatId]     = useState('');   // Telegram chat/kanal IDsi
+  const [tgChatId, setTgChatId]     = useState('');   // Telegram chat/kanal IDsi (eski — zaxira)
+  const [tgChats, setTgChats]       = useState([]);   // Ko'p manzil: [{id, nom, chatId}] (guruh/kanal/shaxsiy)
   const [libHandle, setLibHandle]   = useState(null); // Mijozlar kutubxonasi root papka (File System Access)
   const [usdRate, setUsdRate]       = useState(DEFAULT_USD_RATE);
   const [usdOlish, setUsdOlish]     = useState(DEFAULT_USD_RATE);
@@ -380,6 +381,7 @@ export default function App() {
       ['shop-phone', setShopPhone],
       ['telegram-bot-token', setTgToken],
       ['telegram-chat-id', setTgChatId],
+      ['telegram-dxf-chats', (v) => setTgChats(Array.isArray(v) ? v : [])],
       ['ustalar', setUstalar],
       ['klentlar', setKlentlar],
       ['usd-rate', (v) => setUsdRate(Number(v) || DEFAULT_USD_RATE)],
@@ -608,6 +610,23 @@ export default function App() {
   function updateShopPhone(v)  { setShopPhone(v);  persist('shop-phone', v); }
   function updateTgToken(v)    { setTgToken(v);    persist('telegram-bot-token', v); }
   function updateTgChatId(v)   { setTgChatId(v);   persist('telegram-chat-id', v); }
+  function updateTgChats(v)    { setTgChats(v);    persist('telegram-dxf-chats', v); }
+  // Guruh superguruhga aylansa — Telegram yangi chat ID beradi; uni saqlaymiz
+  function onTgChatMigrated(oldId, newId) {
+    const o = String(oldId), n = String(newId);
+    setTgChats((prev) => {
+      const next = (prev || []).map((c) => (String(c.chatId) === o ? { ...c, chatId: n } : c));
+      persist('telegram-dxf-chats', next);
+      return next;
+    });
+    // Eski yagona maydon — closure'siz (eng so'nggi qiymatga qarab) yangilanadi
+    setTgChatId((prev) => {
+      if (String(prev) !== o) return prev;
+      persist('telegram-chat-id', n);
+      return n;
+    });
+    showToast('Guruh superguruhga aylandi — yangi ID saqlandi');
+  }
   // Mijozlar kutubxonasi (File System Access) — handle IndexedDB'da (Firestore emas, qurilmada)
   async function pickLibraryFolder() {
     try {
@@ -710,7 +729,10 @@ export default function App() {
     // tashlaymiz — chek/DXF uchun faqat segs va o'lchamlar kerak).
     const kazSlim = (kd) => {
       const drop = (it) => { if (!it) return it; const { svg, ...rest } = it; return rest; };
-      return { groups: ((kd && kd.groups) || []).map((g) => ({ offCm: g.offCm, pat: drop(g.pat), pal: drop(g.pal) })) };
+      return {
+        groups: ((kd && kd.groups) || []).map((g) => ({ offCm: g.offCm, pat: drop(g.pat), pal: drop(g.pal) })),
+        qoz: ((kd && kd.qoz) || []).map(drop),   // tashqi burchak qozonlar (svg'siz — chek/DXF uchun)
+      };
     };
 
     // Yangi va tahrirlangan zakasga umumiy maydonlar (raqam/sana/holat alohida)
@@ -1201,6 +1223,7 @@ export default function App() {
             keys={keys} updateKeys={updateKeys}
             tgToken={tgToken} updateTgToken={updateTgToken}
             tgChatId={tgChatId} updateTgChatId={updateTgChatId}
+            tgChats={tgChats} updateTgChats={updateTgChats}
             libName={libHandle ? libHandle.name : null} libSupported={fsSupported()}
             onPickLib={pickLibraryFolder} onClearLib={clearLibraryFolder}
             onLogout={doLogout}
@@ -1233,7 +1256,9 @@ export default function App() {
       {receiptOrder && (
         <ReceiptModal order={receiptOrder} shopName={shopName} shopPhone={shopPhone} usdRate={usdRate} usdOlish={usdOlish}
           kazData={kazData} kazRows={draftCalc.kazRows || []} tunikaBaza={tunikaBaza}
-          telegram={{ token: tgToken, chatId: tgChatId }} libRoot={libHandle}
+          ustalar={ustalar}
+          telegram={{ token: tgToken, chatId: tgChatId, chats: tgChats }} libRoot={libHandle}
+          onChatMigrated={onTgChatMigrated}
           onClose={() => setReceiptOrder(null)} />
       )}
 

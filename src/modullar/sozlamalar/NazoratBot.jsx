@@ -13,7 +13,7 @@ import { Bot, Send, Camera, Link2, UserCheck } from 'lucide-react';
 import { Card, SectionTitle } from '../../components/ui.jsx';
 import { storage, O_CHIR } from '../../lib/storage.js';
 
-const DEFAULT_WELCOME = 'Ishga xush kelibsiz, charchamang! 💪';
+const DEFAULT_WELCOME = "Assalomu alaykum, {ism}! 🌅\nIshga xush kelibsiz, charchamang — barakali ish kuni bo'lsin! 💪";
 
 export function NazoratBot({ ishchilar = [], currentUser, showToast }) {
   const [sozlama, setSozlama] = useState({});

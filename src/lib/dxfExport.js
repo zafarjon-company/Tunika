@@ -63,14 +63,23 @@ export function safeFileName(s) {
 export function nestsToDxfFiles(nests, resolveName, lengthKey, customerName) {
   const cust = customerName ? safeFileName(customerName) : '';
   const files = [];
+  const used = new Set();   // butun to'plamda nom takrorlanmasin (albom + papka ustiga yozilmasin)
   for (const n of nests) {
     const listNm = safeFileName(resolveName ? resolveName(n.listId) : n.listId);
-    const kindLabel = n.kind === 'pat' ? 'patalok' : 'paloska';
+    const kindLabel = n.kind === 'pat' ? 'patalok' : n.kind === 'pal' ? 'paloska' : 'tashqi_burchak';
     (n.sheets || []).forEach((sh, i) => {
-      const base = [kindLabel, listNm, lengthKey, cust, String(i + 1)].filter(Boolean).join('_');
+      // List eni (1240mm) + shu sheetda ishlatilgan UZUNLIK + 20mm kesim hashiyasi
+      // → nomda "1240mm_<uzunlik>mm_<N>" (masalan 1240mm_3450mm_3). Operator
+      //   fayl nomidan qancha metr list ketishini bilib oladi.
+      const lenMm = Math.round(sh.usedL || 0) + 20;
+      const base = [kindLabel, listNm, lengthKey, cust, '1240mm', lenMm + 'mm', String(i + 1)].filter(Boolean).join('_');
+      // Ikki List bir xil nomli bo'lsa (yoki nom takrorlansa) — qo'shimcha raqam bilan farqlaymiz
+      let name = base + '.dxf';
+      for (let k = 2; used.has(name); k++) name = base + '_' + k + '.dxf';
+      used.add(name);
       files.push({
         listId: n.listId, kind: n.kind, sheetIndex: i + 1,
-        name: base + '.dxf',
+        name,
         text: buildSheetDxf(sh),
         pieces: sh.pieces.length,
       });

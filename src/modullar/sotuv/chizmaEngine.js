@@ -86,8 +86,9 @@ const PAT_SEG = [
 // KAZIROK > "Paloska" detali — list 16 bo'lakka bo'linib yasaladi (tor uzun chiziq).
 // Patalokdek simmetrik, 2 razmer: peshona (yuqori) + razmeri (tana). DXF dan AYNAN.
 const KAZ_PAL_KEY = 'kazirok-paloska-v1';
-const KAZ_OFF_KEY = 'kazirok-by-offset-v1';   // offset(sm) -> { patEni, palEni, patPesh, palPesh, qisq, patFold }
+const KAZ_OFF_KEY = 'kazirok-by-offset-v1';   // offset(sm) -> { patEni, palEni, patPesh, palPesh, qisq, patFold, patCountOv, palCountOv }
 const KAZ_LIST_KEY = 'kazirok-list-v1';       // { pat, pal } — Pataloklar/Paloskalar uchun umumiy List id
+const KAZ_CORNER_KEY = 'kazirok-corner-count-v1'; // "WxH" -> qo'lda kiritilgan dona (burchak qozon override)
 const PAL_W = 7.75;        // detal eni (sm) — DXF dan aniq
 const PAL_DEF = { peshona: 10.1, razmeri: 51.5 }; // DXF: peshona D5=10.1; tana 62.1-10.6=51.5
 // Paloska konturi — "Kazirok 2 bolak.dxf" dan AYNAN (sm, y = yuqoridan past). 20 segment:
@@ -138,6 +139,53 @@ const KAZ_DETS = {
     presets: [ { bolak: 16, eni: 7.75 }, { bolak: 15, eni: 8.3 }, { bolak: 14, eni: 8.85 } ],
   },
 };
+
+/* ---- KAZIROK > "Tashqi burchak qozon" detali (parametrik, BURCHAK) ----
+   "Tashqi burchak qozon.dxf" dan AYNAN olingan kvadrat kontur (71.5×71.5 sm,
+   sm, y = yuqoridan past). Patalokdek detal — RAZMERI + PESHONA bilan, lekin
+   BURCHAK bo'lgani uchun IKKITADAN (har tomon uchun alohida):
+     • razmeriX / peshonaX — gorizontal (tepa) tomon
+     • razmeriY / peshonaY — vertikal (chap) tomon
+   Default: razmeri = 60 sm (DXF 600), peshona = 7 sm (DXF 70). Razmeri va peshona
+   ORASIDAGI 1.5 sm O'ZGARMAS qoladi; chetdagi tabchalar / diagonal o'yiqlar ham
+   joyida qoladi. Faqat razmeri va peshona zonalari cho'ziladi/qisqaradi
+   ("orqasi qayrilgan" yo'q). Bitta namuna kontur barcha o'lchamlarni qoplaydi. */
+const QOZ_RAZ0 = 60;   // bazaviy razmeri (sm) — DXF 600 mm
+const QOZ_PESH0 = 7;   // bazaviy peshona (sm) — DXF 70 mm
+// O'lcham (dimension) zona chegaralari (sm) — DXF konturidan:
+const QOZ_X_RAZ_A = 3,    QOZ_X_RAZ_B = 63;     // gorizontal razmeri (3..63 = 60)
+const QOZ_X_PESH_A = 64.5, QOZ_X_PESH_B = 71.5; // gorizontal peshona (64.5..71.5 = 7)
+const QOZ_Y_PESH_A = 1.5,  QOZ_Y_PESH_B = 8.5;  // vertikal peshona (1.5..8.5 = 7)
+const QOZ_Y_RAZ_A = 10.3,  QOZ_Y_RAZ_B = 70;    // vertikal razmeri (10.3..70 ≈ 60)
+// Cho'zish (kesish) nuqtalari — flat tanada, hech bir tabcha/diagonal kesilmaydigan joyda.
+const QOZ_XR = 33, QOZ_XP = 67;   // X: razmeri / peshona cho'zish nuqtasi
+const QOZ_YP = 4,  QOZ_YR = 40;   // Y: peshona / razmeri cho'zish nuqtasi
+// Burchak konturi — "Tashqi burchak qozon.dxf" dan AYNAN (sm, y = yuqoridan past), 28 segment.
+const QOZON_SEG = [
+  [3, 1.5, 3, 0], [3, 0, 64.5, 0], [63, 0, 63, 0.5],
+  [64.5, 0, 64.5, 7], [0, 7, 0, 1.5], [0, 1.5, 3, 1.5],
+  [63.5, 1.5, 64.5, 1.5], [1.5, 7, 0, 7], [1.5, 7, 3, 8.5],
+  [64.5, 7, 63, 8.5], [1.5, 10.3, 1.5, 8.5], [1.5, 8.5, 3, 8.5],
+  [71.5, 8.5, 63, 8.5], [70, 9.5, 70, 8.5], [71.5, 68.5, 71.5, 8.5],
+  [0, 68.5, 0, 10.3], [0, 10.3, 1.5, 10.3], [0, 68.5, 3, 68.5],
+  [3, 68.5, 3, 71.5], [63, 70, 63, 68.5], [64.5, 70, 63, 68.5],
+  [70, 71.5, 70, 68.5], [70, 68.5, 71.5, 68.5], [61.2, 71.5, 61.2, 70],
+  [61.2, 70, 63, 70], [64.5, 70, 64.5, 71.5], [3, 71.5, 61.2, 71.5],
+  [64.5, 71.5, 70, 71.5],
+];
+// Koordinata o'zgartirgichlari: razmeri/peshona zonalarini cho'zadi/qisqartiradi
+// (cho'zish nuqtasidan keyingi hamma narsa siljiydi), 1.5 gap + tabchalar joyida qoladi.
+function cornerFx(x, dRx, dPx) { return x + (x > QOZ_XR ? dRx : 0) + (x > QOZ_XP ? dPx : 0); }
+function cornerFy(y, dPy, dRy) { return y + (y > QOZ_YP ? dPy : 0) + (y > QOZ_YR ? dRy : 0); }
+// Burchak detali konturi (sm). razX/peshX — gorizontal tomon, razY/peshY — vertikal tomon.
+function cornerGeom(razX, peshX, razY, peshY) {
+  const rX = Math.max(5, razX || QOZ_RAZ0), pX = Math.max(2, peshX || QOZ_PESH0);
+  const rY = Math.max(5, razY || QOZ_RAZ0), pY = Math.max(2, peshY || QOZ_PESH0);
+  const dRx = rX - QOZ_RAZ0, dPx = pX - QOZ_PESH0, dRy = rY - QOZ_RAZ0, dPy = pY - QOZ_PESH0;
+  const segs = QOZON_SEG.map(([x1, y1, x2, y2]) =>
+    [cornerFx(x1, dRx, dPx), cornerFy(y1, dPy, dRy), cornerFx(x2, dRx, dPx), cornerFy(y2, dPy, dRy)]);
+  return { segs, W: cornerFx(71.5, dRx, dPx), H: cornerFy(71.5, dPy, dRy), rX, pX, rY, pY, dRx, dPx, dRy, dPy };
+}
 
 /* ---------------- MAVZUGA MOS RANG PALITRASI ----------------
    --c-btn (mavzu asosiy rangi) tusidan boshlab, rang doirasida
@@ -418,10 +466,13 @@ export function mountChizma(root, opts) {
     refWorld: [],          // import world mm (vaqtinchalik) — ref'dan hosil qilinadi, saqlanmaydi
     showRef: false,        // (eskirgan) kulrang fon — endi import to'g'ridan-to'g'ri tahrirlanadi
     impUnit: null,         // import qilingan chiziqlarning birligi (birlik o'zgarsa joyida masshtablash uchun)
-    kazByOffset: {},       // Kazirok: offset(sm) -> { patEni, palEni, patPesh, palPesh, qisq, patFold, patList, palList }
+    kazByOffset: {},       // Kazirok: offset(sm) -> { patEni, palEni, patPesh, palPesh, qisq, patFold, patList, palList, patCountOv, palCountOv }
+    kazCornerOv: {},       // Tashqi burchak qozon: "WxH" -> qo'lda kiritilgan dona (override)
     tunikaBaza: (opts && Array.isArray(opts.tunikaBaza)) ? opts.tunikaBaza : [],  // Listlar (tunikalar) ro'yxati — React'dan
     kazListPat: '',        // Pataloklar uchun umumiy (default) List id
     kazListPal: '',        // Paloskalar uchun umumiy (default) List id
+    kazTuri: 'qosh90',     // Kazirok turi — hozircha bitta: "Qosh 90 gradus" (patalok+paloska+qozon shu turga kiradi)
+    darvozaTuri: '',       // Darvozaxona turi — hozircha tur qo'shilmagan (bo'sh)
     // ----- TAHRIR (AutoCAD uslubidagi mustaqil tahrir qatlami) -----
     // Bu qatlam devor/qosh/kazirok hisobiga TEGMAYDI — erkin geometriya.
     editEntities: [],      // {id,type:'line'|'polyline'|'circle'|'arc', ...world mm, layer}
@@ -906,15 +957,26 @@ export function mountChizma(root, opts) {
   function saveKazByOffset() {
     try { localStorage.setItem(KAZ_OFF_KEY, JSON.stringify(state.kazByOffset)); } catch (e) { /* noop */ }
   }
+  // --- Saqlash/yuklash: tashqi burchak qozon uchun qo'lda dona ("WxH" -> dona) ---
+  function loadKazCornerOv() {
+    try { const o = JSON.parse(localStorage.getItem(KAZ_CORNER_KEY)); if (o && typeof o === 'object') state.kazCornerOv = o; } catch (e) { /* noop */ }
+  }
+  function saveKazCornerOv() {
+    try { localStorage.setItem(KAZ_CORNER_KEY, JSON.stringify(state.kazCornerOv)); } catch (e) { /* noop */ }
+  }
   // --- Pataloklar/Paloskalar uchun UMUMIY List tanlovi (saqlash/yuklash) ---
   function loadKazList() {
     try {
       const o = JSON.parse(localStorage.getItem(KAZ_LIST_KEY));
-      if (o && typeof o === 'object') { state.kazListPat = o.pat || ''; state.kazListPal = o.pal || ''; }
+      if (o && typeof o === 'object') {
+        state.kazListPat = o.pat || ''; state.kazListPal = o.pal || '';
+        state.kazTuri = o.turi || 'qosh90';
+        state.darvozaTuri = o.darvozaTuri || '';
+      }
     } catch (e) { /* noop */ }
   }
   function saveKazList() {
-    try { localStorage.setItem(KAZ_LIST_KEY, JSON.stringify({ pat: state.kazListPat, pal: state.kazListPal })); } catch (e) { /* noop */ }
+    try { localStorage.setItem(KAZ_LIST_KEY, JSON.stringify({ pat: state.kazListPat, pal: state.kazListPal, turi: state.kazTuri, darvozaTuri: state.darvozaTuri })); } catch (e) { /* noop */ }
   }
   // HTML-xavfsiz matn (List nomlari uchun).
   function escHtml(s) {
@@ -940,13 +1002,28 @@ export function mountChizma(root, opts) {
   function renderKazListGlobal() {
     const box = q('kazListGlobal');
     if (!box) return;
+    // "Kazirok turi" — hozircha bitta tur: "Qosh 90 gradus" (patalok+paloska+burchak qozon shunga kiradi).
+    const kazTuriOpts = '<option value="qosh90"' + (state.kazTuri === 'qosh90' ? ' selected' : '') + '>Qosh 90 gradus</option>';
+    // "Darvozaxona turi" — hozircha tur qo'shilmagan (kelajakda to'ldiriladi).
+    const darvOpts = '<option value="">— tur qo\'shilmagan —</option>';
     box.innerHTML =
+      '<div class="chz-kaz-globrow"><span>Kazirok turi</span>' +
+        '<select data-chz-turi="kaz">' + kazTuriOpts + '</select></div>' +
+      '<div class="chz-kaz-globrow"><span>Darvozaxona turi</span>' +
+        '<select data-chz-turi="darvoza">' + darvOpts + '</select></div>' +
       '<div class="chz-kaz-globrow"><span>Pataloklar — List</span>' +
         '<select data-chz-glob="pat">' + tunikaOptions(state.kazListPat) + '</select></div>' +
       '<div class="chz-kaz-globrow"><span>Paloskalar — List</span>' +
         '<select data-chz-glob="pal">' + tunikaOptions(state.kazListPal) + '</select></div>';
     box.querySelectorAll('select[data-chz-glob]').forEach((sel) => {
       sel.addEventListener('change', () => setKazListGlobal(sel.getAttribute('data-chz-glob'), sel.value));
+    });
+    box.querySelectorAll('select[data-chz-turi]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        if (sel.getAttribute('data-chz-turi') === 'kaz') state.kazTuri = sel.value;
+        else state.darvozaTuri = sel.value;
+        saveKazList();
+      });
     });
   }
   // Umumiy List o'zgartirilsa — barcha patalok/paloska o'sha bo'yicha bo'ladi
@@ -974,7 +1051,7 @@ export function mountChizma(root, opts) {
     const patPesh = s.patPesh > 0 ? s.patPesh : KAZ_DETS.pat.def.peshona;
     const palPesh = s.palPesh > 0 ? s.palPesh : KAZ_DETS.pal.def.peshona;
     const qisqDef = patEni > 41.6 ? 10 : 8;                 // qisqarishi default (patalok eni bo'yicha)
-    const qisq = s.qisq > 0 ? s.qisq : qisqDef;
+    const qisq = s.qisq >= 0 ? s.qisq : qisqDef;            // 0 ham hurmat qilinadi (default faqat o'rnatilmaganda)
     const patRazmer = Math.max(2, offCm - 1.5 - qisq);     // patalok razmeri
     const palRazmer = Math.max(2, patRazmer - 1.5);        // paloska — yana 1.5 sm kam
     return {
@@ -988,6 +1065,27 @@ export function mountChizma(root, opts) {
   function setKazByOffset(offCm, patch) {
     state.kazByOffset[offCm] = Object.assign({}, state.kazByOffset[offCm], patch);
     saveKazByOffset();
+  }
+  // AMALDAGI dona — qo'lda kiritilgan override bo'lsa o'sha, aks holda avtomatik hisob.
+  function effKazCount(offCm, kind, autoCount) {
+    const s = state.kazByOffset[offCm] || {};
+    const ov = kind === 'pat' ? s.patCountOv : s.palCountOv;
+    return (ov != null && ov >= 0) ? ov : autoCount;
+  }
+  // Patalok/Paloska donasi qo'lda o'zgartirilganmi (override mavjudmi)?
+  function isKazCntOv(offCm, kind) {
+    const s = state.kazByOffset[offCm];
+    return !!s && (kind === 'pat' ? s.patCountOv != null : s.palCountOv != null);
+  }
+  // Detal kartasi sarlavhasidagi "dona" vidjeti (qo'lda tahrirlanadi + avtomatga qaytarish tugmasi).
+  // `attrs` — input/tugmaga qo'yiladigan data-* (pat/pal yoki burchak qozon uchun har xil).
+  function kazCntWidget(attrs, val, isOv, autoCount) {
+    return '<span class="chz-kaz-cnt">' +
+      '<button type="button" class="chz-kaz-cntreset' + (isOv ? ' on' : '') + '" ' + attrs +
+        ' title="Avtomatik hisobga qaytarish (' + autoCount + ' ta)" aria-label="Avtomatik hisobga qaytarish">↻</button>' +
+      '<input type="number" class="chz-kaz-cntinp" min="0" step="1" ' + attrs + ' value="' + val + '" />' +
+      '<span class="chz-kaz-cntu">dona</span>' +
+    '</span>';
   }
   // Eni'ga mos "Asosiy" preset (bo'lak soni) — mos kelmasa null.
   function kazActivePreset(kind, eni) {
@@ -1093,6 +1191,29 @@ export function mountChizma(root, opts) {
     const folded = d.foldable && !!fold;
     return detSvgMarkup(kazGeom(kind, Pd, Rd, eni, folded), d, Pd, Rd, eni);
   }
+  // Tashqi burchak qozon detali chizmasi (SVG) — patalokdek, lekin ikkitadan:
+  // tepada razmeriX + peshonaX, chapda peshonaY + razmeriY (rasmga o'xshash).
+  function cornerSvg(razX, peshX, razY, peshY) {
+    const g = cornerGeom(razX, peshX, razY, peshY);
+    const padL = 17, padR = 8, padT = 14, padB = 8;
+    const W = g.W, H = g.H;
+    const vbW = W + padL + padR, vbH = H + padT + padB;
+    const GREEN = '#16a34a';
+    const FX = (x) => cornerFx(x, g.dRx, g.dPx);
+    const FY = (y) => cornerFy(y, g.dPy, g.dRy);
+    const det = g.segs.map((s) =>
+      `<line x1="${s[0].toFixed(2)}" y1="${s[1].toFixed(2)}" x2="${s[2].toFixed(2)}" y2="${s[3].toFixed(2)}" stroke="currentColor" stroke-width="0.85" stroke-linecap="round"/>`).join('');
+    // Tepada: razmeriX (chap) + peshonaX (o'ng); chapda: peshonaY (tepa) + razmeriY (past).
+    const dims =
+      hdimMarkup(-4, FX(QOZ_X_RAZ_A),  FX(QOZ_X_RAZ_B),  '' + (+g.rX.toFixed(1)), GREEN) +
+      hdimMarkup(-4, FX(QOZ_X_PESH_A), FX(QOZ_X_PESH_B), '' + (+g.pX.toFixed(1)), GREEN) +
+      vdimMarkup(-7, FY(QOZ_Y_PESH_A), FY(QOZ_Y_PESH_B), '' + (+g.pY.toFixed(1)), GREEN) +
+      vdimMarkup(-7, FY(QOZ_Y_RAZ_A),  FY(QOZ_Y_RAZ_B),  '' + (+g.rY.toFixed(1)), GREEN);
+    return `<svg viewBox="${-padL} ${-padT} ${vbW} ${vbH}" style="display:block;width:100%;height:auto">
+      ${det}
+      ${dims}
+    </svg>`;
+  }
   function redrawKazDet(body, offCm, kind) {
     const draw = (body || root).querySelector('.chz-kaz-draw[data-off="' + offCm + '"][data-chz-det="' + kind + '"]');
     if (!draw) return;
@@ -1111,9 +1232,12 @@ export function mountChizma(root, opts) {
     }
     return [...m.values()].sort((a, b) => b.offCm - a.offCm);
   }
-  // Offsetlar to'plami imzosi — o'zgarsa panel qayta chiziladi.
+  // Offsetlar + tashqi burchaklar to'plami imzosi — o'zgarsa panel qayta chiziladi.
+  // Pataloklar Listi ham kiritilgan: u o'zgarsa burchak qozon kartasi ham yangilanadi.
   function kazSig(groups) {
-    return (groups || kazGroups()).map((g) => g.offCm + ':' + g.patCount + ':' + g.palCount).join('|');
+    const gs = (groups || kazGroups()).map((g) => g.offCm + ':' + g.patCount + ':' + g.palCount).join('|');
+    const cs = computeCornerQozonlar().map((e) => e.wCm + 'x' + e.hCm + ':' + e.count).join('|');
+    return gs + '#' + cs + '#' + (state.kazListPat || '');
   }
   // Doska o'zgarganda (offset qo'shilsa/o'chsa/dona o'zgarsa) panelni yangilaydi.
   function syncKazPanel() {
@@ -1131,8 +1255,16 @@ export function mountChizma(root, opts) {
     ['pat', 'pal'].forEach((kind) => {
       redrawKazDet(body, off, kind);
       const v = b[kind];
-      const head = body.querySelector('.chz-kaz-head[data-off="' + off + '"][data-chz-det="' + kind + '"] span');
-      if (head) head.textContent = 'razmeri ' + (+v.razmeri.toFixed(1)) + ' sm · ' + (b.off ? 'kerak emas' : (kind === 'pat' ? g.patCount : g.palCount) + ' dona');
+      const rsz = body.querySelector('.chz-kaz-head[data-off="' + off + '"][data-chz-det="' + kind + '"] .chz-kaz-rsz');
+      if (rsz) rsz.textContent = 'razmeri ' + (+v.razmeri.toFixed(1)) + ' sm · ';
+      if (!b.off) {
+        const auto = kind === 'pat' ? g.patCount : g.palCount;
+        const sel = '[data-off="' + off + '"][data-chz-det="' + kind + '"]';
+        const inp = body.querySelector('input.chz-kaz-cntinp' + sel);
+        if (inp && inp !== except) inp.value = effKazCount(off, kind, auto);
+        const rbtn = body.querySelector('button.chz-kaz-cntreset' + sel);
+        if (rbtn) { rbtn.classList.toggle('on', isKazCntOv(off, kind)); rbtn.title = 'Avtomatik hisobga qaytarish (' + auto + ' ta)'; }
+      }
       const setF = (k, val) => {
         const el = body.querySelector('input[data-off="' + off + '"][data-chz-det="' + kind + '"][data-chz-k="' + k + '"]');
         if (el && el !== except) el.value = +(+val).toFixed(2);
@@ -1163,7 +1295,7 @@ export function mountChizma(root, opts) {
       : '';
     return '' +
       need +
-      '<div class="chz-kaz-head" data-off="' + offCm + '" data-chz-det="' + kind + '"><b>' + d.title + '</b><span>razmeri ' + (+v.razmeri.toFixed(1)) + ' sm · ' + (disabled ? 'kerak emas' : count + ' dona') + '</span></div>' +
+      '<div class="chz-kaz-head" data-off="' + offCm + '" data-chz-det="' + kind + '"><b>' + d.title + '</b><span class="chz-kaz-hr"><span class="chz-kaz-rsz">razmeri ' + (+v.razmeri.toFixed(1)) + ' sm · </span>' + (disabled ? 'kerak emas' : kazCntWidget('data-off="' + offCm + '" data-chz-det="' + kind + '"', effKazCount(offCm, kind, count), isKazCntOv(offCm, kind), count)) + '</span></div>' +
       '<label class="chz-kaz-listsel"><span>List (tunika)</span><select data-off="' + offCm + '" data-chz-list="' + kind + '">' + tunikaOptions(effList(offCm, kind)) + '</select></label>' +
       '<div class="chz-kaz-fields">' + field('eni', 'Eni', v.eni) + field('peshona', 'Peshona', v.peshona) + field('qisq', 'Qisqarishi', b.qisq) + field('razmeri', 'Razmeri', v.razmeri) + '</div>' +
       '<div class="chz-kaz-draw" data-off="' + offCm + '" data-chz-det="' + kind + '">' + kazSvg(kind, v.eni, v.peshona, v.razmeri, v.fold) + '</div>' +
@@ -1171,12 +1303,29 @@ export function mountChizma(root, opts) {
       '<div class="chz-kaz-plabel">Asosiy razmerlar</div>' +
       '<div class="chz-kaz-presets" data-off="' + offCm + '" data-chz-det="' + kind + '">' + presets + '</div>';
   }
+  // Tashqi burchak qozon bo'limi (avtomatik, read-only): har xil o'lcham bo'yicha karta.
+  function cornerSectionHtml(corners) {
+    if (!corners.length) return '';
+    const patListNm = (() => {
+      const t = (state.tunikaBaza || []).find((x) => String(x.id) === String(state.kazListPat));
+      return t ? escHtml(t.nomi) : 'List tanlanmagan';
+    })();
+    return '<div class="chz-kaz-group"><div class="chz-kaz-ghead">Tashqi burchak qozon</div>' +
+      corners.map((it) =>
+        '<div class="chz-kaz-head"><b>Burchak</b><span class="chz-kaz-hr"><span class="chz-kaz-rsz">razmeri ' + it.wcm + ' × ' + it.hcm + ' sm · </span>' + kazCntWidget('data-chz-qoz="' + it.wcm + 'x' + it.hcm + '"', it.count, state.kazCornerOv[it.wcm + 'x' + it.hcm] != null, it.autoCount) + '</span></div>' +
+        '<label class="chz-kaz-listsel"><span>List (tunika)</span>' +
+          '<div class="chz-kaz-listro" title="Pataloklar Listi bilan bir xil — yuqoridan o\'zgartiriladi">' + patListNm + '</div></label>' +
+        '<div class="chz-kaz-draw">' + it.svg + '</div>'
+      ).join('<div class="chz-kaz-sep"></div>') +
+      '</div>';
+  }
   function renderKazirokBolim() {
     const body = q('kazirokBolimBody');
     if (!body) return;
     const groups = kazGroups();
+    const corners = buildCornerPayload();   // tashqi burchak qozonlar (avtomatik, har burchakdan)
     state._kazSig = kazSig(groups);
-    if (!groups.length) {
+    if (!groups.length && !corners.length) {
       body.classList.add('chz-kbolim-empty');
       body.innerHTML = 'Avval devorga <b>Chiqishi (Qosh)</b> tashlang — har Chiqishi uchun Patalok va Paloska razmerlari (dona soni bilan) shu yerda chiqadi.';
       return;
@@ -1190,7 +1339,7 @@ export function mountChizma(root, opts) {
         '<div class="chz-kaz-sep"></div>' +
         kazCard(g.offCm, 'pal', b, g.palCount) +
         '</div>';
-    }).join('');
+    }).join('') + cornerSectionHtml(corners);
     // Razmer maydonlari (Eni / Peshona / Qisqarishi / Razmeri)
     body.querySelectorAll('input[data-chz-k]').forEach((inp) => {
       inp.addEventListener('input', () => {
@@ -1249,6 +1398,72 @@ export function mountChizma(root, opts) {
         const off = +sel.getAttribute('data-off');
         const kind = sel.getAttribute('data-chz-list');
         setKazByOffset(off, kind === 'pat' ? { patList: sel.value } : { palList: sel.value });
+        publishKazirok();
+      });
+    });
+    // Patalok/Paloska donasini QO'LDA o'zgartirish (override) — avtomatik hisob ustidan.
+    body.querySelectorAll('input.chz-kaz-cntinp[data-chz-det]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        if (inp.value === '') return;   // bo'sh — hali commit qilinmaydi (blur'da tiklanadi)
+        const off = +inp.getAttribute('data-off');
+        const kind = inp.getAttribute('data-chz-det');
+        const val = Math.max(0, Math.round(parseFloat(inp.value) || 0));
+        setKazByOffset(off, kind === 'pat' ? { patCountOv: val } : { palCountOv: val });
+        const rbtn = body.querySelector('button.chz-kaz-cntreset[data-off="' + off + '"][data-chz-det="' + kind + '"]');
+        if (rbtn) rbtn.classList.add('on');
+        publishKazirok();
+      });
+      inp.addEventListener('blur', () => {
+        if (inp.value !== '') return;
+        const off = +inp.getAttribute('data-off');
+        const kind = inp.getAttribute('data-chz-det');
+        const g = kazGroups().find((x) => x.offCm === off) || { patCount: 0, palCount: 0 };
+        inp.value = effKazCount(off, kind, kind === 'pat' ? g.patCount : g.palCount);
+      });
+    });
+    // Patalok/Paloska donasini AVTOMATIK hisobga qaytarish (override'ni o'chirish).
+    body.querySelectorAll('button.chz-kaz-cntreset[data-chz-det]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const off = +btn.getAttribute('data-off');
+        const kind = btn.getAttribute('data-chz-det');
+        const s = state.kazByOffset[off];
+        if (s) { delete s[kind === 'pat' ? 'patCountOv' : 'palCountOv']; saveKazByOffset(); }
+        const g = kazGroups().find((x) => x.offCm === off) || { patCount: 0, palCount: 0 };
+        const inp = body.querySelector('input.chz-kaz-cntinp[data-off="' + off + '"][data-chz-det="' + kind + '"]');
+        if (inp) inp.value = kind === 'pat' ? g.patCount : g.palCount;
+        btn.classList.remove('on');
+        publishKazirok();
+      });
+    });
+    // Tashqi burchak qozon donasini QO'LDA o'zgartirish (override) — "WxH" bo'yicha.
+    body.querySelectorAll('input.chz-kaz-cntinp[data-chz-qoz]').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        if (inp.value === '') return;
+        const key = inp.getAttribute('data-chz-qoz');
+        const val = Math.max(0, Math.round(parseFloat(inp.value) || 0));
+        state.kazCornerOv[key] = val; saveKazCornerOv();
+        const rbtn = body.querySelector('button.chz-kaz-cntreset[data-chz-qoz="' + key + '"]');
+        if (rbtn) rbtn.classList.add('on');
+        publishKazirok();
+      });
+      inp.addEventListener('blur', () => {
+        if (inp.value !== '') return;
+        const key = inp.getAttribute('data-chz-qoz');
+        const e = computeCornerQozonlar().find((x) => (x.wCm + 'x' + x.hCm) === key);
+        const auto = e ? e.count : 0;
+        const ov = state.kazCornerOv[key];
+        inp.value = (ov != null && ov >= 0) ? ov : auto;
+      });
+    });
+    // Tashqi burchak qozon donasini AVTOMATIK hisobga qaytarish (override'ni o'chirish).
+    body.querySelectorAll('button.chz-kaz-cntreset[data-chz-qoz]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-chz-qoz');
+        delete state.kazCornerOv[key]; saveKazCornerOv();
+        const e = computeCornerQozonlar().find((x) => (x.wCm + 'x' + x.hCm) === key);
+        const inp = body.querySelector('input.chz-kaz-cntinp[data-chz-qoz="' + key + '"]');
+        if (inp) inp.value = e ? e.count : 0;
+        btn.classList.remove('on');
         publishKazirok();
       });
     });
@@ -2344,6 +2559,45 @@ export function mountChizma(root, opts) {
   // guruhlar va dona = 0 bo'laklar chiqarilmaydi. List metri:
   //   metr = dona × (bir bo'lak uzunligi, m) ÷ (listga sig'adigan bo'lak soni).
   // Bir bo'lak uzunligi = kazGeom balandligi (peshona+razmeri+jiya, qayrilsa +1.5).
+  // TASHQI BURCHAK QOZON — har tashqi (convex) burchak uchun bitta kesiladigan detal.
+  // O'lcham burchakning o'zidan (w × h) avtomatik; bir xil o'lchamli burchaklar
+  // bitta guruh (dona soni) bo'lib yig'iladi. "Kerak emas" burchaklar chiqarilmaydi.
+  function computeCornerQozonlar() {
+    const byKey = new Map();
+    for (const c of computeBlueCorners()) {
+      if (c.concave || c.disabled) continue;          // faqat TASHQI (convex), "kerak emas" emas
+      const wCm = +(c.w / 10).toFixed(1), hCm = +(c.h / 10).toFixed(1);
+      if (!(wCm > 0) || !(hCm > 0)) continue;
+      const key = wCm + 'x' + hCm;
+      let e = byKey.get(key);
+      if (!e) { e = { wCm, hCm, count: 0 }; byKey.set(key, e); }
+      e.count++;
+    }
+    return [...byKey.values()].sort((a, b) => (b.wCm * b.hCm) - (a.wCm * a.hCm));
+  }
+  // Burchak qozon payload elementlari — Pataloklar Listi bilan (xuddi patalokdek
+  // hisob/nesting/DXF ga ulanadi, lekin ALOHIDA "qoz" turi sifatida).
+  function buildCornerPayload() {
+    const listId = state.kazListPat || '';
+    const toMm = (v) => +(v * 10).toFixed(1);
+    return computeCornerQozonlar().map((e) => {
+      // razmeri = burchak o'lchami (w × h); peshona = default 7 sm (har ikki tomon)
+      const g = cornerGeom(e.wCm, QOZ_PESH0, e.hCm, QOZ_PESH0);
+      const wMm = toMm(g.W), hMm = toMm(g.H);
+      const bolak = Math.max(1, Math.floor(1245 / Math.max(1, wMm)));   // 1.245 m enga sig'adigan dona
+      const pieceLenCm = g.H;
+      const autoCount = e.count;                                       // avtomatik (burchaklardan) hisoblangan dona
+      const ov = state.kazCornerOv[e.wCm + 'x' + e.hCm];
+      const count = (ov != null && ov >= 0) ? ov : autoCount;          // qo'lda override bo'lsa o'sha
+      const meters = (count * (pieceLenCm / 100)) / bolak;             // sarflanadigan list metri (taxminiy)
+      const segs = g.segs.map((s) => [toMm(s[0]), toMm(s[1]), toMm(s[2]), toMm(s[3])]);
+      return {
+        count, autoCount, wcm: e.wCm, hcm: e.hCm, peshona: QOZ_PESH0, listId, bolak,
+        pieceLenCm: +pieceLenCm.toFixed(1), meters: +meters.toFixed(3),
+        wMm, hMm, segs, svg: cornerSvg(e.wCm, QOZ_PESH0, e.hCm, QOZ_PESH0),
+      };
+    });
+  }
   function buildKazPayload() {
     const groups = [];
     for (const g of kazGroups()) {
@@ -2370,12 +2624,12 @@ export function mountChizma(root, opts) {
           svg: kazSvg(kind, v.eni, v.peshona, v.razmeri, v.fold),
         };
       };
-      const pat = mk('pat', g.patCount);
-      const pal = mk('pal', g.palCount);
+      const pat = mk('pat', effKazCount(g.offCm, 'pat', g.patCount));
+      const pal = mk('pal', effKazCount(g.offCm, 'pal', g.palCount));
       if (!pat && !pal) continue;
       groups.push({ offCm: g.offCm, pat, pal });
     }
-    return { groups };
+    return { groups, qoz: buildCornerPayload() };
   }
   let lastKaz = null;
   function publishKazirok() {
@@ -3288,6 +3542,7 @@ export function mountChizma(root, opts) {
   q('unitQosh').value = state.unitQosh;
   q('unitCorner').value = state.unitCorner;
   loadKazByOffset();       // Kazirok: offset bo'yicha o'zgartirishlar (saqlangan bo'lsa)
+  loadKazCornerOv();       // Tashqi burchak qozon: qo'lda kiritilgan dona (saqlangan bo'lsa)
   loadKazList();           // Pataloklar/Paloskalar uchun umumiy List tanlovi (saqlangan bo'lsa)
   renderKazListGlobal();   // umumiy List tanlovlari (kazirok yozuvi oldida — chizmasiz ham ko'rinadi)
   renderKazirokBolim();    // panel "Kazirok" bo'limiga har offset uchun patalok+paloska bloklarini joylaymiz

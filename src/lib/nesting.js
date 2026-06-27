@@ -13,7 +13,7 @@
 // ============================================================
 
 export const SHEET_W_MM = 1245;        // list eni (mm) — o'zgarmas
-export const SHEET_LENGTHS = { '4m': 4000, '6m': 6000 };
+export const SHEET_LENGTHS = { '3m': 3000, '4m': 4000, '6m': 6000, '8m': 8000, '10m': 10000, '12m': 12000 };
 
 // Payloaddan bo'laklarni (List × kind) bo'yicha ajratamiz — Patalok va Paloska
 // ALOHIDA listlarga ketadi (har fayl toza patalok yoki toza paloska bo'lsin).
@@ -33,6 +33,20 @@ function piecesByKindList(data) {
       for (let i = 0; i < it.count; i++) {
         arr.push({ w: it.wMm, h: it.hMm, segs: it.segs, label, kind });
       }
+    }
+  }
+  // Tashqi burchak qozon — PATALOK bilan BIR XIL faylga qo'shiladi (list bir xil,
+  // qozon ham aslida patalok hisoblanadi). Bo'laklar patalok bo'laklari bilan
+  // aralash zich joylanadi; label "Burchak ..." bo'lib farqlanadi.
+  for (const it of (data && data.qoz) || []) {
+    if (!it || !(it.count > 0) || !Array.isArray(it.segs) || !it.segs.length) continue;
+    const id = it.listId || '';
+    const key = id + '|pat';
+    if (!byKey.has(key)) byKey.set(key, { listId: id, kind: 'pat', pieces: [] });
+    const arr = byKey.get(key).pieces;
+    const label = 'Burchak ' + it.wcm + 'x' + it.hcm;
+    for (let i = 0; i < it.count; i++) {
+      arr.push({ w: it.wMm, h: it.hMm, segs: it.segs, label, kind: 'qoz' });
     }
   }
   return [...byKey.values()];

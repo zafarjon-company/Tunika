@@ -1,7 +1,7 @@
 // ============================================================
 //  SOZLAMALAR TABI
 // ============================================================
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Download, Upload, LogOut, Users, Plus, Trash2,
   Sun, Moon, MoonStar, Leaf, Sparkles, Coffee, Waves,
@@ -24,6 +24,7 @@ import { ROLLAR, rolNomi } from '../../lib/ruxsat.js';
 import { TILLAR } from '../../lib/til.js';
 import { Languages, Keyboard } from 'lucide-react';
 import { KEY_ACTIONS, comboFromEvent, comboValid } from '../../lib/keybind.js';
+import { telegramSozlangan, tgChatList } from '../../lib/telegram.js';
 import { NazoratBot } from './NazoratBot.jsx';
 
 const MAVZULAR = [
@@ -117,6 +118,16 @@ const MAVZULAR = [
   { id: 'glacier',   nom: 'Muzlik',     icon: MountainSnow,  rang: '#7fdbff' },
 ];
 
+// Telegram manzillari uchun tahrirlanadigan boshlang'ich ro'yxat.
+// Yangi ko'p manzilli ro'yxat bo'lsa — o'shani; bo'lmasa eski yagona chatId; bo'lmasa bitta bo'sh qator.
+function seedChats(chats, legacyChatId) {
+  if (Array.isArray(chats) && chats.length) {
+    return chats.map((c) => ({ id: c.id || genId(), nom: c.nom || '', chatId: c.chatId || '' }));
+  }
+  if (legacyChatId) return [{ id: genId(), nom: 'Asosiy', chatId: String(legacyChatId) }];
+  return [{ id: genId(), nom: '', chatId: '' }];
+}
+
 // "Oq" har doim eng tepada turadigan tartiblash
 function oqTepada(a, b) {
   const ao = /oq/i.test(a) ? 0 : 1;
@@ -156,11 +167,11 @@ function KeybindRow({ action, combo, onSet }) {
   );
 }
 
-export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], updateUsers, tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
+export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], updateUsers, tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, tgChats = [], updateTgChats = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
   const [shopDraft, setShopDraft] = useState(shopName);
   const [phoneDraft, setPhoneDraft] = useState(shopPhone);
   const [tgTokenDraft, setTgTokenDraft] = useState(tgToken);
-  const [tgChatDraft, setTgChatDraft] = useState(tgChatId);
+  const [tgChatsDraft, setTgChatsDraft] = useState(() => seedChats(tgChats, tgChatId));
   const [olishDraft, setOlishDraft] = useState(usdOlish);
   const [sotishDraft, setSotishDraft] = useState(usdRate);
   const [nLogin, setNLogin] = useState('');
@@ -175,7 +186,34 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
   useEffect(() => { setShopDraft(shopName); }, [shopName]);
   useEffect(() => { setPhoneDraft(shopPhone); }, [shopPhone]);
   useEffect(() => { setTgTokenDraft(tgToken); }, [tgToken]);
-  useEffect(() => { setTgChatDraft(tgChatId); }, [tgChatId]);
+  // Tahrir qilinayotgan bo'lsa — masofadan kelgan yangilanish (o'z saqlovimiz aks-sadosi
+  // yoki boshqa qurilma) draftni ustiga yozib, yozilmagan o'zgarishlarni o'chirmasin.
+  const tgDirty = useRef(false);
+  useEffect(() => {
+    if (tgDirty.current) return;
+    setTgChatsDraft(seedChats(tgChats, tgChatId));
+  }, [JSON.stringify(tgChats), tgChatId]);
+
+  function addChatRow() { tgDirty.current = true; setTgChatsDraft((p) => [...p, { id: genId(), nom: '', chatId: '' }]); }
+  function setChatRow(id, field, val) { tgDirty.current = true; setTgChatsDraft((p) => p.map((r) => (r.id === id ? { ...r, [field]: val } : r))); }
+  function removeChatRow(id) {
+    tgDirty.current = true;
+    setTgChatsDraft((p) => (p.length <= 1 ? [{ id: genId(), nom: '', chatId: '' }] : p.filter((r) => r.id !== id)));
+  }
+  function saveChats() {
+    const seen = new Set();
+    const clean = tgChatsDraft
+      .map((r) => ({ id: r.id, nom: (r.nom || '').trim(), chatId: (r.chatId || '').trim() }))
+      .filter((r) => r.chatId)
+      .filter((r) => { if (seen.has(r.chatId)) return false; seen.add(r.chatId); return true; }); // ID takrorlanmasin
+    updateTgChats(clean);
+    updateTgChatId(clean.length ? clean[0].chatId : ''); // eski yagona maydon — zaxira moslik
+    tgDirty.current = false;
+    showToast(clean.length ? `${clean.length} ta manzil saqlandi` : 'Manzillar tozalandi');
+  }
+  const tgManzilSoni = new Set(tgChatsDraft.map((r) => (r.chatId || '').trim()).filter(Boolean)).size;
+  const tgSozlangan = telegramSozlangan({ token: tgToken, chatId: tgChatId, chats: tgChats });
+  const tgManzilJami = tgChatList({ token: tgToken, chatId: tgChatId, chats: tgChats }).length;
   useEffect(() => { setOlishDraft(usdOlish); }, [usdOlish]);
   useEffect(() => { setSotishDraft(usdRate); }, [usdRate]);
 
@@ -301,11 +339,12 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
       </Card>
 
       <Card>
-        <SectionTitle icon={Bot}>Telegram bot (Kazirok DXF)</SectionTitle>
+        <SectionTitle icon={Bot}>Telegram bot (Kazirok DXF albom)</SectionTitle>
         <p className="text-xs text-slate-500 mb-3 -mt-1">
-          Chekdan "Botga DXF (4m/6m)" bosilganda sartirovka qilingan DXF fayllar shu botga yuboriladi.
-          Token <b>@BotFather</b>dan; Chat ID — bot yuboradigan guruh/kanal yoki shaxsiy chat IDsi
-          (botni o'sha chatga qo'shing, admin qiling).
+          Chekdan <b>"Botga DXF (4m/6m)"</b> bosilganda — <b>narxsiz chek rasmi</b> (qisqartirilmagan) +
+          barcha DXF fayllar <b>bitta albom</b> bo'lib quyidagi manzillarning <b>hammasiga</b> yuboriladi.
+          Rasm ostida zakas ma'lumotlari (mijoz, usta, sana, holat — <b>pulsiz</b>). Har bosganda qaytadan ketadi.
+          Token <b>@BotFather</b>dan. Manzil — guruh, kanal yoki shaxsiy. Botni o'sha joyga qo'shing va <b>admin</b> qiling.
         </p>
         <div className="space-y-3">
           <div>
@@ -319,20 +358,49 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
             </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Chat ID (guruh/kanal/shaxsiy)</label>
-            <div className="flex gap-2">
-              <input value={tgChatDraft} onChange={(e) => setTgChatDraft(e.target.value)} placeholder="-1001234567890"
-                autoComplete="off" spellCheck={false}
-                className="flex-1 min-w-0 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none font-mono text-xs tabular-nums" />
-              <button onClick={() => { updateTgChatId(tgChatDraft.trim()); showToast('Chat ID saqlandi'); }}
-                className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 flex-shrink-0">Saqlash</button>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs text-slate-500">Manzillar (guruh / kanal / shaxsiy) — xohlagancha qo'shing</label>
+              <span className="text-[10px] text-slate-400">{tgManzilSoni} ta</span>
+            </div>
+            <div className="space-y-2">
+              {tgChatsDraft.map((row, i) => (
+                <div key={row.id} className="flex gap-2 items-start">
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <input value={row.nom} onChange={(e) => setChatRow(row.id, 'nom', e.target.value)}
+                      placeholder={`Nom (masalan: ${i === 0 ? 'Menejerlar guruhi' : i === 1 ? 'Kanal' : 'Shaxsiy'})`}
+                      autoComplete="off" spellCheck={false}
+                      className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none text-xs" />
+                    <input value={row.chatId} onChange={(e) => setChatRow(row.id, 'chatId', e.target.value)}
+                      placeholder="-1001234567890 (yoki @kanal_username)"
+                      autoComplete="off" spellCheck={false}
+                      className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none font-mono text-xs tabular-nums" />
+                  </div>
+                  <button onClick={() => removeChatRow(row.id)} title="Manzilni o'chirish"
+                    className="px-2.5 py-2 rounded-lg border-2 border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex-shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <button onClick={addChatRow}
+                className="flex-1 py-2 rounded-lg border-2 border-slate-200 text-slate-700 font-medium hover:bg-slate-50 flex items-center justify-center gap-1.5 text-sm">
+                <Plus className="w-4 h-4" /> Manzil qo'shish
+              </button>
+              <button onClick={saveChats}
+                className="px-5 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800 flex-shrink-0">Saqlash</button>
             </div>
           </div>
           <div className="text-[11px] text-slate-400">
-            {tgToken && tgChatId
-              ? <span className="text-emerald-600 font-semibold">✓ Telegram sozlangan — chekdan DXF yuborish mumkin</span>
-              : <span>Token va Chat ID to'ldirilsa, chekdan DXF avtomatik botga ketadi.</span>}
+            {tgSozlangan
+              ? <span className="text-emerald-600 font-semibold">✓ Telegram sozlangan — {tgManzilJami} ta manzilga albom yuboriladi</span>
+              : <span>Token va kamida bitta manzil saqlansa, chekdan DXF albom avtomatik botga ketadi.</span>}
           </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Chat ID ni olish: botni guruh/kanalga qo'shib admin qiling, so'ng <b>Nazorat boti</b>ga
+            <code className="px-1">/id</code> yozing — yoki <b>@userinfobot</b>dan foydalaning. Guruh
+            superguruhga aylansa, ID o'zi yangilanadi.
+          </p>
         </div>
       </Card>
 
