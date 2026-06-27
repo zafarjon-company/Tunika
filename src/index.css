@@ -505,6 +505,8 @@ html.themed .chz button.tool:hover { border-color: var(--c-t4); }
 /* "Nuqta qo'shish" tugmasi — yoqilganda accent rangda ajralib turadi */
 .chz button.tool.addpoint { border-color: var(--chz-accent); color: var(--chz-accent); }
 .chz button.tool.addpoint.active { background: color-mix(in srgb, var(--chz-accent) 16%, transparent); box-shadow: 0 0 0 1.5px var(--chz-accent) inset; }
+.chz button.tool.removepoint { border-color: #ef4444; color: #ef4444; }
+.chz button.tool.removepoint.active { background: color-mix(in srgb, #ef4444 16%, transparent); box-shadow: 0 0 0 1.5px #ef4444 inset; }
 
 /* DXF import tugmasi + fon namuna boshqaruvi */
 .chz button.tool.import { border-color: var(--chz-accent); color: var(--chz-accent); }

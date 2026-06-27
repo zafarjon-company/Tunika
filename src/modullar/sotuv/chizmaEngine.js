@@ -156,18 +156,18 @@ const QOZ_PESH0 = 7;   // bazaviy peshona (sm) — DXF 70 mm
 const QOZ_X_RAZ_A = 3,    QOZ_X_RAZ_B = 63;     // gorizontal razmeri (3..63 = 60)
 const QOZ_X_PESH_A = 64.5, QOZ_X_PESH_B = 71.5; // gorizontal peshona (64.5..71.5 = 7)
 const QOZ_Y_PESH_A = 1.5,  QOZ_Y_PESH_B = 8.5;  // vertikal peshona (1.5..8.5 = 7)
-const QOZ_Y_RAZ_A = 10.3,  QOZ_Y_RAZ_B = 70;    // vertikal razmeri (10.3..70 ≈ 60)
+const QOZ_Y_RAZ_A = 8.5,   QOZ_Y_RAZ_B = 68.5;  // vertikal razmeri (8.5..68.5 = 60) — peshonaga TO'G'RIDAN-TO'G'RI ulanadi (chapda gap YO'Q)
 // Cho'zish (kesish) nuqtalari — flat tanada, hech bir tabcha/diagonal kesilmaydigan joyda.
 const QOZ_XR = 33, QOZ_XP = 67;   // X: razmeri / peshona cho'zish nuqtasi
 const QOZ_YP = 4,  QOZ_YR = 40;   // Y: peshona / razmeri cho'zish nuqtasi
-// Burchak konturi — "Tashqi burchak qozon.dxf" dan AYNAN (sm, y = yuqoridan past), 28 segment.
+// Burchak konturi — "Tashqi burchak qozon.dxf" dan, CHAP qirrasi TUZATILGAN:
+// chapda razmeri↔peshona orasidagi notch (gap) olib tashlandi → uzluksiz qirra
+// [0,1.5,0,68.5]. Gap/notch FAQAT tepada qoladi. (sm, y = yuqoridan past), 22 segment.
 const QOZON_SEG = [
   [3, 1.5, 3, 0], [3, 0, 64.5, 0], [63, 0, 63, 0.5],
-  [64.5, 0, 64.5, 7], [0, 7, 0, 1.5], [0, 1.5, 3, 1.5],
-  [63.5, 1.5, 64.5, 1.5], [1.5, 7, 0, 7], [1.5, 7, 3, 8.5],
-  [64.5, 7, 63, 8.5], [1.5, 10.3, 1.5, 8.5], [1.5, 8.5, 3, 8.5],
-  [71.5, 8.5, 63, 8.5], [70, 9.5, 70, 8.5], [71.5, 68.5, 71.5, 8.5],
-  [0, 68.5, 0, 10.3], [0, 10.3, 1.5, 10.3], [0, 68.5, 3, 68.5],
+  [64.5, 0, 64.5, 7], [0, 1.5, 3, 1.5], [63.5, 1.5, 64.5, 1.5],
+  [64.5, 7, 63, 8.5], [71.5, 8.5, 63, 8.5], [70, 9.5, 70, 8.5],
+  [71.5, 68.5, 71.5, 8.5], [0, 1.5, 0, 68.5], [0, 68.5, 3, 68.5],
   [3, 68.5, 3, 71.5], [63, 70, 63, 68.5], [64.5, 70, 63, 68.5],
   [70, 71.5, 70, 68.5], [70, 68.5, 71.5, 68.5], [61.2, 71.5, 61.2, 70],
   [61.2, 70, 63, 70], [64.5, 70, 64.5, 71.5], [3, 71.5, 61.2, 71.5],
@@ -262,6 +262,7 @@ export function computePalette() {
 const TEMPLATE = `
   <div class="chz-toolbar">
     <button type="button" class="tool addpoint" data-chz="btnAddPoint" title="Yoqilsa — maydonni bosib yangi nuqta qo'shiladi (Esc — bekor)">&#10010; Nuqta qo'shish</button>
+    <button type="button" class="tool removepoint" data-chz="btnRemovePoint" title="Yoqilsa — nuqtani bosib belgilang (qizil), so'ng &quot;O'chirish&quot; yoki Delete bilan o'chiring. Nuqtaga ulangan chiziqlar ham o'chadi (Esc — bekor)">&#9447; Nuqta o'chirish</button>
     <span class="sep"></span>
     <button type="button" class="tool import" data-chz="btnImport" title="Chizma (AutoCAD DXF) faylni import qilish — to'g'ridan-to'g'ri tahrirlanadigan chiziqlar bo'lib chiqadi (faylni maydonga sudrab tashlasangiz ham bo'ladi)">&#128193; Import</button>
     <select class="rowUnit chz-refunit" data-chz="unitRef" title="Import faylning o'lcham birligi (o'lchamlar shunga qarab o'giriladi)" style="display:none">
@@ -452,10 +453,12 @@ export function mountChizma(root, opts) {
     unitDevor: 'm', unitQosh: 'm', unitKazirok: 'm', unitKazirokArea: 'm', unitCorner: 'cm',
     unitDarvozaArea: 'm', unitDarvozaHovuz: 'm',
     selectedLines: new Set(),
+    selectedPoints: new Set(),  // "Nuqta o'chirish" rejimida belgilangan nuqtalar (id)
     scale: 1 / 50,         // piksel / mm
     panX: 0, panY: 0,
     activeInput: null,     // {mode:"draw"|...}
     placingPoint: false,   // "Nuqta qo'shish" rejimi — maydonni bosib nuqta ekiladi
+    removingPoint: false,  // "Nuqta o'chirish" rejimi — nuqtani bosib belgilab, so'ng o'chiriladi
     showDevorPlus: true,
     showQoshPlus: false,
     showDarvozaPlus: true,
@@ -780,11 +783,20 @@ export function mountChizma(root, opts) {
 
   /* ---------------- BOSHQARUV AMALLARI ---------------- */
   function deleteSelected() {
-    if (state.selectedLines.size === 0) return;
+    if (state.selectedLines.size === 0 && state.selectedPoints.size === 0) return;
     pushHistory();
-    state.lines = state.lines.filter((l) => !state.selectedLines.has(l.id));
-    state.selectedLines.clear();
-    cleanupOrphans();
+    if (state.selectedPoints.size > 0) {
+      // Belgilangan nuqtalar + ularga ulangan chiziqlar o'chiriladi (boshqa erkin nuqtalarga tegmaymiz).
+      const sp = state.selectedPoints;
+      state.lines = state.lines.filter((l) => !sp.has(l.a) && !sp.has(l.b));
+      state.points = state.points.filter((p) => !sp.has(p.id));
+      sp.clear();
+    }
+    if (state.selectedLines.size > 0) {
+      state.lines = state.lines.filter((l) => !state.selectedLines.has(l.id));
+      state.selectedLines.clear();
+      cleanupOrphans();
+    }
     render();
   }
 
@@ -796,8 +808,20 @@ export function mountChizma(root, opts) {
   // erkin (chiziqqa ulanmagan) nuqta ekiladi; o'sha nuqtadan "+" orqali
   // chizishni boshlash mumkin.
   function setPlacingPoint(on) {
+    if (on && state.editMode) setEditMode(false);   // Tahrir rejimidan chiqamiz (rejimlar o'zaro istisno)
     state.placingPoint = on;
-    if (on) { closeInput(); state.selectedLines.clear(); }
+    if (on) { closeInput(); state.selectedLines.clear(); state.removingPoint = false; state.selectedPoints.clear(); }
+    syncToggleButtons();
+    render();
+  }
+
+  // "Nuqta o'chirish" rejimini yoqish/o'chirish. Yoqilsa — nuqtani bosib belgilab
+  // (qizil), so'ng "O'chirish" yoki Delete bilan o'chiriladi (ulangan chiziqlar bilan).
+  function setRemovingPoint(on) {
+    if (on && state.editMode) setEditMode(false);   // Tahrir rejimidan chiqamiz (rejimlar o'zaro istisno)
+    state.removingPoint = on;
+    state.selectedPoints.clear();
+    if (on) { closeInput(); state.placingPoint = false; state.selectedLines.clear(); }
     syncToggleButtons();
     render();
   }
@@ -816,6 +840,7 @@ export function mountChizma(root, opts) {
     state.points = [{ id: 0, x: 0, y: 0 }];
     state.lines = [];
     state.selectedLines.clear();
+    state.selectedPoints.clear();
     closeInput();
     render();
   }
@@ -1597,7 +1622,7 @@ export function mountChizma(root, opts) {
   function setEditMode(on) {
     state.editMode = on;
     if (!on) { state.toolDraft = null; editSel = null; state.selEdit.clear(); }
-    else { closeInput(); state.placingPoint = false; state.selectedLines.clear(); syncToggleButtons(); }
+    else { closeInput(); state.placingPoint = false; state.removingPoint = false; state.selectedPoints.clear(); state.selectedLines.clear(); syncToggleButtons(); }
     syncEditUI();
     render();
   }
@@ -2731,6 +2756,17 @@ export function mountChizma(root, opts) {
     // 2) NUQTALAR
     for (const p of state.points) {
       const s = worldToScreen(p.x, p.y);
+      // "Nuqta o'chirish" rejimi — nuqtalar bosish uchun kattalashadi; belgilangani qizil.
+      if (state.removingPoint && p.id !== 0) {
+        const selp = state.selectedPoints.has(p.id);
+        svg.appendChild(svgEl('circle', {
+          cx: s.x, cy: s.y, r: selp ? 6.5 : 5,
+          fill: selp ? '#ef4444' : P.point, 'fill-opacity': selp ? 0.35 : 1,
+          stroke: selp ? '#ef4444' : P.pointStroke, 'stroke-width': selp ? 2 : 1.4,
+          style: 'cursor:pointer',
+        }));
+        continue;
+      }
       svg.appendChild(svgEl('circle', {
         cx: s.x, cy: s.y, r: 1.6,
         fill: P.point, stroke: P.pointStroke, 'stroke-width': 0.75,
@@ -2849,8 +2885,8 @@ export function mountChizma(root, opts) {
 
     // 5) "+" BELGILARI (chiziq rangiga qarab guruhlangan) — eng ustda,
     //    razmer yozuvi ustiga tushsa ham ko'rinadi va bosiladi.
-    //    Tahrir rejimida "+" belgilari ko'rsatilmaydi (chalkashmasin).
-    if (!state.editMode) {
+    //    Tahrir / Nuqta o'chirish rejimida "+" belgilari ko'rsatilmaydi (chalkashmasin).
+    if (!state.editMode && !state.removingPoint) {
     for (const p of state.points) {
       if (!pointPlusVisible(p.id)) continue;
       const s = worldToScreen(p.x, p.y);
@@ -3075,6 +3111,7 @@ export function mountChizma(root, opts) {
   }
   function syncToggleButtons() {
     q('btnAddPoint').classList.toggle('active', state.placingPoint);
+    q('btnRemovePoint').classList.toggle('active', state.removingPoint);
     q('tgDevor').classList.toggle('off', !state.showDevorPlus);
     q('tgQosh').classList.toggle('off', !state.showQoshPlus);
     q('tgDarvoza').classList.toggle('off', !state.showDarvozaPlus);
@@ -3266,6 +3303,19 @@ export function mountChizma(root, opts) {
     // boradi (qozon to'rtburchagi/razmer yozuvi/devor chizig'i ustini bossa ham;
     // tahrir o'z geometrik hit-testini ishlatadi). e.target===svg sharti shart emas.
     if (state.editMode && e.button === 0 && svg.contains(e.target)) { e.preventDefault(); editDown(e); return; }
+    // "Nuqta o'chirish" rejimi — nuqtani bosib belgilash/belgini olib tashlash
+    // (svg ichidagi istalgan joyda; "+"/chiziq ustiga bosilsa ham eng yaqin nuqta).
+    if (state.removingPoint && e.button === 0 && svg.contains(e.target)) {
+      e.preventDefault();
+      const r0 = svg.getBoundingClientRect();
+      const pid = nearestPointId(e.clientX - r0.left, e.clientY - r0.top, 16, 0);  // id 0 (boshlang'ich) o'chmaydi
+      if (pid != null) {
+        if (state.selectedPoints.has(pid)) state.selectedPoints.delete(pid);
+        else state.selectedPoints.add(pid);
+        render();
+      }
+      return;
+    }
     if (e.target !== svg) return;
     const rect = svg.getBoundingClientRect();
     // "Nuqta qo'shish" rejimi — chap tugma bilan maydonni bosib nuqta ekiladi.
@@ -3349,6 +3399,8 @@ export function mountChizma(root, opts) {
     }
     // "Nuqta qo'shish" rejimi — Esc bilan bekor qilinadi.
     if (state.placingPoint && e.key === 'Escape') { setPlacingPoint(false); return; }
+    // "Nuqta o'chirish" rejimi — Esc bilan bekor qilinadi.
+    if (state.removingPoint && e.key === 'Escape') { setRemovingPoint(false); return; }
     // TAHRIR rejimi qisqartmalari (Ctrl+Z/Y/E pastda umumiy ishlayveradi).
     if (state.editMode) {
       if (e.key === 'Escape') { e.preventDefault(); editEscape(); return; }
@@ -3362,13 +3414,14 @@ export function mountChizma(root, opts) {
     if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'e') { e.preventDefault(); centerView(); }
-    else if (!state.editMode && (e.key === 'Delete' || e.key === 'Backspace') && state.selectedLines.size > 0) {
+    else if (!state.editMode && (e.key === 'Delete' || e.key === 'Backspace') && (state.selectedLines.size > 0 || state.selectedPoints.size > 0)) {
       e.preventDefault(); deleteSelected();
     }
   });
 
   // Toolbar hodisalari.
   on(q('btnAddPoint'), 'click', () => setPlacingPoint(!state.placingPoint));
+  on(q('btnRemovePoint'), 'click', () => setRemovingPoint(!state.removingPoint));
   on(q('btnRed'), 'click', () => setColor('red'));
   on(q('btnYellow'), 'click', () => setColor('yellow'));
   on(q('btnDarvoza'), 'click', () => setColor('darvoza'));
