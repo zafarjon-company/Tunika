@@ -99,6 +99,10 @@ export const DEFAULT_KAZ_TURLARI = [
       { id: 'l15', eni: 8.3,  peshona: 10.1, razmeri: 51.5, metrNarx: 0 },
       { id: 'l14', eni: 8.85, peshona: 10.1, razmeri: 51.5, metrNarx: 0 },
     ],
+    // Qozon = shu turning BURCHAK patalogi (razmeri/peshona har tomon alohida)
+    qozonlar: [
+      { id: 'q1', razX: 60, peshX: 7, razY: 60, peshY: 7, metrNarx: 0 },
+    ],
   },
 ];
 

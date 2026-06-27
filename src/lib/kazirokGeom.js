@@ -189,3 +189,83 @@ export function kazItemCalc(kind, item = {}) {
   const listMetri = pieceM / bolak;
   return { eni, peshona, razmeri, fold, bolak, pieceLenCm, pieceM, listMetri, W: geom.W, H: geom.H };
 }
+
+/* ============================================================
+   QOZON (Tashqi burchak) — shu turning BURCHAK patalogi
+   ------------------------------------------------------------
+   Patalokdek detal, ammo BURCHAK bo'lgani uchun har tomon alohida:
+     • razmeriX / peshonaX — gorizontal (tepa) tomon
+     • razmeriY / peshonaY — vertikal (chap) tomon
+   "Tashqi burchak qozon.dxf" dan AYNAN (sm). Default razmeri=60, peshona=7.
+   Konturlar chizmaEngine.js bilan bir xil — birini o'zgartirsangiz ikkalasini.
+   ============================================================ */
+export const QOZ_RAZ0 = 60;   // bazaviy razmeri (sm)
+export const QOZ_PESH0 = 7;   // bazaviy peshona (sm)
+const QOZ_X_RAZ_A = 3,    QOZ_X_RAZ_B = 63;     // gorizontal razmeri zonasi
+const QOZ_X_PESH_A = 64.5, QOZ_X_PESH_B = 71.5; // gorizontal peshona zonasi
+const QOZ_Y_PESH_A = 1.5,  QOZ_Y_PESH_B = 8.5;  // vertikal peshona zonasi
+const QOZ_Y_RAZ_A = 8.5,   QOZ_Y_RAZ_B = 68.5;  // vertikal razmeri zonasi
+const QOZ_XR = 33, QOZ_XP = 67;   // X: razmeri / peshona cho'zish nuqtasi
+const QOZ_YP = 4,  QOZ_YR = 40;   // Y: peshona / razmeri cho'zish nuqtasi
+const QOZON_SEG = [
+  [3, 1.5, 3, 0], [3, 0, 64.5, 0], [63, 0, 63, 0.5],
+  [64.5, 0, 64.5, 7], [0, 1.5, 3, 1.5], [63.5, 1.5, 64.5, 1.5],
+  [64.5, 7, 63, 8.5], [71.5, 8.5, 63, 8.5], [70, 9.5, 70, 8.5],
+  [71.5, 68.5, 71.5, 8.5],
+  [0, 1.5, 0, 7], [0, 7, 1.5, 7], [1.5, 7, 3, 8.5], [3, 8.5, 1.5, 8.5],
+  [1.5, 8.5, 1.5, 10.3], [1.5, 10.3, 0, 10.3], [0, 10.3, 0, 68.5],
+  [0, 68.5, 3, 68.5],
+  [3, 68.5, 3, 71.5], [63, 70, 63, 68.5], [64.5, 70, 63, 68.5],
+  [70, 71.5, 70, 68.5], [70, 68.5, 71.5, 68.5], [61.2, 71.5, 61.2, 70],
+  [61.2, 70, 63, 70], [64.5, 70, 64.5, 71.5], [3, 71.5, 61.2, 71.5],
+  [64.5, 71.5, 70, 71.5],
+];
+// razmeri/peshona zonalarini cho'zadi/qisqartiradi (cho'zish nuqtasidan keyin siljiydi).
+function cornerFx(x, dRx, dPx) { return x + (x > QOZ_XR ? dRx : 0) + (x > QOZ_XP ? dPx : 0); }
+function cornerFy(y, dPy, dRy) { return y + (y > QOZ_YP ? dPy : 0) + (y > QOZ_YR ? dRy : 0); }
+function cornerGeom(razX, peshX, razY, peshY) {
+  const rX = Math.max(5, razX || QOZ_RAZ0), pX = Math.max(2, peshX || QOZ_PESH0);
+  const rY = Math.max(5, razY || QOZ_RAZ0), pY = Math.max(2, peshY || QOZ_PESH0);
+  const dRx = rX - QOZ_RAZ0, dPx = pX - QOZ_PESH0, dRy = rY - QOZ_RAZ0, dPy = pY - QOZ_PESH0;
+  const segs = QOZON_SEG.map(([x1, y1, x2, y2]) =>
+    [cornerFx(x1, dRx, dPx), cornerFy(y1, dPy, dRy), cornerFx(x2, dRx, dPx), cornerFy(y2, dPy, dRy)]);
+  return { segs, W: cornerFx(71.5, dRx, dPx), H: cornerFy(71.5, dPy, dRy), rX, pX, rY, pY, dRx, dPx, dRy, dPy };
+}
+// Burchak qozon chizmasi (SVG) — DOSKA (orqa) ko'rinishi (transpose'siz, asl DXF'dek).
+// TEPA = razmeriX + peshonaX (gapli); CHAP = peshonaY + razmeriY (gapsiz).
+export function cornerSvg(razX, peshX, razY, peshY) {
+  const g = cornerGeom(razX, peshX, razY, peshY);
+  const padL = 17, padR = 8, padT = 14, padB = 8;
+  const vbW = g.W + padL + padR, vbH = g.H + padT + padB;
+  const GREEN = '#16a34a';
+  const FX = (x) => cornerFx(x, g.dRx, g.dPx);
+  const FY = (y) => cornerFy(y, g.dPy, g.dRy);
+  const det = g.segs.map((s) =>
+    `<line x1="${s[0].toFixed(2)}" y1="${s[1].toFixed(2)}" x2="${s[2].toFixed(2)}" y2="${s[3].toFixed(2)}" stroke="currentColor" stroke-width="0.85" stroke-linecap="round"/>`).join('');
+  const dims =
+    hdimMarkup(-4, FX(QOZ_X_RAZ_A),  FX(QOZ_X_RAZ_B),  '' + (+g.rX.toFixed(1)), GREEN) +
+    hdimMarkup(-4, FX(QOZ_X_PESH_A), FX(QOZ_X_PESH_B), '' + (+g.pX.toFixed(1)), GREEN) +
+    vdimMarkup(-7, FY(QOZ_Y_PESH_A), FY(QOZ_Y_PESH_B), '' + (+g.pY.toFixed(1)), GREEN) +
+    vdimMarkup(-7, FY(QOZ_Y_RAZ_A),  FY(QOZ_Y_RAZ_B),  '' + (+g.rY.toFixed(1)), GREEN);
+  return `<svg viewBox="${-padL} ${-padT} ${vbW} ${vbH}" style="display:block;width:100%;height:auto">
+    ${det}
+    ${dims}
+  </svg>`;
+}
+
+/* Bitta qozon (burchak) uchun to'liq hisob. Savdodagi buildCornerPayload bilan
+   bir xil mantiq: kraska tomoni transpose qilingani uchun bo'lak eni = g.H,
+   bir bo'lak uzunligi = g.W. listMetri = (g.W m) ÷ bolak (1 dona uchun). */
+export function cornerItemCalc(item = {}) {
+  const razX = Math.max(5, +item.razX || QOZ_RAZ0);
+  const peshX = Math.max(2, +item.peshX || QOZ_PESH0);
+  const razY = Math.max(5, +item.razY || QOZ_RAZ0);
+  const peshY = Math.max(2, +item.peshY || QOZ_PESH0);
+  const g = cornerGeom(razX, peshX, razY, peshY);
+  const wMm = g.H * 10;                                       // transpose (kraska) eni, mm
+  const bolak = Math.max(1, Math.floor(1245 / Math.max(1, wMm)));
+  const pieceLenCm = g.W;
+  const pieceM = pieceLenCm / 100;
+  const listMetri = pieceM / bolak;
+  return { razX, peshX, razY, peshY, bolak, pieceLenCm, pieceM, listMetri, W: g.W, H: g.H };
+}

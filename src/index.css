@@ -748,15 +748,17 @@ html.themed .chz-kaz-listsel { color: var(--c-t3); }
 .chz-kaz-item.closed .chz-kaz-itoggle::before { content: '▸'; }
 .chz-kaz-itoggle:hover { border-color: var(--chz-kazirok); color: var(--chz-kazirok); }
 html.themed .chz-kaz-itoggle { background: var(--c-bg); border-color: var(--c-line); color: var(--c-t2); }
-/* Yig'ilganda — batafsil sozlamalar yashirin; sarlavha (razmer+dona) va KICHIK chizma qoladi */
+/* Yig'ilganda — batafsil sozlamalar yashirin; sarlavha (razmer+dona) qoladi va
+   chizma JUDA KICHIK ko'rinadi (shrift bo'yidan biroz kattaroq — faqat tanish belgisi) */
 .chz-kaz-item.closed .chz-kaz-ibody { display: none; }
-.chz-kaz-item.closed .chz-kaz-draw { max-width: 150px; margin: 0 0 2px; }
-/* Guruh tepasidagi sarlavha ("Kazirok" / "Tashqi burchak qozon") + "Hammasini" tugmasi */
+.chz-kaz-item.closed .chz-kaz-draw { margin: 0 0 2px; }
+.chz-kaz-item.closed .chz-kaz-draw svg { width: auto !important; height: 22px !important; }
+/* Guruh tepasidagi sarlavha ("Kazirok" / "Tashqi burchak qozon") + tugmalar */
 .chz-kaz-superhead {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--chz-kazirok);
 }
-.chz-kaz-superhead > span { font-size: 13px; font-weight: 800; color: var(--chz-kazirok); }
+.chz-kaz-superhead > span { flex: 1; font-size: 13px; font-weight: 800; color: var(--chz-kazirok); }
 .chz-kaz-superhead-top { margin: 2px 0 12px; }
 .chz-kaz-allbtn {
   flex: none; padding: 5px 11px; font-size: 10.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
@@ -766,10 +768,27 @@ html.themed .chz-kaz-itoggle { background: var(--c-bg); border-color: var(--c-li
 .chz-kaz-allbtn:hover { background: var(--chz-kazirok); color: #fff; }
 html.themed .chz-kaz-allbtn { background: var(--c-bg); }
 html.themed .chz-kaz-allbtn:hover { background: var(--chz-kazirok); color: #fff; }
+/* Butun guruhni bitta qatorga yopish — "Kazirok" / "Tashqi burchak qozon" bloki */
+.chz-kaz-block { margin-bottom: 16px; }
+.chz-kaz-block.closed .chz-kaz-blockbody { display: none; }
+.chz-kaz-block.closed .chz-kaz-allbtn { display: none; }
+.chz-kaz-block.closed .chz-kaz-superhead { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+/* Butun guruhni ochish/yopish tugmasi (superhead chap chetidagi chevron) */
+.chz-kaz-gtoggle {
+  flex: none; width: 22px; height: 22px; padding: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--chz-kazirok); border-radius: 5px; background: #fff; color: var(--chz-kazirok);
+  transition: background .12s, color .12s;
+}
+.chz-kaz-gtoggle::before { content: '▾'; font-size: 11px; line-height: 1; }
+.chz-kaz-block.closed .chz-kaz-gtoggle::before { content: '▸'; }
+.chz-kaz-gtoggle:hover { background: var(--chz-kazirok); color: #fff; }
+html.themed .chz-kaz-gtoggle { background: var(--c-bg); }
+html.themed .chz-kaz-gtoggle:hover { background: var(--chz-kazirok); color: #fff; }
 /* "Kerak emas" qilingan guruh — yig'ish o'chiriladi (qaytarish tugmasi doim ko'rinsin) */
 .chz-kaz-off .chz-kaz-itoggle { display: none; }
 .chz-kaz-off .chz-kaz-item.closed .chz-kaz-ibody { display: block; }
-.chz-kaz-off .chz-kaz-item.closed .chz-kaz-draw { max-width: none; }
+.chz-kaz-off .chz-kaz-item.closed .chz-kaz-draw svg { width: 100% !important; height: auto !important; }
 html.themed .chz-kaz-listsel select { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
 /* Burchak qozon — List ko'rsatkichi (read-only; Pataloklar Listiga ergashadi) */
 .chz-kaz-listro { width: 100%; padding: 4px 6px; border: 1px dashed #cbd5e1; border-radius: 5px; font-size: 12px; font-weight: 600; color: #0f172a; background: #f8fafc; }

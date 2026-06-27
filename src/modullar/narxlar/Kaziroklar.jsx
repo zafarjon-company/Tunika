@@ -13,7 +13,10 @@ import React, { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Triangle, Edit3, Copy, ChevronRight, ArrowLeft, Ruler } from 'lucide-react';
 import { Card, SectionTitle, RangTanla, RangBadge } from '../../components/ui.jsx';
 import { genId, fmt, rangGuruhlari } from '../../lib/helpers.js';
-import { KAZ_DETS, kazSvg, kazItemCalc } from '../../lib/kazirokGeom.js';
+import { KAZ_DETS, kazSvg, kazItemCalc, cornerSvg, cornerItemCalc, QOZ_RAZ0, QOZ_PESH0 } from '../../lib/kazirokGeom.js';
+
+// Detal turi sarlavhasi (KAZ_DETS faqat pat/pal; qoz alohida).
+const KIND_TITLE = { pat: 'Patalok', pal: 'Paloska', qoz: 'Qozon (burchak)' };
 
 export function KazirokTab({ kaziroklar, updateKaziroklar, kazTurlari = [], updateKazTurlari, ranglar = [], showToast }) {
   const [openTuriId, setOpenTuriId] = useState(null);
@@ -49,7 +52,7 @@ function TurlarSection({ kazTurlari, onOpen }) {
       ) : (
         <div className="space-y-1.5">
           {kazTurlari.map((t) => {
-            const np = (t.pataloklar || []).length, nl = (t.paloskalar || []).length;
+            const np = (t.pataloklar || []).length, nl = (t.paloskalar || []).length, nq = (t.qozonlar || []).length;
             return (
               <button key={t.id} onClick={() => onOpen(t.id)}
                 className="w-full flex items-center gap-3 p-3 border border-slate-200 rounded-xl bg-white hover:border-slate-900 transition text-left">
@@ -59,7 +62,7 @@ function TurlarSection({ kazTurlari, onOpen }) {
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold text-sm text-slate-800 truncate">{t.nomi}</span>
                   <span className="block text-[11px] text-slate-500">
-                    {np} patalok · {nl} paloska · foyda {Number(t.foyda) || 0}%
+                    {np} patalok · {nl} paloska · {nq} qozon · foyda {Number(t.foyda) || 0}%
                   </span>
                 </span>
                 <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
@@ -81,10 +84,10 @@ function TurlarSection({ kazTurlari, onOpen }) {
    ============================================================ */
 function TuriDetail({ turi, onBack, onPatch }) {
   const foyda = Number(turi.foyda) || 0;
-  const items = (kind) => (kind === 'pat' ? turi.pataloklar : turi.paloskalar) || [];
-  const key = (kind) => (kind === 'pat' ? 'pataloklar' : 'paloskalar');
+  const KEY = { pat: 'pataloklar', pal: 'paloskalar', qoz: 'qozonlar' };
+  const items = (kind) => turi[KEY[kind]] || [];
 
-  const setItems = (kind, arr) => onPatch({ [key(kind)]: arr });
+  const setItems = (kind, arr) => onPatch({ [KEY[kind]]: arr });
   const patchItem = (kind, id, p) => setItems(kind, items(kind).map((it) => (it.id === id ? { ...it, ...p } : it)));
   const removeItem = (kind, id) => setItems(kind, items(kind).filter((it) => it.id !== id));
   const dupItem = (kind, it) => {
@@ -95,9 +98,14 @@ function TuriDetail({ turi, onBack, onPatch }) {
     setItems(kind, next);
   };
   function addItem(kind) {
-    const d = KAZ_DETS[kind].def;
-    const base = { id: genId(), eni: d.eni, peshona: d.peshona, razmeri: d.razmeri, metrNarx: 0 };
-    if (kind === 'pat') base.fold = false;
+    let base;
+    if (kind === 'qoz') {
+      base = { id: genId(), razX: QOZ_RAZ0, peshX: QOZ_PESH0, razY: QOZ_RAZ0, peshY: QOZ_PESH0, metrNarx: 0 };
+    } else {
+      const d = KAZ_DETS[kind].def;
+      base = { id: genId(), eni: d.eni, peshona: d.peshona, razmeri: d.razmeri, metrNarx: 0 };
+      if (kind === 'pat') base.fold = false;
+    }
     setItems(kind, [...items(kind), base]);
   }
 
@@ -131,17 +139,22 @@ function TuriDetail({ turi, onBack, onPatch }) {
       <KazDetGroup kind="pal" items={items('pal')} foyda={foyda}
         onAdd={() => addItem('pal')} onPatch={(id, p) => patchItem('pal', id, p)}
         onRemove={(id) => removeItem('pal', id)} onDup={(it) => dupItem('pal', it)} />
+      <div className="h-4" />
+      <KazDetGroup kind="qoz" items={items('qoz')} foyda={foyda}
+        onAdd={() => addItem('qoz')} onPatch={(id, p) => patchItem('qoz', id, p)}
+        onRemove={(id) => removeItem('qoz', id)} onDup={(it) => dupItem('qoz', it)} />
     </Card>
   );
 }
 
-// Patalok yoki Paloska guruhi — har detal kartasi chizma + hisob + narx bilan.
+// Patalok / Paloska / Qozon guruhi — har detal kartasi chizma + hisob + narx bilan.
 function KazDetGroup({ kind, items, foyda, onAdd, onPatch, onRemove, onDup }) {
-  const title = KAZ_DETS[kind].title;
+  const title = KIND_TITLE[kind];
+  const titlePl = kind === 'qoz' ? 'Qozonlar (burchak)' : title + 'lar';
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">{title}lar ({items.length})</h3>
+        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">{titlePl} ({items.length})</h3>
         <button onClick={onAdd} className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-lg px-2 py-1">
           <Plus className="w-3.5 h-3.5" /> Qo'shish
         </button>
@@ -151,8 +164,11 @@ function KazDetGroup({ kind, items, foyda, onAdd, onPatch, onRemove, onDup }) {
       ) : (
         <div className="space-y-3">
           {items.map((it) => (
-            <KazDetCard key={it.id} kind={kind} it={it} foyda={foyda}
-              onPatch={(p) => onPatch(it.id, p)} onRemove={() => onRemove(it.id)} onDup={() => onDup(it)} />
+            kind === 'qoz'
+              ? <KazQozCard key={it.id} it={it} foyda={foyda}
+                  onPatch={(p) => onPatch(it.id, p)} onRemove={() => onRemove(it.id)} onDup={() => onDup(it)} />
+              : <KazDetCard key={it.id} kind={kind} it={it} foyda={foyda}
+                  onPatch={(p) => onPatch(it.id, p)} onRemove={() => onRemove(it.id)} onDup={() => onDup(it)} />
           ))}
         </div>
       )}
@@ -160,7 +176,77 @@ function KazDetGroup({ kind, items, foyda, onAdd, onPatch, onRemove, onDup }) {
   );
 }
 
-// Bitta detal kartasi — jonli chizma, tahrirlanadigan razmerlar, hisob, narx.
+// Tahrirlanadigan o'lcham (sm) maydoni.
+function NumField({ label, value, onChange, unit = 'sm' }) {
+  return (
+    <label className="block">
+      <span className="block text-[10px] text-slate-400 mb-0.5">{label}</span>
+      <div className="flex items-center gap-1">
+        <input type="number" inputMode="decimal" step="0.5" value={value ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
+        <span className="text-[10px] text-slate-400">{unit}</span>
+      </div>
+    </label>
+  );
+}
+
+// Hisoblash mantig'i (bo'lak / 1 bo'lak / list metri) — uchala detalga umumiy.
+function CalcFacts({ c }) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+      <Fact label="Bo'lak" val={c.bolak + ' ta'} />
+      <Fact label="1 bo'lak" val={c.pieceM.toFixed(2) + ' m'} />
+      <Fact label="List metri (1 dona)" val={c.listMetri.toFixed(3) + ' m'} />
+    </div>
+  );
+}
+
+// Narx bloki: 1 metr narxi → material → sotuv (foyda bilan) — uchala detalga umumiy.
+function PriceBlock({ metrNarx, onMetrNarx, material, foyda, sotuv }) {
+  return (
+    <div className="rounded-lg border border-slate-200 overflow-hidden">
+      <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-100">
+        <span className="text-[11px] text-slate-500 whitespace-nowrap">1 metr narxi</span>
+        <input type="number" inputMode="decimal" value={metrNarx ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          onChange={(e) => onMetrNarx(e.target.value)}
+          className="w-28 px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
+        <span className="text-[11px] text-slate-400">so'm / m</span>
+      </div>
+      <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-slate-50">
+        <span className="text-[11px] text-slate-500">
+          Material: <span className="tabular-nums font-medium text-slate-600">{fmt(material)}</span> so'm
+          <span className="text-slate-400"> · +{foyda}%</span>
+        </span>
+        <span className="text-sm font-extrabold text-emerald-700 tabular-nums">{fmt(sotuv)} so'm</span>
+      </div>
+    </div>
+  );
+}
+
+// Karta sarlavhasi (badge + nom + nusxa/o'chir) — uchala detalga umumiy.
+function CardHead({ badge, badgeBg, title, sub, onDup, onRemove }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+      <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${badgeBg}`}>{badge}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold text-slate-800">{title}</span>
+        <span className="block text-[10px] text-slate-400 tabular-nums">{sub}</span>
+      </span>
+      <button title="Nusxalash" onClick={onDup} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><Copy className="w-4 h-4" /></button>
+      <button title="O'chirish" onClick={onRemove} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></button>
+    </div>
+  );
+}
+
+function Drawing({ svg }) {
+  return (
+    <div className="bg-slate-50/70 border-b border-slate-100 p-2 flex justify-center text-slate-700 max-h-[280px] overflow-auto"
+      dangerouslySetInnerHTML={{ __html: svg }} />
+  );
+}
+
+// Patalok / Paloska kartasi — jonli chizma, eni/peshona/razmeri, hisob, narx.
 function KazDetCard({ kind, it, foyda, onPatch, onRemove, onDup }) {
   const c = kazItemCalc(kind, it);                 // bolak / pieceLenCm / listMetri (clamp qilingan)
   const metrNarx = Number(it.metrNarx) || 0;
@@ -168,43 +254,17 @@ function KazDetCard({ kind, it, foyda, onPatch, onRemove, onDup }) {
   const sotuv = material * (1 + foyda / 100);      // 1 dona sotuv narxi (foyda bilan)
   const svg = kazSvg(kind, c.eni, c.peshona, c.razmeri, c.fold);
 
-  const numField = (k, lbl, val) => (
-    <label className="block">
-      <span className="block text-[10px] text-slate-400 mb-0.5">{lbl}</span>
-      <div className="flex items-center gap-1">
-        <input type="number" inputMode="decimal" step="0.5" value={val ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-          onChange={(e) => onPatch({ [k]: e.target.value })}
-          className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
-        <span className="text-[10px] text-slate-400">sm</span>
-      </div>
-    </label>
-  );
-
   return (
     <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
-      {/* Sarlavha */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
-        <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ${kind === 'pat' ? 'bg-emerald-600' : 'bg-sky-600'}`}>
-          {c.bolak}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-xs font-semibold text-slate-800">{KAZ_DETS[kind].title}</span>
-          <span className="block text-[10px] text-slate-400 tabular-nums">{c.bolak} bo'lak · eni {(+c.eni).toFixed(2)} sm</span>
-        </span>
-        <button title="Nusxalash" onClick={onDup} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><Copy className="w-4 h-4" /></button>
-        <button title="O'chirish" onClick={onRemove} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></button>
-      </div>
-
-      {/* Jonli chizma (kazirokGeom — savdodagidek) */}
-      <div className="bg-slate-50/70 border-b border-slate-100 p-2 flex justify-center text-slate-700 max-h-[280px] overflow-auto"
-        dangerouslySetInnerHTML={{ __html: svg }} />
-
+      <CardHead badge={c.bolak} badgeBg={kind === 'pat' ? 'bg-emerald-600' : 'bg-sky-600'}
+        title={KIND_TITLE[kind]} sub={`${c.bolak} bo'lak · eni ${(+c.eni).toFixed(2)} sm`}
+        onDup={onDup} onRemove={onRemove} />
+      <Drawing svg={svg} />
       <div className="p-3 space-y-3">
-        {/* Tahrirlanadigan razmerlar */}
         <div className="grid grid-cols-3 gap-2">
-          {numField('eni', 'Eni', it.eni)}
-          {numField('peshona', 'Peshona', it.peshona)}
-          {numField('razmeri', 'Razmeri', it.razmeri)}
+          <NumField label="Eni" value={it.eni} onChange={(v) => onPatch({ eni: v })} />
+          <NumField label="Peshona" value={it.peshona} onChange={(v) => onPatch({ peshona: v })} />
+          <NumField label="Razmeri" value={it.razmeri} onChange={(v) => onPatch({ razmeri: v })} />
         </div>
         {KAZ_DETS[kind].foldable && (
           <button type="button" onClick={() => onPatch({ fold: !it.fold })}
@@ -213,31 +273,36 @@ function KazDetCard({ kind, it, foyda, onPatch, onRemove, onDup }) {
             Orqasi qayrilgan
           </button>
         )}
+        <CalcFacts c={c} />
+        <PriceBlock metrNarx={it.metrNarx} onMetrNarx={(v) => onPatch({ metrNarx: v })} material={material} foyda={foyda} sotuv={sotuv} />
+      </div>
+    </div>
+  );
+}
 
-        {/* Hisoblash mantig'i */}
-        <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-          <Fact label="Bo'lak" val={c.bolak + ' ta'} />
-          <Fact label="1 bo'lak" val={c.pieceM.toFixed(2) + ' m'} />
-          <Fact label="List metri (1 dona)" val={c.listMetri.toFixed(3) + ' m'} />
-        </div>
+// Qozon (burchak) kartasi — har tomon alohida razmeri/peshona (tepa = X, chap = Y).
+function KazQozCard({ it, foyda, onPatch, onRemove, onDup }) {
+  const c = cornerItemCalc(it);
+  const metrNarx = Number(it.metrNarx) || 0;
+  const material = c.listMetri * metrNarx;
+  const sotuv = material * (1 + foyda / 100);
+  const svg = cornerSvg(c.razX, c.peshX, c.razY, c.peshY);
 
-        {/* Narx: 1 metr narxi → material → sotuv (foyda bilan) */}
-        <div className="rounded-lg border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-100">
-            <span className="text-[11px] text-slate-500 whitespace-nowrap">1 metr narxi</span>
-            <input type="number" inputMode="decimal" value={it.metrNarx ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-              onChange={(e) => onPatch({ metrNarx: e.target.value })}
-              className="w-28 px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
-            <span className="text-[11px] text-slate-400">so'm / m</span>
-          </div>
-          <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-slate-50">
-            <span className="text-[11px] text-slate-500">
-              Material: <span className="tabular-nums font-medium text-slate-600">{fmt(material)}</span> so'm
-              <span className="text-slate-400"> · +{foyda}%</span>
-            </span>
-            <span className="text-sm font-extrabold text-emerald-700 tabular-nums">{fmt(sotuv)} so'm</span>
-          </div>
+  return (
+    <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+      <CardHead badge={c.bolak} badgeBg="bg-amber-600"
+        title="Qozon (burchak)" sub={`razmeri ${(+c.razX).toFixed(1)} × ${(+c.razY).toFixed(1)} sm`}
+        onDup={onDup} onRemove={onRemove} />
+      <Drawing svg={svg} />
+      <div className="p-3 space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <NumField label="Razmeri (tepa)" value={it.razX} onChange={(v) => onPatch({ razX: v })} />
+          <NumField label="Peshona (tepa)" value={it.peshX} onChange={(v) => onPatch({ peshX: v })} />
+          <NumField label="Razmeri (chap)" value={it.razY} onChange={(v) => onPatch({ razY: v })} />
+          <NumField label="Peshona (chap)" value={it.peshY} onChange={(v) => onPatch({ peshY: v })} />
         </div>
+        <CalcFacts c={c} />
+        <PriceBlock metrNarx={it.metrNarx} onMetrNarx={(v) => onPatch({ metrNarx: v })} material={material} foyda={foyda} sotuv={sotuv} />
       </div>
     </div>
   );

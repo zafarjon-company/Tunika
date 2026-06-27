@@ -1392,8 +1392,11 @@ export function mountChizma(root, opts) {
     const cf = (key, qk, lbl, val) =>
       '<label>' + lbl + '<input type="number" min="0" step="0.5" data-chz-qsz="' + key + '" data-qk="' + qk + '" value="' + (+(+val).toFixed(2)) + '" /><i>sm</i></label>';
     const qKeys = corners.map((it) => 'qoz:' + it.wcm + 'x' + it.hcm);
-    return '<div class="chz-kaz-group">' +
-      '<div class="chz-kaz-superhead"><span>Tashqi burchak qozon</span>' + kazAllToggleBtn('qoz', qKeys) + '</div>' +
+    return '<div class="chz-kaz-block chz-kaz-group' + (state.kazUiClosed['grp:qoz'] ? ' closed' : '') + '" data-grp="qoz">' +
+      '<div class="chz-kaz-superhead">' +
+        '<button type="button" class="chz-kaz-gtoggle" data-grp="qoz" aria-label="Butun guruhni yoyish / yig\'ish" title="Butun guruhni yoyish / yig\'ish"></button>' +
+        '<span>Tashqi burchak qozon</span>' + kazAllToggleBtn('qoz', qKeys) + '</div>' +
+      '<div class="chz-kaz-blockbody">' +
       corners.map((it) => {
         const key = it.wcm + 'x' + it.hcm;   // burchak identity (geometrik o'lcham)
         const uikey = 'qoz:' + key;
@@ -1411,6 +1414,7 @@ export function mountChizma(root, opts) {
           '</div>' +
         '</div>';
       }).join('<div class="chz-kaz-sep"></div>') +
+      '</div>' +
       '</div>';
   }
   function renderKazirokBolim() {
@@ -1425,13 +1429,11 @@ export function mountChizma(root, opts) {
       return;
     }
     body.classList.remove('chz-kbolim-empty');
-    // "Kazirok" guruhi tepasida — barcha patalok/paloskani birdan yoyish/yig'ish tugmasi.
+    // "Kazirok" guruhi — butun guruhni bitta qatorga yopish (chz-kaz-gtoggle) + ichidagi
+    // barcha patalok/paloskani birdan yoyish/yig'ish (kazAllToggleBtn).
     const kKeys = [];
     groups.forEach((g) => { kKeys.push('pat:' + g.offCm, 'pal:' + g.offCm); });
-    const kazTop = groups.length
-      ? '<div class="chz-kaz-superhead chz-kaz-superhead-top"><span>Kazirok</span>' + kazAllToggleBtn('kaz', kKeys) + '</div>'
-      : '';
-    body.innerHTML = kazTop + groups.map((g) => {
+    const kazBody = groups.map((g) => {
       const b = kazBlock(g.offCm);
       return '<div class="chz-kaz-group' + (b.off ? ' chz-kaz-off' : '') + '">' +
         '<div class="chz-kaz-ghead">Chiqishi ' + g.offCm + ' sm' + (b.off ? ' · <i>kerak emas</i>' : '') + '</div>' +
@@ -1439,7 +1441,17 @@ export function mountChizma(root, opts) {
         '<div class="chz-kaz-sep"></div>' +
         kazCard(g.offCm, 'pal', b, g.palCount) +
         '</div>';
-    }).join('') + cornerSectionHtml(corners);
+    }).join('');
+    const kazTop = groups.length
+      ? '<div class="chz-kaz-block' + (state.kazUiClosed['grp:kaz'] ? ' closed' : '') + '" data-grp="kaz">' +
+          '<div class="chz-kaz-superhead chz-kaz-superhead-top">' +
+            '<button type="button" class="chz-kaz-gtoggle" data-grp="kaz" aria-label="Butun guruhni yoyish / yig\'ish" title="Butun guruhni yoyish / yig\'ish"></button>' +
+            '<span>Kazirok</span>' + kazAllToggleBtn('kaz', kKeys) +
+          '</div>' +
+          '<div class="chz-kaz-blockbody">' + kazBody + '</div>' +
+        '</div>'
+      : '';
+    body.innerHTML = kazTop + cornerSectionHtml(corners);
     // Razmer maydonlari (Eni / Peshona / Qisqarishi / Razmeri)
     body.querySelectorAll('input[data-chz-k]').forEach((inp) => {
       inp.addEventListener('input', () => {
@@ -1625,9 +1637,22 @@ export function mountChizma(root, opts) {
         saveStateLS();
       });
     });
+    // Butun guruhni (Kazirok / Tashqi burchak qozon) bitta qatorga yopish / ochish.
+    body.querySelectorAll('.chz-kaz-gtoggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const grp = btn.getAttribute('data-grp');
+        const block = btn.closest('.chz-kaz-block');
+        const key = 'grp:' + grp;
+        const nowClosed = !state.kazUiClosed[key];
+        if (nowClosed) state.kazUiClosed[key] = true; else delete state.kazUiClosed[key];
+        if (block) block.classList.toggle('closed', nowClosed);
+        saveStateLS();
+      });
+    });
     // DOM'da qolmagan kartalarning yig'ilgan holatini tozalaymiz (saqlangan holat shishmasin).
+    // 'grp:*' (butun guruh holati) — element emas, shuning uchun saqlanadi.
     const liveKeys = new Set([...body.querySelectorAll('.chz-kaz-item[data-uikey]')].map((el) => el.getAttribute('data-uikey')));
-    Object.keys(state.kazUiClosed).forEach((k) => { if (!liveKeys.has(k)) delete state.kazUiClosed[k]; });
+    Object.keys(state.kazUiClosed).forEach((k) => { if (!k.startsWith('grp:') && !liveKeys.has(k)) delete state.kazUiClosed[k]; });
   }
 
   /* ============================================================
