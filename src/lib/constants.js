@@ -106,6 +106,24 @@ export const DEFAULT_KAZ_TURLARI = [
   },
 ];
 
+// Saqlangan (Firestore) kazirok turlarini standartga moslaydi. ESKI ma'lumotda
+// (masalan qozon qo'shilmasdan oldin saqlangan) yetishmayotgan guruhlarni
+// standartdan to'ldiradi — foydalanuvchi o'zgartirishlari (foyda, narx, ...) saqlanadi.
+// Faqat guruh UMUMAN bo'lmasa (undefined) to'ldiriladi; bo'sh massiv [] (ataylab
+// o'chirilgan) tegilmaydi.
+export function normalizeKazTurlari(v) {
+  const arr = Array.isArray(v) ? v : DEFAULT_KAZ_TURLARI;
+  return arr.map((t) => {
+    const def = DEFAULT_KAZ_TURLARI.find((d) => d.id === t.id) || {};
+    return {
+      ...t,
+      pataloklar: t.pataloklar === undefined ? (def.pataloklar || []) : t.pataloklar,
+      paloskalar: t.paloskalar === undefined ? (def.paloskalar || []) : t.paloskalar,
+      qozonlar: t.qozonlar === undefined ? (def.qozonlar || []) : t.qozonlar,
+    };
+  });
+}
+
 // ============================================================
 //  RANGLAR PALITRASI — ASOSIY METALL RANGLAR + SOYALARI
 // ------------------------------------------------------------

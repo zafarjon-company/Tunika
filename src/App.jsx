@@ -50,7 +50,7 @@ import { fetchKurslar } from './lib/kurs.js';
 import { LoginScreen } from './components/LoginScreen.jsx';
 import {
   DEFAULT_TUNIKA_BAZA, DEFAULT_LATOK, DEFAULT_SHOP_NAME,
-  DEFAULT_PRODUCTS, DEFAULT_USD_RATE, DEFAULT_AKSESSUARLAR, DEFAULT_KAZIROKLAR, DEFAULT_KAZ_TURLARI,
+  DEFAULT_PRODUCTS, DEFAULT_USD_RATE, DEFAULT_AKSESSUARLAR, DEFAULT_KAZIROKLAR, DEFAULT_KAZ_TURLARI, normalizeKazTurlari,
 } from './lib/constants.js';
 import {
   fmt, genId, calcItem, makeBlankItem, makeBlankPayment, makeBlankDraft,
@@ -395,7 +395,7 @@ export default function App() {
         ...a, birlik: a.birlik || (/semichka|tom samarez/i.test(a.nomi) ? 'kg' : 'dona'),
       })))],
       ['kaziroklar', (v) => setKaziroklar(v || [])],
-      ['kazirok-turlari', (v) => setKazTurlari(Array.isArray(v) ? v : DEFAULT_KAZ_TURLARI)],
+      ['kazirok-turlari', (v) => setKazTurlari(normalizeKazTurlari(v))],
       ['metrlilar', setMetrlilar],
       ['ranglar', setRanglar],
       ['lavozimlar', setLavozimlar],
@@ -687,6 +687,16 @@ export default function App() {
   }, []);
   function setKazPrice(id, v) { const next = { ...kazNarx, [id]: v }; setKazNarx(next); saveKazNarx(next); }
 
+  // Zakas saqlangach Savdo bo'limini TO'LIQ bo'shatish: chizma board ham
+  // tozalanadi ('chizma:clear' → engine clearAll). Chizma bo'shagach undan
+  // kelgan Kazirok ham yo'qoladi. Engine mount bo'lmagan holatda ham kafolat
+  // uchun kazData/lokal kalit bevosita tozalanadi. (Chizma undo bilan qaytadi.)
+  function clearSavdoChizma() {
+    try { window.dispatchEvent(new CustomEvent('chizma:clear')); } catch (e) { /* noop */ }
+    setKazData({ groups: [] });
+    try { localStorage.removeItem('xona-chizma-kazirok'); } catch (e) { /* noop */ }
+  }
+
   // ----- Draft buyurtma hisob-kitoblari -----
   const draftCalc = useMemo(() => {
     const ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products };
@@ -786,6 +796,7 @@ export default function App() {
       updateOrders(list);
       logAction('zakas_tahrirladi', `№${upd.number} · ${upd.customer.name} · ${fmt(upd.totalSum)} so'm`);
       setDraft(makeBlankDraft(usdRate));
+      clearSavdoChizma();
       setEditingId(null);
       setSavedAnim(true);
       setTimeout(() => setSavedAnim(false), 1500);
@@ -806,6 +817,7 @@ export default function App() {
     updateOrders([newOrder, ...orders]);
     logAction('zakas_yaratdi', `№${newOrder.number} · ${newOrder.customer.name} · ${fmt(newOrder.totalSum)} so'm`);
     setDraft(makeBlankDraft(usdRate));
+    clearSavdoChizma();
     setSavedAnim(true);
     setTimeout(() => setSavedAnim(false), 1500);
     showToast(`Zakas saqlandi, tartib raqami: ${newOrder.number}`);

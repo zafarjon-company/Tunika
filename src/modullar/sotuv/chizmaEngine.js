@@ -3445,6 +3445,11 @@ export function mountChizma(root, opts) {
     cleanups.push(() => target.removeEventListener(ev, fn, opts));
   }
 
+  // Tashqi "chizma:clear" — zakas saqlangach Savdo bo'limi butun chizmani
+  // tozalaydi (clearAll: render → publishKazirok/Latok/Qozon bo'sh chiqadi,
+  // shu sabab Kazirok ham yo'qoladi). "Bekor qilish" (undo) bilan qaytariladi.
+  on(window, 'chizma:clear', () => clearAll());
+
   // Quti hodisalari.
   on(lengthInput, 'keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') { e.preventDefault(); commitInput(); }

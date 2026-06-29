@@ -192,13 +192,40 @@ function NumField({ label, value, onChange, unit = 'sm' }) {
 }
 
 // Hisoblash mantig'i (bo'lak / 1 bo'lak / list metri) — uchala detalga umumiy.
-function CalcFacts({ c }) {
+// Qozon uchun qo'shimcha "Kontur" o'lchami (kraska konturi W×H) ham ko'rsatiladi.
+function CalcFacts({ c, kind }) {
   return (
-    <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+    <div className={`grid ${kind === 'qoz' ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 text-[11px]`}>
+      {kind === 'qoz' && <Fact label="Kontur (sm)" val={c.W.toFixed(1) + '×' + c.H.toFixed(1)} />}
       <Fact label="Bo'lak" val={c.bolak + ' ta'} />
       <Fact label="1 bo'lak" val={c.pieceM.toFixed(2) + ' m'} />
       <Fact label="List metri (1 dona)" val={c.listMetri.toFixed(3) + ' m'} />
     </div>
+  );
+}
+
+// Hisoblash MANTIG'I (formulasi) ochiq matn bilan — detal turiga qarab.
+function LogicNote({ kind, c }) {
+  if (kind === 'qoz') {
+    return (
+      <p className="text-[11px] leading-relaxed text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+        <b className="text-slate-600">Hisob:</b> Burchak qozon — kraska konturi{' '}
+        <b className="tabular-nums">{c.W.toFixed(1)}×{c.H.toFixed(1)} sm</b> (razmeri + peshona + jiya, har tomon alohida).
+        List eni 1.25 m bo'ylab {c.H.toFixed(1)} sm-dan <b>{c.bolak}</b> bo'lak chiqadi;
+        bir bo'lak uzunligi {c.W.toFixed(1)} sm = {c.pieceM.toFixed(2)} m.
+        1 dona uchun list metri = {c.pieceM.toFixed(2)} ÷ {c.bolak} ={' '}
+        <b className="tabular-nums">{c.listMetri.toFixed(3)} m</b>. Material = list metri × 1 metr narxi; sotuv = material × (1 + foyda%).
+      </p>
+    );
+  }
+  return (
+    <p className="text-[11px] leading-relaxed text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+      <b className="text-slate-600">Hisob:</b> Bir bo'lak uzunligi (peshona + razmeri + jiya) ={' '}
+      <b className="tabular-nums">{c.pieceLenCm.toFixed(1)} sm</b> = {c.pieceM.toFixed(2)} m.
+      List eni 1.25 m-ga {c.eni != null ? (+c.eni).toFixed(2) + ' sm enli ' : ''}bo'lak sig'adi → <b>{c.bolak}</b> bo'lak.
+      1 dona uchun list metri = {c.pieceM.toFixed(2)} ÷ {c.bolak} ={' '}
+      <b className="tabular-nums">{c.listMetri.toFixed(3)} m</b>. Material = list metri × 1 metr narxi; sotuv = material × (1 + foyda%).
+    </p>
   );
 }
 
@@ -273,7 +300,8 @@ function KazDetCard({ kind, it, foyda, onPatch, onRemove, onDup }) {
             Orqasi qayrilgan
           </button>
         )}
-        <CalcFacts c={c} />
+        <CalcFacts c={c} kind={kind} />
+        <LogicNote kind={kind} c={c} />
         <PriceBlock metrNarx={it.metrNarx} onMetrNarx={(v) => onPatch({ metrNarx: v })} material={material} foyda={foyda} sotuv={sotuv} />
       </div>
     </div>
@@ -301,7 +329,8 @@ function KazQozCard({ it, foyda, onPatch, onRemove, onDup }) {
           <NumField label="Razmeri (chap)" value={it.razY} onChange={(v) => onPatch({ razY: v })} />
           <NumField label="Peshona (chap)" value={it.peshY} onChange={(v) => onPatch({ peshY: v })} />
         </div>
-        <CalcFacts c={c} />
+        <CalcFacts c={c} kind="qoz" />
+        <LogicNote kind="qoz" c={c} />
         <PriceBlock metrNarx={it.metrNarx} onMetrNarx={(v) => onPatch({ metrNarx: v })} material={material} foyda={foyda} sotuv={sotuv} />
       </div>
     </div>
