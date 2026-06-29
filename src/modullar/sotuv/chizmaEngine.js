@@ -2516,7 +2516,9 @@ export function mountChizma(root, opts) {
           if (kazBlock(offKey(o.offDist)).off) anyDisabled = true; else anyActive = true;
         }
       }
-      const disabled = concave ? (anyKaz && !anyActive) : anyDisabled;
+      // Ichki (botiq) qozon: faqat KAMIDA BIR tomonda AKTIV kazirok bo'lsa chiqadi
+      // (qo'shni kazirok umuman bo'lmasa — kerak emas, chiqmaydi).
+      const disabled = concave ? !anyActive : anyDisabled;
 
       // QO'L (chirality): qosh (tashqi) nuqtaning devor burchagiga nisbatan
       // diagonal yo'nalishi. (dx·dy) belgisi oyna-juftni ajratadi:

@@ -25,7 +25,7 @@ export const KAZ_SERVICE = 0.25; // xizmat haqi = material qiymatining 25% i
 // zakaslarda esa sizeLabel'dan aniqlaymiz (aralash bo'lsa "Kazirok").
 export function kazRowNom(r) {
   if (r && r.nom) return r.nom;
-  if (r && r.kind === 'qoz') return 'Tashqi burchak qozon';
+  if (r && r.kind === 'qoz') return r.ctype === 'in' ? 'Ichki burchak qozon' : 'Tashqi burchak qozon';
   const s = (r && r.sizeLabel) || '';
   const hasPat = s.includes('Patalok'), hasPal = s.includes('Paloska');
   if (hasPat && !hasPal) return 'Patalok';
