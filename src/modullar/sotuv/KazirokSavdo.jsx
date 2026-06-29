@@ -174,15 +174,9 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
             {it.count}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold text-sm text-slate-800 leading-tight">
-              Tashqi burchak qozon
-              {it.mirror && (
-                <span className="ml-1.5 align-middle text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded px-1 py-px whitespace-nowrap"
-                  title="Oyna qo'l — kraska tomoni teskari, alohida kesiladi">⇄ oyna</span>
-              )}
-            </span>
+            <span className="block font-semibold text-sm text-slate-800 leading-tight">Tashqi burchak qozon</span>
             <span className="block text-[11px] text-slate-500 truncate">
-              {(it.razX ?? it.wcm)} × {(it.razY ?? it.hcm)} sm · {it.count} dona · {listNom(it.listId)}
+              {(it.ordLbl ?? `${it.razX ?? it.wcm} × ${it.razY ?? it.hcm}`)} sm · {it.count} dona · {listNom(it.listId)}
             </span>
           </span>
           <span className="text-[11px] text-slate-400 tabular-nums hidden sm:inline mr-1">{it.meters.toFixed(2)} m</span>

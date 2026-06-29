@@ -1413,14 +1413,10 @@ export function mountChizma(root, opts) {
         const key = it.key;                  // burchak identity (o'lcham + QO'L)
         const uikey = 'qoz:' + key;
         const closed = !!state.kazUiClosed[uikey];
-        // Oyna qo'l — alohida (kraska teskari) kesiladigan juft burchak.
-        const handTag = it.mirror
-          ? '<b class="chz-kaz-mir" title="Oyna qo\'l — kraska tomoni teskari, alohida kesiladi">⇄ oyna</b>'
-          : '';
         return '<div class="chz-kaz-item' + (closed ? ' closed' : '') + '" data-uikey="' + uikey + '">' +
           '<div class="chz-kaz-ihead">' +
             '<button type="button" class="chz-kaz-itoggle" data-uikey="' + uikey + '" aria-label="Yoyish / yig\'ish" title="Yoyish / yig\'ish"></button>' +
-            '<div class="chz-kaz-head"><span class="chz-kaz-htitle"><b>Burchak</b>' + handTag + '</span><span class="chz-kaz-hr"><span class="chz-kaz-rsz" data-chz-qhead="' + key + '">razmeri ' + it.razX + ' × ' + it.razY + ' sm · </span>' + kazCntWidget('data-chz-qoz="' + key + '"', it.count, state.kazCornerOv[key] != null, it.autoCount) + '</span></div>' +
+            '<div class="chz-kaz-head"><b>Burchak</b><span class="chz-kaz-hr"><span class="chz-kaz-rsz" data-chz-qhead="' + key + '">chiqishi ' + it.ordLbl + ' sm · </span>' + kazCntWidget('data-chz-qoz="' + key + '"', it.count, state.kazCornerOv[key] != null, it.autoCount) + '</span></div>' +
           '</div>' +
           '<div class="chz-kaz-draw" data-chz-qdraw="' + key + '">' + it.svg + '</div>' +
           '<div class="chz-kaz-ibody">' +
@@ -1618,7 +1614,7 @@ export function mountChizma(root, opts) {
           const draw = body.querySelector('.chz-kaz-draw[data-chz-qdraw="' + key + '"]');
           if (draw) draw.innerHTML = it.svg;
           const hd = body.querySelector('.chz-kaz-rsz[data-chz-qhead="' + key + '"]');
-          if (hd) hd.textContent = 'razmeri ' + it.razX + ' × ' + it.razY + ' sm · ';
+          if (hd) hd.textContent = 'chiqishi ' + it.ordLbl + ' sm · ';
         }
         publishKazirok();
       });
@@ -2841,9 +2837,19 @@ export function mountChizma(root, opts) {
       const count = (ov != null && ov >= 0) ? ov : autoCount;          // qo'lda override bo'lsa o'sha
       const meters = (count * (pieceLenCm / 100)) / bolak;             // sarflanadigan list metri (taxminiy)
       const segs = tSegs.map((s) => [toMm(s[0]), toMm(s[1]), toMm(s[2]), toMm(s[3])]);
+      // QOIDA (oyna-juftni BELGISIZ ajratish): razmerlar tartibi QO'L (chirality)ga
+      // bog'liq. Asl qo'lda  tepa × chap (razX × razY); oyna qo'lda TESKARI:
+      // chap × tepa (razY × razX). Shunda bir xil o'lchamli juft burchak 75.5 × 80.5
+      // va 80.5 × 75.5 bo'lib alohida o'qiladi — belgisiz farqlanadi. Qo'l geometrik
+      // (qosh nuqtaning devorga nisbatan diagonali) bo'lgani uchun bir burchak doim
+      // bir xil tartib beradi. "chiqishi" = shu tartibdagi ikki razmeri.
+      const ord1 = +(mirror ? razY : razX).toFixed(1);
+      const ord2 = +(mirror ? razX : razY).toFixed(1);
+      const ordLbl = ord1 + ' × ' + ord2;   // ko'rinish uchun
+      const ordKey = ord1 + 'x' + ord2;      // nesting/DXF yorlig'i (ixcham)
       return {
         count, autoCount, key, wcm: e.wCm, hcm: e.hCm, hand: e.hand, mirror,
-        handLbl: mirror ? 'oyna' : 'asl',
+        ordLbl, ordKey,
         razX: +razX.toFixed(1), razY: +razY.toFixed(1), peshX: +peshX.toFixed(1), peshY: +peshY.toFixed(1),
         peshona: peshX, listId, bolak,
         pieceLenCm: +pieceLenCm.toFixed(1), meters: +meters.toFixed(3),
