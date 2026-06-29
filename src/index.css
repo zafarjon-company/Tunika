@@ -633,6 +633,12 @@ html.themed .chz-kbolim-empty { color: var(--c-t3); }
 .chz-kaz-head span { font-size: 10px; color: #94a3b8; }
 html.themed .chz-kaz-head b { color: var(--c-t1); }
 html.themed .chz-kaz-head span { color: var(--c-t3); }
+/* Sarlavha guruhi (nom + oyna belgisi) — chapda bitta bo'lak bo'lib turadi */
+.chz-kaz-htitle { display: inline-flex; align-items: baseline; gap: 5px; flex: none; }
+/* Oyna qo'l belgisi — kraska teskari kesiladigan juft burchak */
+.chz-kaz-mir { font-size: 9px !important; font-weight: 700; color: #b45309 !important;
+  background: #fef3c7; border: 1px solid #fcd34d; border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+html.themed .chz-kaz-mir { color: #fde68a !important; background: rgba(180,83,9,.22); border-color: rgba(252,211,77,.5); }
 /* Dona — qo'lda tahrirlanadigan (avtomatik hisob ustidan) + avtomatga qaytarish tugmasi */
 .chz-kaz-hr { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .chz-kaz-cnt { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }

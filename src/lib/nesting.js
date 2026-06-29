@@ -44,7 +44,7 @@ function piecesByKindList(data) {
     const key = id + '|pat';
     if (!byKey.has(key)) byKey.set(key, { listId: id, kind: 'pat', pieces: [] });
     const arr = byKey.get(key).pieces;
-    const label = 'Burchak ' + it.wcm + 'x' + it.hcm;
+    const label = 'Burchak ' + it.wcm + 'x' + it.hcm + (it.mirror ? ' (oyna)' : '');
     for (let i = 0; i < it.count; i++) {
       arr.push({ w: it.wMm, h: it.hMm, segs: it.segs, label, kind: 'qoz' });
     }
