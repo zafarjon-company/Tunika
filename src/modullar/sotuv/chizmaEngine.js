@@ -192,6 +192,27 @@ function cornerGeom(razX, peshX, razY, peshY) {
   return { segs, W: cornerFx(71.5, dRx, dPx), H: cornerFy(71.5, dPy, dRy), rX, pX, rY, pY, dRx, dPx, dRy, dPy };
 }
 
+/* ---- KAZIROK > "Ichki burchak qozon" detali (parametrik, ICHKI/botiq BURCHAK) ----
+   "Ichki burchak qozon.dxf" dan: PESHONASIZ kvadrat (63×63 sm bazaviy), bitta
+   burchagida 3 sm KESIK (notch). Faqat RAZMERI bor (har tomon: razX tepa, razY chap);
+   tashqi tomoni butun razmeri, kesik tomoni razmeri−3 sm. Cho'zish kerak emas —
+   kontur to'g'ridan-to'g'ri razX×razY dan quriladi (kesik 3 sm o'zgarmas). */
+const ICHKI_NOTCH = 3;   // sm — ichki burchakdagi kesik (DXF: 30 mm)
+function innerCornerGeom(razX, razY) {
+  const rX = Math.max(8, razX || 63), rY = Math.max(8, razY || 63);
+  const n = Math.min(ICHKI_NOTCH, Math.min(rX, rY) / 2);   // kesik (kichik detalda chegaralanadi)
+  // y = yuqoridan past (QOZON_SEG bilan bir xil yo'nalish). Kesik pastki-chap burchakda.
+  const segs = [
+    [0, 0, rX, 0],            // tepa (butun razX)
+    [rX, 0, rX, rY],          // o'ng (butun razY)
+    [n, rY, rX, rY],          // past — kesikdan keyin (razX − n)
+    [0, 0, 0, rY - n],        // chap (razY − n)
+    [0, rY - n, n, rY - n],   // kesik: gorizontal
+    [n, rY - n, n, rY],       // kesik: vertikal
+  ];
+  return { segs, W: rX, H: rY, rX, rY, n };
+}
+
 /* ---------------- MAVZUGA MOS RANG PALITRASI ----------------
    --c-btn (mavzu asosiy rangi) tusidan boshlab, rang doirasida
    teng oraliqlar bilan 6 ta vazifaviy rang hosil qilinadi.
@@ -1276,6 +1297,28 @@ export function mountChizma(root, opts) {
       ${dims}
     </svg>`;
   }
+  // Ichki burchak qozon chizmasi (DOSKA/orqa ko'rinish). Peshonasiz — faqat
+  // tepa (razX) va chap (razY) razmeri. mirror — oyna qo'l (kontur x→W−x aks).
+  function innerCornerSvg(razX, razY, mirror) {
+    const g = innerCornerGeom(razX, razY);
+    const W = g.W, H = g.H;
+    const padL = mirror ? 8 : 17, padR = mirror ? 17 : 8, padT = 14, padB = 8;
+    const vbW = W + padL + padR, vbH = H + padT + padB;
+    const GREEN = '#16a34a';
+    const MX = (x) => (mirror ? W - x : x);
+    const det = g.segs.map((s) => {
+      const x1 = MX(s[0]), x2 = MX(s[2]);
+      return `<line x1="${x1.toFixed(2)}" y1="${s[1].toFixed(2)}" x2="${x2.toFixed(2)}" y2="${s[3].toFixed(2)}" stroke="currentColor" stroke-width="0.85" stroke-linecap="round"/>`;
+    }).join('');
+    const hx1 = MX(0), hx2 = MX(W);
+    const dims =
+      hdimMarkup(-4, Math.min(hx1, hx2), Math.max(hx1, hx2), '' + (+g.rX.toFixed(1)), GREEN) +
+      vdimMarkup(mirror ? W + 7 : -7, 0, H, '' + (+g.rY.toFixed(1)), GREEN, mirror ? W : 0);
+    return `<svg viewBox="${-padL} ${-padT} ${vbW} ${vbH}" style="display:block;width:100%;height:auto">
+      ${det}
+      ${dims}
+    </svg>`;
+  }
   function redrawKazDet(body, offCm, kind) {
     const draw = (body || root).querySelector('.chz-kaz-draw[data-off="' + offCm + '"][data-chz-det="' + kind + '"]');
     if (!draw) return;
@@ -1350,7 +1393,8 @@ export function mountChizma(root, opts) {
   function updateKazAllBtns(body) {
     body.querySelectorAll('.chz-kaz-allbtn').forEach((btn) => {
       const grp = btn.getAttribute('data-grp');
-      const sel = grp === 'qoz' ? '.chz-kaz-item[data-uikey^="qoz:"]'
+      const sel = grp === 'qozout' ? '.chz-kaz-item[data-uikey^="qoz:out:"]'
+        : grp === 'qozin' ? '.chz-kaz-item[data-uikey^="qoz:in:"]'
         : '.chz-kaz-item[data-uikey^="pat:"], .chz-kaz-item[data-uikey^="pal:"]';
       const keys = [...body.querySelectorAll(sel)].map((el) => el.getAttribute('data-uikey'));
       const allClosed = keys.length > 0 && keys.every((k) => state.kazUiClosed[k]);
@@ -1393,8 +1437,9 @@ export function mountChizma(root, opts) {
       '</div>' +
     '</div>';
   }
-  // Tashqi burchak qozon bo'limi: har xil o'lcham bo'yicha karta. Razmeri/peshona
-  // TAHRIRLANADI (patalokdek), har tomon uchun alohida (tepa = X, chap = Y).
+  // Burchak qozon bo'limlari: TASHQI (peshonali) va ICHKI (peshonasiz) — alohida
+  // bloklar. Razmeri (+ tashqida peshona) TAHRIRLANADI, har tomon alohida (tepa=X, chap=Y).
+  // Sarlavhada "chiqishi" = o'sha tomonlarning OFFSETI (qaysi burchak ekanini bildiradi).
   function cornerSectionHtml(corners) {
     if (!corners.length) return '';
     const patListNm = (() => {
@@ -1403,31 +1448,44 @@ export function mountChizma(root, opts) {
     })();
     const cf = (key, qk, lbl, val) =>
       '<label>' + lbl + '<input type="number" min="0" step="0.5" data-chz-qsz="' + key + '" data-qk="' + qk + '" value="' + (+(+val).toFixed(2)) + '" /><i>sm</i></label>';
-    const qKeys = corners.map((it) => 'qoz:' + it.key);
-    return '<div class="chz-kaz-block chz-kaz-group' + (state.kazUiClosed['grp:qoz'] ? ' closed' : '') + '" data-grp="qoz">' +
-      '<div class="chz-kaz-superhead">' +
-        '<button type="button" class="chz-kaz-gtoggle" data-grp="qoz" aria-label="Butun guruhni yoyish / yig\'ish" title="Butun guruhni yoyish / yig\'ish"></button>' +
-        '<span>Tashqi burchak qozon</span>' + kazAllToggleBtn('qoz', qKeys) + '</div>' +
-      '<div class="chz-kaz-blockbody">' +
-      corners.map((it) => {
-        const key = it.key;                  // burchak identity (o'lcham + QO'L)
-        const uikey = 'qoz:' + key;
-        const closed = !!state.kazUiClosed[uikey];
-        return '<div class="chz-kaz-item' + (closed ? ' closed' : '') + '" data-uikey="' + uikey + '">' +
-          '<div class="chz-kaz-ihead">' +
-            '<button type="button" class="chz-kaz-itoggle" data-uikey="' + uikey + '" aria-label="Yoyish / yig\'ish" title="Yoyish / yig\'ish"></button>' +
-            '<div class="chz-kaz-head"><b>Burchak</b><span class="chz-kaz-hr"><span class="chz-kaz-rsz" data-chz-qhead="' + key + '">chiqishi ' + it.ordLbl + ' sm · </span>' + kazCntWidget('data-chz-qoz="' + key + '"', it.count, state.kazCornerOv[key] != null, it.autoCount) + '</span></div>' +
-          '</div>' +
-          '<div class="chz-kaz-draw" data-chz-qdraw="' + key + '">' + it.svg + '</div>' +
-          '<div class="chz-kaz-ibody">' +
-            '<label class="chz-kaz-listsel"><span>List (tunika)</span>' +
-              '<div class="chz-kaz-listro" title="Pataloklar Listi bilan bir xil — yuqoridan o\'zgartiriladi">' + patListNm + '</div></label>' +
-            '<div class="chz-kaz-fields">' + cf(key, 'razX', 'Razmeri (tepa)', it.razX) + cf(key, 'peshX', 'Peshona (tepa)', it.peshX) + cf(key, 'razY', 'Razmeri (chap)', it.razY) + cf(key, 'peshY', 'Peshona (chap)', it.peshY) + '</div>' +
-          '</div>' +
+    // Bitta blok (tur bo'yicha: tashqi/ichki)
+    const block = (items, ctype, title, grp) => {
+      if (!items.length) return '';
+      const inner = ctype === 'in';
+      const qKeys = items.map((it) => 'qoz:' + it.key);
+      return '<div class="chz-kaz-block chz-kaz-group' + (state.kazUiClosed['grp:' + grp] ? ' closed' : '') + '" data-grp="' + grp + '">' +
+        '<div class="chz-kaz-superhead">' +
+          '<button type="button" class="chz-kaz-gtoggle" data-grp="' + grp + '" aria-label="Butun guruhni yoyish / yig\'ish" title="Butun guruhni yoyish / yig\'ish"></button>' +
+          '<span>' + title + '</span>' + kazAllToggleBtn(grp, qKeys) + '</div>' +
+        '<div class="chz-kaz-blockbody">' +
+        items.map((it) => {
+          const key = it.key;                  // burchak identity (tur + o'lcham + QO'L)
+          const uikey = 'qoz:' + key;
+          const closed = !!state.kazUiClosed[uikey];
+          // Ichkida peshona maydonlari yo'q — faqat razmeri (tepa/chap).
+          const fields = inner
+            ? cf(key, 'razX', 'Razmeri (tepa)', it.razX) + cf(key, 'razY', 'Razmeri (chap)', it.razY)
+            : cf(key, 'razX', 'Razmeri (tepa)', it.razX) + cf(key, 'peshX', 'Peshona (tepa)', it.peshX) + cf(key, 'razY', 'Razmeri (chap)', it.razY) + cf(key, 'peshY', 'Peshona (chap)', it.peshY);
+          return '<div class="chz-kaz-item' + (closed ? ' closed' : '') + '" data-uikey="' + uikey + '">' +
+            '<div class="chz-kaz-ihead">' +
+              '<button type="button" class="chz-kaz-itoggle" data-uikey="' + uikey + '" aria-label="Yoyish / yig\'ish" title="Yoyish / yig\'ish"></button>' +
+              '<div class="chz-kaz-head"><b>Burchak</b><span class="chz-kaz-hr"><span class="chz-kaz-rsz" data-chz-qhead="' + key + '">chiqishi ' + it.ordLbl + ' sm · </span>' + kazCntWidget('data-chz-qoz="' + key + '"', it.count, state.kazCornerOv[key] != null, it.autoCount) + '</span></div>' +
+            '</div>' +
+            '<div class="chz-kaz-draw" data-chz-qdraw="' + key + '">' + it.svg + '</div>' +
+            '<div class="chz-kaz-ibody">' +
+              '<label class="chz-kaz-listsel"><span>List (tunika)</span>' +
+                '<div class="chz-kaz-listro" title="Pataloklar Listi bilan bir xil — yuqoridan o\'zgartiriladi">' + patListNm + '</div></label>' +
+              '<div class="chz-kaz-fields">' + fields + '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('<div class="chz-kaz-sep"></div>') +
+        '</div>' +
         '</div>';
-      }).join('<div class="chz-kaz-sep"></div>') +
-      '</div>' +
-      '</div>';
+    };
+    const outs = corners.filter((it) => it.ctype !== 'in');
+    const ins = corners.filter((it) => it.ctype === 'in');
+    return block(outs, 'out', 'Tashqi burchak qozon', 'qozout') +
+           block(ins, 'in', 'Ichki burchak qozon', 'qozin');
   }
   function renderKazirokBolim() {
     const body = q('kazirokBolimBody');
@@ -1636,7 +1694,8 @@ export function mountChizma(root, opts) {
     body.querySelectorAll('.chz-kaz-allbtn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const grp = btn.getAttribute('data-grp');
-        const sel = grp === 'qoz' ? '.chz-kaz-item[data-uikey^="qoz:"]'
+        const sel = grp === 'qozout' ? '.chz-kaz-item[data-uikey^="qoz:out:"]'
+          : grp === 'qozin' ? '.chz-kaz-item[data-uikey^="qoz:in:"]'
           : '.chz-kaz-item[data-uikey^="pat:"], .chz-kaz-item[data-uikey^="pal:"]';
         const items = [...body.querySelectorAll(sel)];
         const anyOpen = items.some((el) => !state.kazUiClosed[el.getAttribute('data-uikey')]);
@@ -2786,29 +2845,34 @@ export function mountChizma(root, opts) {
     }
     return { razX, razY };
   }
-  // TASHQI BURCHAK QOZON — har tashqi (convex) burchak uchun bitta kesiladigan detal.
-  // Bir xil o'lchamli burchaklar bitta guruh (dona soni). Razmeri default — yonidagi
-  // patalok RAZMERI'dan (topilmasa burchak o'lchami w×h). "Kerak emas" burchaklar chiqmaydi.
+  // BURCHAK QOZON — har burchak (TASHQI convex / ICHKI concave) uchun bitta kesiladigan
+  // detal. Bir xil o'lcham + qo'l + tur bitta guruh (dona soni). Razmeri default —
+  // yonidagi patalok RAZMERI'dan (topilmasa burchak o'lchami w×h). "Kerak emas" chiqmaydi.
+  //   • ctype 'out' — tashqi burchak qozon (peshonali)
+  //   • ctype 'in'  — ichki burchak qozon (peshonasiz, 3 sm kesik)
   function computeCornerQozonlar() {
     const byKey = new Map();
     for (const c of computeBlueCorners()) {
-      if (c.concave || c.disabled) continue;          // faqat TASHQI (convex), "kerak emas" emas
+      if (c.disabled) continue;                       // "kerak emas" — chiqmaydi
+      const ctype = c.concave ? 'in' : 'out';         // botiq → ichki, qabariq → tashqi
       const wCm = +(c.w / 10).toFixed(1), hCm = +(c.h / 10).toFixed(1);
       if (!(wCm > 0) || !(hCm > 0)) continue;
-      // IDENTITY = o'lcham + QO'L (chirality). Oyna-juft (bir xil w×h, teskari qo'l)
-      // ALOHIDA guruh — kraska bir yuzda bo'lgani uchun alohida kesiladi.
+      // IDENTITY = tur + o'lcham + QO'L (chirality). Oyna-juft (bir xil w×h, teskari
+      // qo'l) ALOHIDA guruh — kraska bir yuzda bo'lgani uchun alohida kesiladi.
       const hand = c.hand < 0 ? -1 : 1;
-      const key = wCm + 'x' + hCm + (hand < 0 ? 'L' : 'R');
+      const key = ctype + ':' + wCm + 'x' + hCm + (hand < 0 ? 'L' : 'R');
       let e = byKey.get(key);
       if (!e) {
         const adj = adjacentPatRazmeri(c.rx, c.ry);   // yondagi patalok razmerlari
-        e = { key, wCm, hCm, hand, count: 0, adjRazX: adj.razX, adjRazY: adj.razY };
+        e = { key, ctype, wCm, hCm, hand, count: 0, adjRazX: adj.razX, adjRazY: adj.razY };
         byKey.set(key, e);
       }
       e.count++;
     }
-    // Avval yuza (katta→kichik), so'ng qo'l bo'yicha — barqaror tartib.
-    return [...byKey.values()].sort((a, b) => (b.wCm * b.hCm - a.wCm * a.hCm) || (a.hand - b.hand));
+    // Tartib: tashqi avval → ichki; har birida yuza (katta→kichik), so'ng qo'l.
+    const ord = { out: 0, in: 1 };
+    return [...byKey.values()].sort((a, b) =>
+      (ord[a.ctype] - ord[b.ctype]) || (b.wCm * b.hCm - a.wCm * a.hCm) || (a.hand - b.hand));
   }
   // Burchak qozon payload elementlari — Pataloklar Listi bilan (xuddi patalokdek
   // hisob/nesting/DXF ga ulanadi, lekin ALOHIDA "qoz" turi sifatida).
@@ -2816,15 +2880,16 @@ export function mountChizma(root, opts) {
     const listId = state.kazListPat || '';
     const toMm = (v) => +(v * 10).toFixed(1);
     return computeCornerQozonlar().map((e) => {
-      const key = e.key;                 // burchak IDENTITY (o'lcham + QO'L) — override kaliti
+      const key = e.key;                 // burchak IDENTITY (tur + o'lcham + QO'L) — override kaliti
       const mirror = e.hand < 0;         // oyna qo'l — kraska tomoni teskari kesiladi
+      const inner = e.ctype === 'in';    // ichki (botiq) burchak — peshonasiz, 3 sm kesik
       // razmeri default = yondagi patalok RAZMERI (topilmasa burchak o'lchami); peshona default = 7 sm.
       // Qo'lda override (kazCornerSize) bo'lsa — o'sha.
       const sz = state.kazCornerSize[key] || {};
       const razX = sz.razX > 0 ? sz.razX : (e.adjRazX > 0 ? e.adjRazX : e.wCm);
       const razY = sz.razY > 0 ? sz.razY : (e.adjRazY > 0 ? e.adjRazY : e.hCm);
       const peshX = sz.peshX > 0 ? sz.peshX : QOZ_PESH0, peshY = sz.peshY > 0 ? sz.peshY : QOZ_PESH0;
-      const g = cornerGeom(razX, peshX, razY, peshY);
+      const g = inner ? innerCornerGeom(razX, razY) : cornerGeom(razX, peshX, razY, peshY);
       // Kraska tomoni — transpose (x↔y); nesting/DXF shu (kesiladigan) ko'rinishda. O'lchamlar almashadi.
       // Oyna qo'lda QO'SHIMCHA gorizontal aks (x→H−x): lazer to'g'ri (oyna) detalni kesadi.
       let tSegs = cornerTranspose(g.segs);
@@ -2837,23 +2902,22 @@ export function mountChizma(root, opts) {
       const count = (ov != null && ov >= 0) ? ov : autoCount;          // qo'lda override bo'lsa o'sha
       const meters = (count * (pieceLenCm / 100)) / bolak;             // sarflanadigan list metri (taxminiy)
       const segs = tSegs.map((s) => [toMm(s[0]), toMm(s[1]), toMm(s[2]), toMm(s[3])]);
-      // QOIDA (oyna-juftni BELGISIZ ajratish): razmerlar tartibi QO'L (chirality)ga
-      // bog'liq. Asl qo'lda  tepa × chap (razX × razY); oyna qo'lda TESKARI:
-      // chap × tepa (razY × razX). Shunda bir xil o'lchamli juft burchak 75.5 × 80.5
-      // va 80.5 × 75.5 bo'lib alohida o'qiladi — belgisiz farqlanadi. Qo'l geometrik
-      // (qosh nuqtaning devorga nisbatan diagonali) bo'lgani uchun bir burchak doim
-      // bir xil tartib beradi. "chiqishi" = shu tartibdagi ikki razmeri.
-      const ord1 = +(mirror ? razY : razX).toFixed(1);
-      const ord2 = +(mirror ? razX : razY).toFixed(1);
-      const ordLbl = ord1 + ' × ' + ord2;   // ko'rinish uchun
+      // "chiqishi" = o'sha TOMONLARNING OFFSETI (wcm × hcm), razmer EMAS — operator
+      // qaysi tomon burchagi ekanini offsetdan biladi. Tartib QO'L (chirality)ga
+      // bog'liq: asl qo'lda wcm × hcm, oyna qo'lda TESKARI hcm × wcm. Shunda bir xil
+      // offsetli oyna-juft 85 × 90 va 90 × 85 bo'lib BELGISIZ farqlanadi. Qo'l geometrik.
+      const ord1 = +(mirror ? e.hCm : e.wCm).toFixed(1);
+      const ord2 = +(mirror ? e.wCm : e.hCm).toFixed(1);
+      const ordLbl = ord1 + ' × ' + ord2;   // ko'rinish uchun (offset)
       const ordKey = ord1 + 'x' + ord2;      // nesting/DXF yorlig'i (ixcham)
+      const svg = inner ? innerCornerSvg(razX, razY, mirror) : cornerSvg(razX, peshX, razY, peshY, mirror);
       return {
-        count, autoCount, key, wcm: e.wCm, hcm: e.hCm, hand: e.hand, mirror,
+        count, autoCount, key, ctype: e.ctype, wcm: e.wCm, hcm: e.hCm, hand: e.hand, mirror,
         ordLbl, ordKey,
         razX: +razX.toFixed(1), razY: +razY.toFixed(1), peshX: +peshX.toFixed(1), peshY: +peshY.toFixed(1),
         peshona: peshX, listId, bolak,
         pieceLenCm: +pieceLenCm.toFixed(1), meters: +meters.toFixed(3),
-        wMm, hMm, segs, svg: cornerSvg(razX, peshX, razY, peshY, mirror),
+        wMm, hMm, segs, svg,
       };
     });
   }

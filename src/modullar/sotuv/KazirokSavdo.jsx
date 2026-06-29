@@ -60,16 +60,18 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
       e.eni.add(+it.eni);
     }
   }
-  // Tashqi burchak qozon — kind 'qoz' (Pataloklar Listi bilan); o'lcham yorlig'i "w × h sm".
+  // Burchak qozon — kind 'qoz' (Pataloklar Listi bilan); tashqi/ichki ALOHIDA qator.
+  // O'lcham yorlig'i "chiqishi" (offset) — ordLbl.
   for (const it of qoz) {
     if (!it || !(it.count > 0)) continue;
     totalDona += it.count;
     const id = it.listId || '';
-    const key = id + '|qoz';
+    const ct = it.ctype === 'in' ? 'in' : 'out';
+    const key = id + '|qoz' + ct;
     let e = per.get(key);
-    if (!e) { e = { listId: id, kind: 'qoz', metr: 0, eni: new Set() }; per.set(key, e); }
+    if (!e) { e = { listId: id, kind: 'qoz', ctype: ct, metr: 0, eni: new Set() }; per.set(key, e); }
     e.metr += it.meters;
-    e.eni.add((it.razX ?? it.wcm) + '×' + (it.razY ?? it.hcm));
+    e.eni.add(it.ordLbl ?? ((it.razX ?? it.wcm) + ' × ' + (it.razY ?? it.hcm)));
   }
   // Eni o'lchamlari yorlig'i: pat/pal uchun "62.5 lik, 41.6 lik"; qoz uchun "62×40, ...".
   const sizeStr = (set) => [...set].sort((a, b) => b - a).map((v) => (+v.toFixed(2)) + ' lik').join(', ');
@@ -78,18 +80,19 @@ export function computeKazRows(data, tunikaBaza = [], narx = {}) {
     const t = listById(e.listId);
     const price = eff(e.listId);
     const material = e.metr * price;
-    const nom = e.kind === 'pat' ? 'Patalok' : e.kind === 'pal' ? 'Paloska' : 'Tashqi burchak qozon';
+    const nom = e.kind === 'pat' ? 'Patalok' : e.kind === 'pal' ? 'Paloska'
+      : e.ctype === 'in' ? 'Ichki burchak qozon' : 'Tashqi burchak qozon';
     return {
-      id: e.listId + '|' + e.kind, listId: e.listId, kind: e.kind, nom,
+      id: e.listId + '|' + e.kind + (e.ctype || ''), listId: e.listId, kind: e.kind, ctype: e.ctype, nom,
       listNom: t ? t.nomi : 'List tanlanmagan', rang: t ? (t.rang || rangTozala(t.nomi)) : '',
       sizeLabel: e.kind === 'qoz' ? [...e.eni].join(', ') : sizeStr(e.eni), metr: e.metr, price,
       material, xizmat: material * KAZ_SERVICE, jami: material * (1 + KAZ_SERVICE),
     };
   });
-  // Tartib: Patalok → Paloska → Burchak qozon, har biri ichida List nomi bo'yicha
-  rows.sort((a, b) => (a.kind === b.kind
-    ? (a.listNom < b.listNom ? -1 : a.listNom > b.listNom ? 1 : 0)
-    : (ord[a.kind] - ord[b.kind])));
+  // Tartib: Patalok → Paloska → Tashqi qozon → Ichki qozon, har birida List nomi bo'yicha
+  const ctO = (r) => (r.kind === 'qoz' && r.ctype === 'in' ? 1 : 0);
+  rows.sort((a, b) => (ord[a.kind] - ord[b.kind]) || (ctO(a) - ctO(b))
+    || (a.listNom < b.listNom ? -1 : a.listNom > b.listNom ? 1 : 0));
   return {
     rows, totalDona,
     totalMaterial: rows.reduce((s, r) => s + r.material, 0),
@@ -174,9 +177,11 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
             {it.count}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold text-sm text-slate-800 leading-tight">Tashqi burchak qozon</span>
+            <span className="block font-semibold text-sm text-slate-800 leading-tight">
+              {it.ctype === 'in' ? 'Ichki burchak qozon' : 'Tashqi burchak qozon'}
+            </span>
             <span className="block text-[11px] text-slate-500 truncate">
-              {(it.ordLbl ?? `${it.razX ?? it.wcm} × ${it.razY ?? it.hcm}`)} sm · {it.count} dona · {listNom(it.listId)}
+              chiqishi {(it.ordLbl ?? `${it.razX ?? it.wcm} × ${it.razY ?? it.hcm}`)} sm · {it.count} dona · {listNom(it.listId)}
             </span>
           </span>
           <span className="text-[11px] text-slate-400 tabular-nums hidden sm:inline mr-1">{it.meters.toFixed(2)} m</span>

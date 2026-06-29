@@ -44,8 +44,9 @@ function piecesByKindList(data) {
     const key = id + '|pat';
     if (!byKey.has(key)) byKey.set(key, { listId: id, kind: 'pat', pieces: [] });
     const arr = byKey.get(key).pieces;
-    // Yorliq tartiblangan razmer bilan — oyna-juft (75.5x80.5 / 80.5x75.5) belgisiz farqlanadi.
-    const label = 'Burchak ' + (it.ordKey || (it.wcm + 'x' + it.hcm));
+    // Yorliq: tur (ichki/tashqi) + tartiblangan offset — oyna-juft (85x90 / 90x85) belgisiz farqlanadi.
+    const nomi = it.ctype === 'in' ? 'Ichki burchak ' : 'Tashqi burchak ';
+    const label = nomi + (it.ordKey || (it.wcm + 'x' + it.hcm));
     for (let i = 0; i < it.count; i++) {
       arr.push({ w: it.wMm, h: it.hMm, segs: it.segs, label, kind: 'qoz' });
     }
