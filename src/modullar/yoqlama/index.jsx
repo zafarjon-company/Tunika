@@ -6,12 +6,14 @@ import { CalendarCheck, CalendarDays, Wallet } from 'lucide-react';
 import { YoqlamaBelgilash } from './Belgilash.jsx';
 import { YoqlamaKalendar } from './Kalendar.jsx';
 import { AvansTab } from './Avans.jsx';
+import { YoloControl } from './YoloControl.jsx';
 
 export function YoqlamaModule({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBulk, avanslar, updateAvanslar, usdRate, showToast }) {
   const [sub, setSub] = useState('belgilash');
 
   return (
     <div className="space-y-4">
+      <YoloControl />
       <div className="flex gap-2">
         {[
           { k: 'belgilash', label: 'Belgilash', icon: CalendarCheck },

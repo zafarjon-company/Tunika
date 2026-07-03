@@ -8,8 +8,33 @@ import { fmt, genId, formatDate } from '../../lib/helpers.js';
 import { DarajaNishon, StarRating } from './Lavozimlar.jsx';
 import { NegativeRating } from './Kamchiliklar.jsx';
 
-const BLANK = { name: '', phones: [''], lavozimlar: [], oylikHaqq: '', qobiliyatlar: [], kamchiliklar: [], oylikTarix: [] };
+const BLANK = { name: '', avatar: '', phones: [''], lavozimlar: [], oylikHaqq: '', qobiliyatlar: [], kamchiliklar: [], oylikTarix: [] };
 const lavOf = (i) => (i.lavozimlar?.length ? i.lavozimlar : (i.lavozim ? [i.lavozim] : []));
+
+// Rasmni kichraytirib (256px, kvadrat) JPEG dataURL ga aylantiradi.
+// YOLO kamera tizimi aynan shu rasmdan ishchining yuzini oladi (yuz tanish uchun).
+function fileToAvatar(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        canvas.getContext('2d').drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], qobiliyatRoyxati = [], kamchilikRoyxati = [], showToast }) {
   const [query, setQuery]     = useState('');
@@ -32,8 +57,19 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
 
   function startAdd() { setForm(BLANK); setAdding(true); setEditing(null); }
   function startEdit(i) {
-    setForm({ name: i.name, phones: i.phones || [''], lavozimlar: lavOf(i), oylikHaqq: i.oylikHaqq || '', qobiliyatlar: i.qobiliyatlar || [], kamchiliklar: i.kamchiliklar || [], oylikTarix: i.oylikTarix || [] });
+    setForm({ name: i.name, avatar: i.avatar || '', phones: i.phones || [''], lavozimlar: lavOf(i), oylikHaqq: i.oylikHaqq || '', qobiliyatlar: i.qobiliyatlar || [], kamchiliklar: i.kamchiliklar || [], oylikTarix: i.oylikTarix || [] });
     setEditing(i.id); setAdding(false);
+  }
+
+  async function handleAvatar(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const a = await fileToAvatar(file);
+      setForm((f) => ({ ...f, avatar: a }));
+    } catch {
+      showToast("Rasm o'qilmadi");
+    }
   }
 
   function toggleLavozim(nomi) {
@@ -127,6 +163,27 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
           <div>
             <label className="block text-xs text-slate-600 mb-1 font-medium">Ism familiya *</label>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ism familiya" className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white" />
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-600 mb-1 font-medium">Rasm (yuz)</label>
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center flex-shrink-0 border-2 border-slate-300">
+                {form.avatar
+                  ? <img src={form.avatar} alt="" className="w-full h-full object-cover" />
+                  : <span className="text-2xl text-slate-400 font-bold">{(form.name || '?').charAt(0).toUpperCase()}</span>}
+              </div>
+              <div className="min-w-0">
+                <label className="px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-medium cursor-pointer inline-block">
+                  Rasm tanlash
+                  <input type="file" accept="image/*" className="hidden" onChange={handleAvatar} />
+                </label>
+                {form.avatar && (
+                  <button type="button" onClick={() => setForm({ ...form, avatar: '' })} className="ml-2 text-xs text-red-600">O'chirish</button>
+                )}
+                <p className="text-[11px] text-slate-400 mt-1">Yuzi aniq ko'ringan rasm — kamera (YOLO) shu rasmdan taniydi.</p>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -258,6 +315,11 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
           const ball = ballOf(i);
           return (
             <button key={i.id} onClick={() => startEdit(i)} className="w-full text-left p-3 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-between gap-3 text-sm">
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center flex-shrink-0">
+                {i.avatar
+                  ? <img src={i.avatar} alt="" className="w-full h-full object-cover" />
+                  : <span className="text-sm font-bold text-slate-500">{(i.name || '?').charAt(0).toUpperCase()}</span>}
+              </div>
               <div className="flex-1 min-w-0 space-y-0.5">
                 <div className="font-medium text-slate-900 truncate">{i.name}</div>
                 {lavList.length > 0 && <div className="text-xs text-slate-600 truncate">{lavList.join(' · ')}</div>}
