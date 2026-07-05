@@ -1,12 +1,14 @@
 // ============================================================
 //  ISHCHILAR RO'YXATI (CRUD)
 // ============================================================
-import React, { useState } from 'react';
-import { Plus, Trash2, Search, Edit3, Star, X, ArrowUp, ArrowDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, Search, Edit3, Star, X, ArrowUp, ArrowDown, Send, Check, Copy } from 'lucide-react';
 import { Card, PhoneInput } from '../../components/ui.jsx';
 import { fmt, genId, formatDate } from '../../lib/helpers.js';
+import { storage } from '../../lib/storage.js';
 import { DarajaNishon, StarRating } from './Lavozimlar.jsx';
 import { NegativeRating } from './Kamchiliklar.jsx';
+import { TelegramSozlama } from './TelegramSozlama.jsx';
 
 const BLANK = { name: '', avatar: '', phones: [''], lavozimlar: [], oylikHaqq: '', qobiliyatlar: [], kamchiliklar: [], oylikTarix: [] };
 const lavOf = (i) => (i.lavozimlar?.length ? i.lavozimlar : (i.lavozim ? [i.lavozim] : []));
@@ -42,6 +44,11 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
   const [adding, setAdding]   = useState(false);
   const [form, setForm]       = useState(BLANK);
   const [oylikDelta, setOylikDelta] = useState('');
+  const [tgLinks, setTgLinks] = useState({});     // { ishchiId: {chat_id, username, ...} }
+  const [tgCfg, setTgCfg]     = useState(null);    // { bot_username, arrival_template, enabled }
+  useEffect(() => storage.subscribe('telegram_links', (v) => setTgLinks(v || {})), []);
+  useEffect(() => storage.subscribe('telegram_config', (v) => setTgCfg(v || {})), []);
+  const botUsername = tgCfg?.bot_username || '';
 
   const ballOf = (i) =>
     (i.qobiliyatlar || []).reduce((s, q) => s + (q.ball || 0), 0)
@@ -151,6 +158,8 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
 
   return (
     <Card>
+      <TelegramSozlama />
+
       <div className="relative mb-3">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ishchi qidirish..." className="w-full pl-10 pr-3 py-2.5 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none text-sm" />
@@ -253,6 +262,33 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
             ))}
             <button type="button" onClick={() => setForm({ ...form, phones: [...form.phones, ''] })} className="text-xs text-slate-900 font-bold mt-1">+ Raqam qo'shish</button>
           </div>
+
+          {editing && (
+            <div>
+              <label className="block text-xs text-slate-600 mb-1 font-medium">Telegram (kelganda xabar uchun)</label>
+              {tgLinks[editing]?.chat_id ? (
+                <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  <Check className="w-4 h-4 flex-shrink-0" /> Telegram ulangan
+                  {tgLinks[editing].username ? <span className="text-slate-500 truncate">@{tgLinks[editing].username}</span> : null}
+                </div>
+              ) : botUsername ? (
+                <div className="space-y-1">
+                  <div className="flex gap-2">
+                    <a href={`https://t.me/${botUsername}?start=${editing}`} target="_blank" rel="noreferrer"
+                      className="flex-1 text-center px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-medium inline-flex items-center justify-center gap-1 hover:bg-sky-700">
+                      <Send className="w-3.5 h-3.5" /> Telegramga ulash
+                    </a>
+                    <button type="button"
+                      onClick={() => { navigator.clipboard?.writeText(`https://t.me/${botUsername}?start=${editing}`); showToast('Havola nusxalandi'); }}
+                      className="px-3 py-2 rounded-lg border-2 border-slate-200 bg-white text-slate-600"><Copy className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <p className="text-[11px] text-slate-400">Bu havolani ishchining <b>o'z telefoniga</b> yuboring — u ochib «START» bossa, xabarlar o'ziga keladi.</p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-amber-600">Bot hali ulanmagan. Kompyuterda <b>Telegram_bot.bat</b> ni ishga tushiring — keyin bu yerda ulash havolasi chiqadi.</p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs text-slate-600 mb-1 font-medium">Qobiliyatlari</label>
