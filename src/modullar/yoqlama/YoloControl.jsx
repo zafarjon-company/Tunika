@@ -6,28 +6,37 @@
 //  saqlanadi (sahifa yangilansa ham, kompyuter o'chib-yonsa ham yo'qolmaydi).
 // ============================================================
 import React, { useEffect, useState } from 'react';
-import { Video, Power, Camera } from 'lucide-react';
+import { Video, Power, Camera, Monitor, Clock } from 'lucide-react';
 import { storage } from '../../lib/storage.js';
 
 export function YoloControl() {
-  const [state, setState] = useState(null); // { running, updated } | null
+  const [state, setState] = useState(null); // { running, viewer, updated } | null
   const [cams, setCams] = useState(null);   // { nom: bool } | null
+  const [sett, setSett] = useState(null);   // { late_after, end_of_day } | null
 
   useEffect(
     () => storage.subscribe('yolo_control', (v) => setState(v || { running: false })),
     [],
   );
   useEffect(() => storage.subscribe('yolo_cameras', (v) => setCams(v || null)), []);
+  useEffect(() => storage.subscribe('yolo_settings', (v) => setSett(v || {})), []);
 
   const running = !!(state && state.running);
   const names = cams ? Object.keys(cams).sort((a, b) => a.localeCompare(b)) : [];
   const checked = names.filter((n) => cams[n]).length;
 
   function toggle() {
-    storage.save('yolo_control', { running: !running, updated: new Date().toISOString() });
+    // viewer holatini saqlab qolish uchun faqat kerakli maydonlarni merge qilamiz
+    storage.saveField('yolo_control', { running: !running, updated: new Date().toISOString() });
   }
   function toggleCam(n) {
     storage.saveField('yolo_cameras', { [n]: !cams[n] }); // faqat shu katak (merge)
+  }
+  function openViewer() {
+    storage.saveField('yolo_control', { viewer: true });
+  }
+  function setTime(k, v) {
+    if (v) storage.saveField('yolo_settings', { [k]: v });
   }
 
   return (
@@ -57,6 +66,33 @@ export function YoloControl() {
           {running ? "To'xtatish" : 'Ishlatish'}
         </button>
       </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={openViewer}
+          disabled={!running}
+          title={running ? '' : "Avval 'Ishlatish'ni bosing"}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-40"
+        >
+          <Monitor className="w-4 h-4" />
+          {state?.viewer ? 'YOLO oynasi ochiq (kompyuterda)' : 'YOLOni ochish'}
+        </button>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-auto">
+          <Clock className="w-3.5 h-3.5" />
+          <span>Yarim:</span>
+          <input type="time" value={sett?.late_after || '09:00'}
+            onChange={(e) => setTime('late_after', e.target.value)}
+            className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
+          <span className="ml-1">Kun oxiri:</span>
+          <input type="time" value={sett?.end_of_day || '19:00'}
+            onChange={(e) => setTime('end_of_day', e.target.value)}
+            className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
+        </div>
+      </div>
+      <p className="text-[11px] text-slate-400 -mt-1">
+        «YOLOni ochish» — kompyuterda jonli oyna: kameralar, tanilganlar, kim nechchida kelgani.
+        «Yarim» — shu vaqtdan keyin kelgan ishchi yarim kun hisoblanadi.
+      </p>
 
       {names.length > 0 && (
         <div className="border-t border-slate-100 pt-3">

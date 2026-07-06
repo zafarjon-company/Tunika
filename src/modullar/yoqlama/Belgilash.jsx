@@ -4,18 +4,23 @@
 //  Sana tanlanadi, har bir ishchi uchun holat belgilanadi.
 //  yoqlama tuzilishi: { 'YYYY-MM-DD': { ishchiId: 'keldi'|'yarim'|'kelmadi' } }
 // ============================================================
-import React, { useState } from 'react';
-import { CalendarCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CalendarCheck, Clock } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, StatBox } from '../../components/ui.jsx';
 import { toDateInput, formatDay } from '../../lib/helpers.js';
 import { YOQLAMA_HOLATLAR } from '../../lib/constants.js';
+import { storage } from '../../lib/storage.js';
 
 const OPTIONS = YOQLAMA_HOLATLAR.map((h) => ({ value: h.value, label: h.label }));
 
 export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBulk, showToast }) {
   const [sana, setSana] = useState(toDateInput());
+  // Kamera (YOLO) yozgan KELISH VAQTLARI: { 'YYYY-MM-DD': { ishchiId: 'HH:MM' } }
+  const [kelish, setKelish] = useState({});
+  useEffect(() => storage.subscribe('yolo_kelish', (v) => setKelish(v || {})), []);
 
   const kunlik = yoqlama[sana] || {};
+  const kelishKun = kelish[sana] || {};
 
   function belgila(ishchiId, holat) {
     setYoqlamaKun(sana, ishchiId, holat || null);
@@ -79,7 +84,13 @@ export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlama
                   <span className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">{(i.name || '?').charAt(0).toUpperCase()}</span>
                   <div className="min-w-0">
                     <div className="font-semibold text-slate-800 truncate">{i.name}</div>
-                    {i.lavozim && <div className="text-xs text-slate-400">{i.lavozim}</div>}
+                    {kelishKun[i.id] ? (
+                      <div className="text-xs text-emerald-600 font-medium inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> {kelishKun[i.id]} da keldi (kamera)
+                      </div>
+                    ) : (
+                      i.lavozim && <div className="text-xs text-slate-400">{i.lavozim}</div>
+                    )}
                   </div>
                 </div>
                 <div className="sm:w-72">
