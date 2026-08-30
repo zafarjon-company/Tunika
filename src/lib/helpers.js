@@ -444,7 +444,20 @@ export function makeBlankDraft(usdRate) {
     payments: [makeBlankPayment(usdRate)],
     notes: '',
     dastafka: { ichida: false, summa: '' }, // ichida=true → narxga kiritilgan (bepul qo'shimcha)
+    muddat: '',                             // topshirish muddati 'YYYY-MM-DD' ('' = belgilanmagan)
   };
+}
+
+// Mijozga beriladigan ommaviy holat havolasi uchun taxminan tasodifiy token.
+// (Zakas raqamini taxmin qilib boshqa mijoz zakasini ochib bo'lmasin.)
+export function genToken() {
+  try {
+    const a = new Uint8Array(12);
+    (globalThis.crypto || window.crypto).getRandomValues(a);
+    return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    return genId() + Math.random().toString(36).slice(2, 10);
+  }
 }
 
 export function formatDate(iso) {

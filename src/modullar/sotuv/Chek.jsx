@@ -7,9 +7,10 @@
 //  nusxa — uning rasmi botga albom bilan birga yuboriladi.
 // ============================================================
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, Receipt, MapPin, Phone, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check, Scissors, Loader2 } from 'lucide-react';
+import { Printer, Receipt, MapPin, Phone, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check, Scissors, Loader2, CalendarClock, Copy } from 'lucide-react';
 import { toBlob } from 'html-to-image';
-import { fmt, formatDate, rangHex, rangMatn } from '../../lib/helpers.js';
+import { fmt, formatDate, formatDay } from '../../lib/helpers.js';
+import { qrDataUrl, zakasHavola } from '../../lib/qr.js';
 import { applyTil, getTil } from '../../lib/til.js';
 import { KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
 import { itemDisp } from './Zakazlar.jsx';
@@ -33,8 +34,21 @@ function RangChip({ rang }) {
   return <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold border border-black/10 whitespace-nowrap" style={rangChipStyle(rang)}>{rang}</span>;
 }
 
+// Kazirok qatoridagi metrni xavfsiz ko'rsatish — eski/chala qatorlarda `metr`
+// bo'lmasligi mumkin (undefined.toFixed → xato).
+function metrMatn(v) {
+  return (Number(v) || 0).toFixed(2);
+}
+
+// Havolaning chek ostida ko'rsatiladigan qisqa ko'rinishi: protokolsiz,
+// juda uzun bo'lsa oxiri "…" bilan qisqartiriladi.
+function qisqaHavola(u) {
+  const s = String(u || '').replace(/^https?:\/\//, '');
+  return s.length > 52 ? s.slice(0, 50) + '…' : s;
+}
+
 // Chek tugunini PNG blob'ga oladi. Ichidagi rasmlar (kanyok PNG) DECODE bo'lishini
-// kutadi (aks holda chek rasmi chala chiqadi), so'ng eng ko'pi 2 marta urinadi
+// kutadi (aks holda chek rasmi chala chiqadi), so'ng eng ko'pi 3 marta urinadi
 // (html-to-image ba'zan birinchi urinishda null qaytaradi). Xatoda null.
 async function captureReceipt(node) {
   if (!node) return null;
@@ -64,7 +78,9 @@ function chekStamp() {
 }
 
 // ===== CHEK TANASI — narxsiz prop bilan boshqariladi (narxlar yashirinadi) =====
-function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd, sotishUsd, kRows, ustaTel = [] }) {
+// `smeta` — mijozga beriladigan NARX TAKLIFI rejimi: zakas hali saqlanmagan,
+// shuning uchun № , to'lov/qarz bloklari, status nishoni va QR ko'rsatilmaydi.
+function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd, sotishUsd, kRows = [], ustaTel = [], smeta = false, qrSrc = '', havola = '' }) {
   // Summa TARKIBI — Umumiy summa qaysi bo'laklardan yig'ilganini ochiq ko'rsatamiz
   // (mijoz "bu summa qayerdan keldi" deb so'ramasin). Manba: zakasning o'zi.
   const bMahsulot = (order.items || []).reduce((s, it) => s + (it.kind === 'aksessuar' ? 0 : (it.jamiSumma || 0)), 0);
@@ -82,9 +98,12 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
           <Receipt className="w-6 h-6" />
         </div>
         <h1 className="text-2xl font-bold tracking-tight leading-none">{shopName}</h1>
-        <p className="text-[11px] opacity-80 mt-1.5 uppercase tracking-[0.25em]">Zakas · Chek</p>
+        <p className="text-[11px] opacity-80 mt-1.5 uppercase tracking-[0.25em]">{smeta ? 'Narx taklifi (Smeta)' : 'Zakas · Chek'}</p>
         <div className="flex justify-center flex-wrap gap-1.5 mt-3">
-          <span className="px-3 py-1 rounded-full bg-white/15 text-[11px] font-semibold">№ {order.number}</span>
+          {/* Smetada zakas hali saqlanmagan — № yo'q, faqat sana chipi qoladi */}
+          {!smeta && order.number != null && order.number !== '' && (
+            <span className="px-3 py-1 rounded-full bg-white/15 text-[11px] font-semibold">№ {order.number}</span>
+          )}
           <span className="px-3 py-1 rounded-full bg-white/15 text-[11px]">{formatDate(order.createdAt)}</span>
           {order.masterName && order.masterName !== 'Boshqa' && (
             <span className="px-3 py-1 rounded-full bg-white/15 text-[11px]">Usta: {order.masterName}{ustaTel && ustaTel.length ? ` · ${ustaTel.join(', ')}` : ''}</span>
@@ -95,13 +114,22 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
       <div className="p-6 pt-5">
         <div className="border border-slate-300 rounded-lg p-2.5 mb-3 text-xs bg-slate-50">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Mijoz</div>
-          <div className="font-bold text-sm">{order.customer.name}</div>
-          {order.customer.phones?.filter(Boolean).length > 0 && (
+          <div className="font-bold text-sm">{order.customer?.name}</div>
+          {order.customer?.phones?.filter(Boolean).length > 0 && (
             <div className="text-slate-600">{order.customer.phones.filter(Boolean).join(', ')}</div>
           )}
-          {order.customer.address && <div className="text-slate-600">{order.customer.address}</div>}
-          {order.customer.orientir && <div className="text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3 flex-shrink-0" /> {order.customer.orientir}</div>}
+          {order.customer?.address && <div className="text-slate-600">{order.customer.address}</div>}
+          {order.customer?.orientir && <div className="text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3 flex-shrink-0" /> {order.customer.orientir}</div>}
         </div>
+
+        {/* Topshirish muddati — narx emas, shuning uchun narxsiz rejimda ham ko'rinadi */}
+        {order.muddat && (
+          <div className="flex items-center gap-1.5 text-xs mb-3 px-2 py-1.5 border border-slate-300 rounded-lg bg-slate-50">
+            <CalendarClock className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
+            <span className="text-slate-600">Topshirish muddati:</span>
+            <b className="text-slate-800 tabular-nums">{formatDay(String(order.muddat).slice(0, 10))}</b>
+          </div>
+        )}
 
         <table className="w-full text-xs mb-3">
           <thead>
@@ -114,10 +142,10 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
             </tr>
           </thead>
           <tbody>
-            {order.items.map((it) => {
+            {(order.items || []).map((it, i) => {
               const d = itemDisp(it);
               return (
-                <tr key={it.id} className="border-b border-slate-200 align-top">
+                <tr key={it.id || 'it' + i} className="border-b border-slate-200 align-top">
                   <td className="py-1.5 px-2">
                     <div className="font-medium flex items-center flex-wrap gap-1">{d.nomi}<KanyokImg item={it} size="w-14 h-8" /><TeskariBadge item={it} /></div>
                     <div className="text-slate-500">{d.tafsilot}</div>
@@ -129,8 +157,8 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
                 </tr>
               );
             })}
-            {(order.aksessuarlar || []).map((a) => (
-              <tr key={a.id} className="border-b border-slate-200 align-top">
+            {(order.aksessuarlar || []).map((a, i) => (
+              <tr key={a.id || 'aks' + i} className="border-b border-slate-200 align-top">
                 <td className="py-1.5 px-2"><div className="font-medium">{a.nomi}</div><div className="text-slate-500">Aksessuar</div></td>
                 <td className="py-1.5 px-1"><RangChip rang={a.rang} /></td>
                 <td className="py-1.5 px-1 text-right tabular-nums">{a.soni} {a.birlik || 'dona'}</td>
@@ -139,14 +167,14 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
               </tr>
             ))}
             {/* KAZIROK — chizmadan avtomatik (material + 25% xizmat) */}
-            {kRows.map((r, i) => (
+            {(kRows || []).map((r, i) => (
               <tr key={'kaz' + i} className="border-b border-slate-200 align-top">
                 <td className="py-1.5 px-2">
                   <div className="font-medium">{kazRowNom(r)}</div>
                   <div className="text-slate-500">{r.listNom}{r.sizeLabel ? ` · ${r.sizeLabel}` : ''}</div>
                 </td>
                 <td className="py-1.5 px-1"><RangChip rang={r.rang} /></td>
-                <td className="py-1.5 px-1 text-right tabular-nums">{r.metr.toFixed(2)} m</td>
+                <td className="py-1.5 px-1 text-right tabular-nums">{metrMatn(r.metr)} m</td>
                 {!narxsiz && <td className="py-1.5 px-1 text-right tabular-nums">{fmt(r.price)}+25%</td>}
                 {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(r.jami)}</td>}
               </tr>
@@ -163,7 +191,7 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
           </div>
         )}
 
-        {!narxsiz && statBadge && (
+        {!narxsiz && !smeta && statBadge && (
           <div className="flex justify-center mb-3">
             <span className={`px-4 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${statBadge.c}`}><statBadge.Icon className="w-3.5 h-3.5" />{statBadge.t}</span>
           </div>
@@ -192,6 +220,12 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
             <span className="text-sm font-semibold">Umumiy summa</span>
             <b className="text-lg tabular-nums">{fmt(order.totalSum)} so'm</b>
           </div>
+          {/* Smetada to'lov/qarz yo'q — faqat taklif muddati haqida izoh */}
+          {smeta ? (
+            <div className="px-3 py-2 text-[11px] text-slate-500 leading-snug">
+              Taklif 3 kun davomida amal qiladi. Narxlar o'zgarishi mumkin.
+            </div>
+          ) : (
           <div className="p-3 space-y-1.5">
             <div className="flex justify-between text-sm text-emerald-800"><span>To'landi</span><b className="tabular-nums">{fmt(order.totalPaid)} so'm</b></div>
             <div className="flex justify-between items-center text-base pt-2 border-t-2 border-slate-200">
@@ -203,14 +237,15 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
               </div>
             </div>
           </div>
+          )}
         </div>
         )}
 
-        {!narxsiz && order.payments && order.payments.length > 0 && (
+        {!narxsiz && !smeta && order.payments && order.payments.length > 0 && (
           <div className="mt-3 text-[11px] text-slate-600">
             <div className="font-semibold mb-0.5">To'lovlar:</div>
-            {order.payments.map((p) => (
-              <div key={p.id} className="flex justify-between border-b border-slate-100 py-0.5 last:border-0">
+            {order.payments.map((p, i) => (
+              <div key={p.id || 'pay' + i} className="flex justify-between border-b border-slate-100 py-0.5 last:border-0">
                 <span>{formatDate(p.createdAt)} · {p.method}</span>
                 <span className="tabular-nums">{p.method === 'Dollorda' ? `${p.amount} $` : `${fmt(p.amount)} so'm`}</span>
               </div>
@@ -224,9 +259,21 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
           </div>
         )}
 
+        {/* QR — zakas holatini kuzatish havolasi. To'q (dark) nusxada ham o'qilishi
+            uchun QR OQ fonli ramka ichida beriladi. */}
+        {qrSrc && (
+          <div className="mt-4 text-center">
+            <div className="bg-white p-1.5 rounded-lg inline-block">
+              <img src={qrSrc} alt="QR" width={110} height={110} style={{ display: 'block', width: '110px', height: '110px' }} />
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1.5">Zakas holatini shu QR orqali kuzating</div>
+            {havola && <div className="text-[10px] text-slate-400 break-all">{qisqaHavola(havola)}</div>}
+          </div>
+        )}
+
         <div className="mt-4 pt-3 border-t border-dashed border-slate-300 text-center">
           <div className="text-slate-300 tracking-[0.5em] text-xs mb-1">• • • • •</div>
-          <p className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">Xaridingiz uchun rahmat! <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /></p>
+          <p className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">{smeta ? 'Taklifimiz bilan tanishganingiz uchun rahmat!' : 'Xaridingiz uchun rahmat!'} <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /></p>
           <div className="text-[11px] text-slate-400 mt-1">{shopName}</div>
           {shopPhone && <div className="text-sm font-bold text-slate-700 mt-0.5 flex items-center justify-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {shopPhone}</div>}
         </div>
@@ -235,7 +282,7 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
   );
 }
 
-export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, kazData = { groups: [] }, kazRows = [], tunikaBaza = [], ustalar = [], telegram = {}, libRoot = null, onChatMigrated = () => {}, onClose }) {
+export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, kazData = { groups: [] }, kazRows = [], tunikaBaza = [], ustalar = [], telegram = {}, libRoot = null, smeta = false, onChatMigrated = () => {}, onClose }) {
   const printRef = useRef(null);
   const dxfImgRef = useRef(null);                   // ekrandan tashqari, DOIM narxsiz TO'Q chek (albom rasmi uchun)
   const darkShareRef = useRef(null);                // ekrandan tashqari, TO'Q chek — WhatsApp/Telegram rasmi (narxsiz holatga ergashadi)
@@ -243,6 +290,33 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
   const [busy, setBusy] = useState(false);          // rasm tayyorlanmoqda
   const [dxfBusy, setDxfBusy] = useState('');       // '' | '4m' | '6m' — DXF tayyorlanyapti
   const [dxfMsg, setDxfMsg] = useState(null);       // { ok, t } — natija xabari
+  const [qrSrc, setQrSrc] = useState('');           // QR PNG dataURL (holat kuzatish havolasi)
+  const [nusxa, setNusxa] = useState(false);        // "Nusxalandi ✓" belgisi (2 soniya)
+
+  // Zakas holatini kuzatish havolasi — faqat saqlangan zakasda (token bor).
+  // Smetada zakas hali yo'q, shuning uchun havola ham, QR ham bo'lmaydi.
+  const havola = (!smeta && order && order.viewToken) ? zakasHavola(order.viewToken) : '';
+  useEffect(() => {
+    let alive = true;
+    if (!havola) { setQrSrc(''); return undefined; }
+    qrDataUrl(havola, { width: 200 }).then((u) => { if (alive && u) setQrSrc(u); }).catch(() => {});
+    return () => { alive = false; };
+  }, [havola]);
+
+  // Chek yopilganda "Nusxalandi ✓" taymerini to'xtatamiz (yopilgan komponentga yozmaslik uchun)
+  const nusxaTimer = useRef(null);
+  useEffect(() => () => { if (nusxaTimer.current) clearTimeout(nusxaTimer.current); }, []);
+
+  // Havolani buferga nusxalash — 2 soniyaga "Nusxalandi ✓"
+  async function nusxaOl() {
+    if (!havola) return;
+    try {
+      await navigator.clipboard.writeText(havola);
+      setNusxa(true);
+      if (nusxaTimer.current) clearTimeout(nusxaTimer.current);
+      nusxaTimer.current = setTimeout(() => setNusxa(false), 2000);
+    } catch (e) { /* ruxsat berilmasa — jim o'tamiz */ }
+  }
 
   // Kazirok manbai: FAQAT zakasning o'zidan (saqlangan). Joriy chizmaga
   // qaytish (fallback) olib tashlandi — aks holda eski/kaziroksiz zakas cheki
@@ -269,15 +343,16 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
     const L = [];
     L.push(shopName);
     L.push(`Zakas № ${order.number}`);
-    L.push(`Mijoz: ${order.customer.name}`);
-    const tels = (order.customer.phones || []).filter(Boolean);
+    L.push(`Mijoz: ${order.customer?.name || ''}`);
+    const tels = ((order.customer && order.customer.phones) || []).filter(Boolean);
     if (tels.length) L.push(`Tel: ${tels.join(', ')}`);
-    if (order.customer.address) L.push(`Manzil: ${order.customer.address}`);
-    if (order.customer.orientir) L.push(`Orientir: ${order.customer.orientir}`);
+    if (order.customer?.address) L.push(`Manzil: ${order.customer.address}`);
+    if (order.customer?.orientir) L.push(`Orientir: ${order.customer.orientir}`);
     if (order.masterName && order.masterName !== 'Boshqa') {
       L.push(`Usta: ${order.masterName}${ustaTel.length ? ` (${ustaTel.join(', ')})` : ''}`);
     }
     L.push(`Sana: ${formatDate(order.createdAt)}`);
+    if (order.muddat) L.push(`Topshirish muddati: ${formatDay(String(order.muddat).slice(0, 10))}`);
     L.push(`Holat: ${HOLAT_LABEL[order.holat || 'jarayon'] || 'Jarayonda'}`);
     L.push(`✂️ DXF: ${lengthKey} · ${fileCount} ta · ~${usedM} m`);
     return L.join('\n');
@@ -364,29 +439,35 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
   function buildText() {
     const L = [];
     L.push(shopName);
-    L.push(`Zakas № ${order.number} · ${formatDate(order.createdAt)}`);
-    L.push(`Mijoz: ${order.customer.name}`);
+    L.push(smeta ? `Narx taklifi (Smeta) · ${formatDate(order.createdAt)}` : `Zakas № ${order.number} · ${formatDate(order.createdAt)}`);
+    L.push(`Mijoz: ${order.customer?.name || ''}`);
+    if (order.muddat) L.push(`Topshirish muddati: ${formatDay(String(order.muddat).slice(0, 10))}`);
     L.push('');
-    order.items.forEach((it) => {
+    (order.items || []).forEach((it) => {
       const d = itemDisp(it);
       L.push(`• ${d.nomi}${it.rang ? ` (${it.rang})` : ''} — ${d.olchov}${narxsiz ? '' : ` = ${fmt(d.jami)} so'm`}`);
     });
     (order.aksessuarlar || []).forEach((a) => L.push(`• ${a.nomi} — ${a.soni} ${a.birlik || 'dona'}${narxsiz ? '' : ` = ${fmt(a.jami)} so'm`}`));
-    kRows.forEach((r) => L.push(`• ${kazRowNom(r)} (${r.listNom}) — ${r.metr.toFixed(2)} m${narxsiz ? '' : ` = ${fmt(r.jami)} so'm`}`));
+    (kRows || []).forEach((r) => L.push(`• ${kazRowNom(r)} (${r.listNom || ''}) — ${metrMatn(r.metr)} m${narxsiz ? '' : ` = ${fmt(r.jami)} so'm`}`));
     if (!narxsiz) {
       if (order.dastafka?.ichida) L.push('Dastafka xizmati: ichida (narxga kiritilgan)');
       else if (order.dastafka?.summa > 0) L.push(`Dastafka xizmati: ${fmt(order.dastafka.summa)} so'm`);
       L.push('');
       L.push(`Umumiy: ${fmt(order.totalSum)} so'm`);
-      L.push(`To'landi: ${fmt(order.totalPaid)} so'm`);
-      if (order.debt > 0) L.push(`Qoldiq qarz: ${fmt(order.debt)} so'm`);
+      if (smeta) {
+        L.push("Taklif 3 kun davomida amal qiladi. Narxlar o'zgarishi mumkin.");
+      } else {
+        L.push(`To'landi: ${fmt(order.totalPaid)} so'm`);
+        if (order.debt > 0) L.push(`Qoldiq qarz: ${fmt(order.debt)} so'm`);
+      }
     }
+    if (havola) L.push(`Zakas holati: ${havola}`);
     if (shopPhone) L.push(`Tel: ${shopPhone}`);
     return L.join('\n');
   }
   // Mijozning birinchi telefoni (xalqaro format, faqat raqam)
   function mijozTel() {
-    const raw = (order.customer.phones || []).filter(Boolean)[0] || '';
+    const raw = ((order.customer && order.customer.phones) || []).filter(Boolean)[0] || '';
     let d = raw.replace(/\D/g, '');
     if (d.startsWith('998')) return d;
     if (d.length === 9) return `998${d}`;
@@ -410,13 +491,17 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
     try {
       const blob = await captureReceipt(darkShareRef.current);
       if (!blob) throw new Error('rasm yo\'q');
-      const file = new File([blob], `zakas-${order.number}.png`, { type: 'image/png' });
+      // Smetada zakas raqami yo'q — fayl nomi/sarlavha "smeta" bo'ladi
+      const nomBelgi = smeta ? `smeta-${chekStamp()}` : `zakas-${order.number}`;
+      const sarlavha = smeta ? 'Narx taklifi (Smeta)' : `Zakas № ${order.number}`;
+      const file = new File([blob], `${nomBelgi}.png`, { type: 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Zakas № ${order.number}`, text: shopName });
+        await navigator.share({ files: [file], title: sarlavha, text: shopName });
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
-        URL.revokeObjectURL(url);
+        // Darhol revoke qilinsa ba'zi brauzerlarda yuklab olish uzilib qoladi
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
         openMatn(app);
       }
     } catch (e) {
@@ -442,20 +527,24 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
         {/* ===== CHOP ETILADIGAN QISM ===== */}
         <div ref={printRef} className="receipt-print text-slate-900" style={{ fontFamily: 'Georgia, serif' }}>
           <ReceiptBody order={order} shopName={shopName} shopPhone={shopPhone} narxsiz={narxsiz}
-            statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel} />
+            statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel}
+            smeta={smeta} qrSrc={qrSrc} havola={havola} />
         </div>
 
         {/* ===== TUGMALAR (chop etishda ko'rinmaydi) ===== */}
         <div className="no-print p-4 border-t border-slate-100 space-y-2">
-          {/* NARXSIZ — chop/yuborishdan OLDIN yoqiladi; yoqilsa barcha narxlar yashirinadi */}
-          <button onClick={() => setNarxsiz((v) => !v)} aria-label="Narxsiz rejim"
-            className={`w-full py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 border-2 transition ${
-              narxsiz ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 text-slate-700 hover:bg-slate-50'
-            }`}>
-            <EyeOff className="w-4 h-4" /> Narxsiz rejim {narxsiz && <><span>— yoqilgan</span><Check className="w-4 h-4" /></>}
-          </button>
+          {/* NARXSIZ — chop/yuborishdan OLDIN yoqiladi; yoqilsa barcha narxlar yashirinadi.
+              Smetada kerak emas — u allaqachon narx taklifi. */}
+          {!smeta && (
+            <button onClick={() => setNarxsiz((v) => !v)} aria-label="Narxsiz rejim"
+              className={`w-full py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 border-2 transition ${
+                narxsiz ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+              }`}>
+              <EyeOff className="w-4 h-4" /> Narxsiz rejim {narxsiz && <><span>— yoqilgan</span><Check className="w-4 h-4" /></>}
+            </button>
+          )}
           <p className="text-[11px] text-slate-400 text-center">
-            Chek RASMI sifatida yuboriladi{narxsiz ? ' · narxlarsiz' : ''}
+            {smeta ? 'Narx taklifi RASMI sifatida yuboriladi' : `Chek RASMI sifatida yuboriladi${narxsiz ? ' · narxlarsiz' : ''}`}
           </p>
           <div className="flex gap-2">
             <button onClick={sendWhatsApp} disabled={busy} aria-label="WhatsApp orqali rasm yuborish"
@@ -467,8 +556,16 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
               <Send className="w-4 h-4" /> {busy ? 'Tayyorlanmoqda…' : 'Telegram'}
             </button>
           </div>
-          {/* KAZIROK — aqlli sartirovka + DXF (narxsiz chek rasmi bilan albom botga, yoki yuklab olish) */}
-          {hasKaz && (
+          {/* HAVOLA — zakas holatini kuzatish uchun QR ostidagi havolani nusxalash */}
+          {havola && (
+            <button onClick={nusxaOl} aria-label="Zakas havolasini nusxalash"
+              className="w-full py-2 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-1.5">
+              {nusxa ? <><Check className="w-3.5 h-3.5 text-emerald-600" /> Nusxalandi ✓</> : <><Copy className="w-3.5 h-3.5" /> Havolani nusxalash</>}
+            </button>
+          )}
+          {/* KAZIROK — aqlli sartirovka + DXF (narxsiz chek rasmi bilan albom botga, yoki yuklab olish).
+              Smetada ko'rsatilmaydi — zakas hali saqlanmagan. */}
+          {!smeta && hasKaz && (
             <div className="pt-2 mt-1 border-t border-slate-100">
               <p className="text-[11px] text-slate-500 text-center mb-1.5 flex items-center justify-center gap-1 flex-wrap">
                 <Scissors className="w-3 h-3 flex-shrink-0" /> Patalok/Paloska/Burchak qozon 1245&nbsp;mm listga zich joylanib, narxsiz chek rasmi + har sheet DXF{dxfWhere}
@@ -522,15 +619,17 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
           style={{ width: '448px', fontFamily: 'Georgia, serif', background: RECEIPT_DARK_BG }}
           className="receipt-dark">
           <ReceiptBody order={order} shopName={shopName} shopPhone={shopPhone} narxsiz={narxsiz}
-            statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel} />
+            statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel}
+            smeta={smeta} qrSrc={qrSrc} havola={havola} />
         </div>
         {/* DXF albom surati — DOIM narxsiz (mijozga narxsiz ketadi) */}
-        {hasKaz && (
+        {!smeta && hasKaz && (
           <div ref={dxfImgRef}
             style={{ width: '448px', fontFamily: 'Georgia, serif', background: RECEIPT_DARK_BG }}
             className="receipt-dark">
             <ReceiptBody order={order} shopName={shopName} shopPhone={shopPhone} narxsiz={true}
-              statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel} />
+              statBadge={statBadge} olishUsd={olishUsd} sotishUsd={sotishUsd} kRows={kRows} ustaTel={ustaTel}
+              smeta={false} qrSrc={qrSrc} havola={havola} />
           </div>
         )}
       </div>

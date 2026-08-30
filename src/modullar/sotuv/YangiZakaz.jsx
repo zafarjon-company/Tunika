@@ -8,9 +8,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Trash2, Save, ShoppingCart, User, Hammer, Wallet, Package, ChevronRight, ChevronDown,
   Loader2, Check, X, AlertCircle, MapPin, Copy, CopyPlus, Truck, Pencil, Scissors,
+  CalendarClock, FileText,
 } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, KanyokImg, TeskariBadge, CountUp, rangChipStyle } from '../../components/ui.jsx';
-import { fmt, genId, metrliVariantlar, barchaRanglar, aksRangKerak, rangHex, rangMatn, isKanyokAny, reducedMotion } from '../../lib/helpers.js';
+import { fmt, genId, metrliVariantlar, barchaRanglar, aksRangKerak, isKanyokAny, reducedMotion, toDateInput } from '../../lib/helpers.js';
 import { STANOK_OPTIONS } from '../../lib/constants.js';
 import { matchCombo } from '../../lib/keybind.js';
 
@@ -72,9 +73,35 @@ export function olchovDisp(it) {
   return `${it.uzunlik || 0} metr × ${it.soni} dona`;
 }
 
+// ----- Topshirish muddati (deadline) yordamchilari -----
+// Bugundan N kun keyingi sana ('YYYY-MM-DD')
+function muddatKun(n) {
+  const t = new Date();
+  return toDateInput(new Date(t.getFullYear(), t.getMonth(), t.getDate() + n));
+}
+// Tez tanlash tugmalari
+const MUDDAT_TEZ = [
+  { label: 'Bugun', kun: 0 },
+  { label: 'Ertaga', kun: 1 },
+  { label: '3 kun', kun: 3 },
+  { label: '1 hafta', kun: 7 },
+];
+// "bugun" / "3 kun qoldi" / "2 kun kechikdi" — sana darajasida (soat farqi ta'sir qilmaydi)
+function muddatQoldi(sana) {
+  if (!sana) return null;
+  // ISO sana-vaqt ham kelishi mumkin ('2026-08-30T...') — faqat sana qismini olamiz
+  const [y, m, d] = String(sana).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const t = new Date();
+  const kun = Math.round((new Date(y, m - 1, d) - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000);
+  if (kun < 0) return { kun, matn: `${-kun} kun kechikdi`, kechikkan: true };
+  if (kun === 0) return { kun, matn: 'bugun', kechikkan: false };
+  return { kun, matn: `${kun} kun qoldi`, kechikkan: false };
+}
+
 export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar, products, ranglar = [],
                               kazData, kazNarx = {}, onKazPrice,
-                              onOpenProductPicker, onOpenClientPicker, onOpenMasterPicker, onSave, usdRate, usdOlish,
+                              onOpenProductPicker, onOpenClientPicker, onOpenMasterPicker, onSave, onSmeta, usdRate, usdOlish,
                               onCopyLast, canCopyLast = false, editing = false, onCancelEdit, editNumber = null,
                               saqlashKey = 'Ctrl+S' }) {
   const colorOptions = barchaRanglar(tunikaBaza, ranglar);
@@ -85,6 +112,12 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
   // (bitta bo'lakda jami = o'zi, takrorlash ortiqcha). Chek bilan bir xil mantiq.
   const sumQismlar = [draftCalc.mahsulotSum, draftCalc.aksessuarSum, draftCalc.kazTotalJami, draftCalc.dastafkaSumma].filter((v) => v > 0);
   const showBreakdown = sumQismlar.length >= 2;
+  // Topshirish muddati — 'YYYY-MM-DD' ko'rinishiga keltiramiz (input type="date" faqat shuni tushunadi)
+  const muddatVal = String(draft.muddat || '').slice(0, 10);
+  // Necha kun qolgani (bo'sh bo'lsa null)
+  const muddatInfo = muddatQoldi(muddatVal);
+  // Smeta (narx taklifi) — zakas saqlanmasdan mijozga beriladi
+  const showSmeta = (hasItems || hasKaz) && typeof onSmeta === 'function';
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved
   const [removingIds, setRemovingIds] = useState(() => new Set());
   const [confirmClearAll, setConfirmClearAll] = useState(false); // "Hammasini o'chirish" tasdig'i
@@ -354,8 +387,8 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                   </thead>
                   <tbody>
                     {/* KAZIROK — chizmadan avtomatik, eng tepada (List → razmer, list rangi → rang, metr → o'lchov, narx+25% → narx, jami = +25%) */}
-                    {kazRows.map((r) => (
-                      <tr key={'kaz-' + (r.id || 'x')} className="border-b border-slate-100">
+                    {kazRows.map((r, i) => (
+                      <tr key={'kaz-' + (r.id || i)} className="border-b border-slate-100">
                         <td className="py-1.5 pr-2">
                           <div className="font-medium text-slate-800">{kazRowNom(r)}</div>
                         </td>
@@ -368,7 +401,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                             ? <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold border border-black/10 whitespace-nowrap" style={rangChipStyle(r.rang)}>{r.rang}</span>
                             : <span className="text-slate-400">—</span>}
                         </td>
-                        <td className="py-1.5 px-1 text-right tabular-nums text-slate-700 whitespace-nowrap">{r.metr.toFixed(2)} m</td>
+                        <td className="py-1.5 px-1 text-right tabular-nums text-slate-700 whitespace-nowrap">{(r.metr || 0).toFixed(2)} m</td>
                         <td className="py-1.5 px-1 text-right tabular-nums text-slate-700 whitespace-nowrap">{fmt(r.price)}+25%</td>
                         <td className="py-1.5 pl-1 text-right tabular-nums font-semibold text-slate-900 whitespace-nowrap">{fmt(r.jami)}</td>
                       </tr>
@@ -418,6 +451,44 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                       placeholder="Dastafka summasi"
                       className="flex-1 min-w-0 px-3 py-2 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-sm focus:border-slate-900 outline-none" />
                     <span className="text-xs text-slate-500 flex-shrink-0">so'm</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Topshirish muddati (deadline) — ixtiyoriy; bo'sh = muddat belgilanmagan */}
+              <div className="bg-slate-50 rounded-lg p-3 mb-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-sm font-semibold text-slate-700 flex items-center gap-1.5"><CalendarClock className="w-4 h-4" /> Topshirish muddati</span>
+                  {muddatVal && (
+                    <button type="button" onClick={() => setDraft({ ...draft, muddat: '' })}
+                      title="Muddatni tozalash" aria-label="Muddatni tozalash"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-slate-300 bg-white text-slate-500 text-[11px] font-semibold hover:bg-slate-100">
+                      <X className="w-3 h-3" /> Tozalash
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="date" value={muddatVal}
+                    onChange={(e) => setDraft({ ...draft, muddat: e.target.value })}
+                    className="flex-1 min-w-[150px] px-3 py-2 border-2 border-slate-200 rounded-lg bg-white text-sm focus:border-slate-900 outline-none" />
+                  <div className="flex flex-wrap gap-1">
+                    {MUDDAT_TEZ.map((t) => {
+                      const sana = muddatKun(t.kun);
+                      const faol = muddatVal === sana;
+                      return (
+                        <button key={t.label} type="button" onClick={() => setDraft({ ...draft, muddat: sana })}
+                          className={`px-2.5 py-1.5 rounded-md text-[11px] font-semibold border transition ${
+                            faol ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                          }`}>
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {muddatInfo && (
+                  <div className={`text-[11px] mt-1.5 font-semibold ${muddatInfo.kechikkan ? 'text-red-600' : 'text-slate-500'}`}>
+                    {muddatInfo.matn}
                   </div>
                 )}
               </div>
@@ -495,8 +566,17 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                   className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none resize-none text-sm" />
               </div>
 
+              {/* Smeta (narx taklifi) — zakas saqlanmaydi, faqat mijozga narx chiqariladi */}
+              {showSmeta && (
+                <button type="button" onClick={onSmeta}
+                  title="Zakasni saqlamasdan mijozga narx taklifini chiqarish"
+                  className="mt-4 w-full py-2.5 rounded-lg border-2 border-slate-300 bg-white text-slate-700 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition">
+                  <FileText className="w-4 h-4" /> Smeta (narx taklifi)
+                </button>
+              )}
+
               <button onClick={handleSave} disabled={saveState !== 'idle'}
-                className={`mt-4 w-full py-3.5 rounded-lg font-bold text-base flex items-center justify-center gap-2 shadow-lg transition ${
+                className={`${showSmeta ? 'mt-2.5' : 'mt-4'} w-full py-3.5 rounded-lg font-bold text-base flex items-center justify-center gap-2 shadow-lg transition ${
                   saveState === 'saved' ? 'bg-emerald-600 text-white shadow-emerald-600/30' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'
                 }`}>
                 {saveState === 'saving' ? (<><Loader2 className="w-5 h-5 anim-spin" /> Saqlanmoqda...</>)
@@ -519,6 +599,12 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
               <CountUp value={draftCalc.totalSum} /> so'm
             </div>
           </div>
+          {showSmeta && (
+            <button type="button" onClick={onSmeta} title="Zakasni saqlamasdan mijozga narx taklifini chiqarish"
+              className="px-3 py-2.5 rounded-lg border-2 border-slate-300 bg-white text-slate-700 text-sm font-semibold flex items-center gap-1.5 flex-shrink-0 hover:bg-slate-50">
+              <FileText className="w-4 h-4" /> Smeta
+            </button>
+          )}
           <button onClick={handleSave} disabled={saveState !== 'idle'}
             className={`px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 shadow-lg flex-shrink-0 transition ${
               saveState === 'saved' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white shadow-slate-900/20'

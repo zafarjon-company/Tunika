@@ -2,9 +2,9 @@
 //  ZAKASLAR KO'RINISHI TABI (+ bitta zakas kartasi)
 // ============================================================
 import React, { useState } from 'react';
-import { Trash2, Printer, FileText, Search, Wallet, MapPin, Download, Calculator, Hourglass, CheckCircle2, Lock, PackageCheck, Undo2, RotateCcw, Timer, Truck, SlidersHorizontal, ArrowDownUp, MessageCircle, Edit3 } from 'lucide-react';
+import { Trash2, Printer, FileText, Search, Wallet, MapPin, Download, Calculator, Hourglass, CheckCircle2, Lock, PackageCheck, Undo2, RotateCcw, Timer, Truck, SlidersHorizontal, ArrowDownUp, MessageCircle, Edit3, CalendarClock } from 'lucide-react';
 import { Card, SectionTitle, StatBox, KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
-import { fmt, formatDate, formatDuration } from '../../lib/helpers.js';
+import { fmt, formatDate, formatDay, formatDuration } from '../../lib/helpers.js';
 import { downloadCSV } from '../../lib/eksport.js';
 import { kazRowNom } from './KazirokSavdo.jsx';
 
@@ -38,6 +38,44 @@ export function itemDisp(it) {
   };
 }
 
+// ----- Topshirish muddati (deadline) holati -----
+// Kunlar SANA darajasida hisoblanadi (soat farqi ta'sir qilmaydi).
+// Qaytadi: { bor:false } yoki { bor:true, kun, matn, holat, cls }
+//   kun: musbat = qolgan kun, 0 = bugun, manfiy = kechikkan
+//   holat: 'kechikkan' | 'bugun' | 'yaqin' (<=3 kun) | 'normal'
+// Yopilgan zakas kechikkan deb ko'rsatilmaydi — holati doim 'normal'.
+export function muddatHolati(order) {
+  const sana = order?.muddat;
+  if (!sana) return { bor: false };
+  // ISO sana-vaqt ham kelishi mumkin ('2026-08-30T...') — faqat sana qismini olamiz
+  const [y, m, d] = String(sana).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return { bor: false };
+  const t = new Date();
+  const kun = Math.round(
+    (new Date(y, m - 1, d) - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000,
+  );
+  const yopilgan = (order.holat || 'jarayon') === 'yopilgan';
+  let matn, holat;
+  if (kun < 0) { matn = `${-kun} kun kechikdi`; holat = 'kechikkan'; }
+  else if (kun === 0) { matn = 'Bugun topshiriladi'; holat = 'bugun'; }
+  else if (kun === 1) { matn = 'Ertaga topshiriladi'; holat = 'yaqin'; }
+  else { matn = `${kun} kun qoldi`; holat = kun <= 3 ? 'yaqin' : 'normal'; }
+  if (yopilgan) {
+    holat = 'normal';
+    if (kun < 0) matn = `${-kun} kun oldin`;   // yopilgan — "kechikdi" deyilmaydi
+  }
+  const cls = {
+    kechikkan: 'bg-red-100 text-red-800',
+    bugun:     'bg-amber-100 text-amber-800',
+    yaqin:     'bg-amber-50 text-amber-700 border border-amber-200',
+    normal:    'bg-slate-100 text-slate-600',
+  }[holat];
+  return { bor: true, kun, matn, holat, cls };
+}
+
+// Muddatning sof sana qismi ('YYYY-MM-DD'); bo'sh bo'lsa ''
+const muddatSana = (o) => String(o?.muddat || '').slice(0, 10);
+
 const holatOf = (o) => o.holat || 'jarayon';
 // "Hisob" (xom chot) = umuman to'lov berilmagan zakas. Statistikaga qo'shilmaydi.
 const isHisob = (o) => (o.totalPaid || 0) <= 0;
@@ -45,8 +83,9 @@ const isHisob = (o) => (o.totalPaid || 0) <= 0;
 export function OrdersTab({ orders, usdRate, usdOlish, onPay, onDelete, onReceipt, onHolat, onEdit, canDelete = true, shopName = '' }) {
   const [holatF, setHolatF] = useState('all');
   const [faqatQarz, setFaqatQarz] = useState(false);
+  const [muddatYaqin, setMuddatYaqin] = useState(false); // kechikkan yoki 3 kun ichida
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState('yangi'); // yangi | eski | summa | qarz
+  const [sort, setSort] = useState('yangi'); // yangi | eski | summa | qarz | muddat
 
   const filtered = orders.filter((o) => {
     if (holatF === 'hisob') { if (!isHisob(o)) return false; }
@@ -55,11 +94,16 @@ export function OrdersTab({ orders, usdRate, usdOlish, onPay, onDelete, onReceip
       if (isHisob(o)) return false;
       if (holatOf(o) !== holatF) return false;
     }
-    if (faqatQarz && o.debt === 0) return false;
+    if (faqatQarz && !((o.debt || 0) > 0)) return false;   // qarzi yo'q / undefined — chiqmaydi
+    if (muddatYaqin) {
+      // kechikkan / bugun / 3 kun ichida (yopilganlar bu yerga tushmaydi)
+      const md = muddatHolati(o);
+      if (!md.bor || md.holat === 'normal') return false;
+    }
     if (query.trim()) {
       const q = query.toLowerCase();
-      return (o.customer.name || '').toLowerCase().includes(q)
-        || (o.customer.address || '').toLowerCase().includes(q)
+      return (o.customer?.name || '').toLowerCase().includes(q)
+        || (o.customer?.address || '').toLowerCase().includes(q)
         || (o.masterName || '').toLowerCase().includes(q)
         || String(o.number).includes(q);
     }
@@ -71,6 +115,15 @@ export function OrdersTab({ orders, usdRate, usdOlish, onPay, onDelete, onReceip
     if (sort === 'eski') return new Date(a.createdAt) - new Date(b.createdAt);
     if (sort === 'summa') return (b.totalSum || 0) - (a.totalSum || 0);
     if (sort === 'qarz') return (b.debt || 0) - (a.debt || 0);
+    if (sort === 'muddat') {
+      // muddati borlar oldin, eng yaqini birinchi; muddatsizlar oxirida
+      const am = muddatSana(a), bm = muddatSana(b);
+      if (!am && !bm) return new Date(b.createdAt) - new Date(a.createdAt);
+      if (!am) return 1;
+      if (!bm) return -1;
+      if (am !== bm) return am < bm ? -1 : 1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }
     return new Date(b.createdAt) - new Date(a.createdAt); // yangi
   });
 
@@ -85,12 +138,12 @@ export function OrdersTab({ orders, usdRate, usdOlish, onPay, onDelete, onReceip
   const statQarz = real.reduce((s, o) => s + (o.debt || 0), 0);
 
   function exportExcel() {
-    const headers = ['№', 'Sana', 'Mijoz', 'Telefon', 'Manzil', 'Orientir', 'Usta', 'Jami', "To'langan", 'Qarz', 'Holat'];
+    const headers = ['№', 'Sana', 'Muddat', 'Mijoz', 'Telefon', 'Manzil', 'Orientir', 'Usta', 'Jami', "To'langan", 'Qarz', 'Holat'];
     const rows = filtered.map((o) => [
-      o.number, formatDate(o.createdAt), o.customer.name,
-      (o.customer.phones || []).filter(Boolean).join(' '), o.customer.address || '', o.customer.orientir || '',
-      o.masterName || '', Math.round(o.totalSum), Math.round(o.totalPaid || 0),
-      Math.round(o.debt), STATUS_LABEL[o.status] || '',
+      o.number, formatDate(o.createdAt), formatDay(muddatSana(o)), o.customer?.name || '',
+      (o.customer?.phones || []).filter(Boolean).join(' '), o.customer?.address || '', o.customer?.orientir || '',
+      o.masterName || '', Math.round(o.totalSum || 0), Math.round(o.totalPaid || 0),
+      Math.round(o.debt || 0), STATUS_LABEL[o.status] || '',
     ]);
     downloadCSV('zakaslar.csv', headers, rows);
   }
@@ -138,16 +191,24 @@ export function OrdersTab({ orders, usdRate, usdOlish, onPay, onDelete, onReceip
               <option value="eski">Avval eski</option>
               <option value="summa">Katta summa</option>
               <option value="qarz">Ko'p qarz</option>
+              <option value="muddat">Muddat bo'yicha</option>
             </select>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 mb-2">
             <button onClick={() => setFaqatQarz((v) => !v)}
               className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium border-2 ${
                 faqatQarz ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}>Faqat qarzdor</button>
+            <button onClick={() => setMuddatYaqin((v) => !v)}
+              title="Kechikkan yoki 3 kun ichida topshiriladigan zakaslar"
+              className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium border-2 inline-flex items-center justify-center gap-1.5 ${
+                muddatYaqin ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}><CalendarClock className="w-4 h-4" /> Muddati yaqin</button>
+          </div>
+          <div className="flex gap-2">
             {orders.length > 0 && (
               <button onClick={exportExcel} title="Excelga yuklash"
-                className="px-3 py-2.5 rounded-lg border-2 border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-1.5">
+                className="flex-1 px-3 py-2.5 rounded-lg border-2 border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-1.5">
                 <Download className="w-4 h-4" /> Excel
               </button>
             )}
@@ -206,6 +267,7 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
       tayyor:   { text: 'Tayyor',    Icon: CheckCircle2, cls: 'bg-emerald-100 text-emerald-800' },
       yopilgan: { text: 'Yopilgan',  Icon: Lock,         cls: 'bg-slate-200 text-slate-600' },
     }[holat];
+  const muddat = muddatHolati(order);   // topshirish muddati chipi uchun
 
   return (
     <Card padding="p-0">
@@ -216,13 +278,18 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
               <span className="text-xs font-bold text-slate-400">Zakas {order.number}</span>
               {holatBadge && <span className={`text-xs px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${holatBadge.cls}`}><holatBadge.Icon className="w-3 h-3" />{holatBadge.text}</span>}
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge.cls}`}>{statusBadge.text}</span>
+              {muddat.bor && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${muddat.cls}`}>
+                  <CalendarClock className="w-3 h-3" />{muddat.matn}
+                </span>
+              )}
               {order.masterName && order.masterName !== 'Boshqa' && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1">Usta: {order.masterName}</span>
               )}
             </div>
-            <div className="font-bold text-slate-900 truncate">{order.customer.name}</div>
+            <div className="font-bold text-slate-900 truncate">{order.customer?.name}</div>
             <div className="text-xs text-slate-500 truncate">
-              {order.customer.phones?.filter(Boolean).length > 0 && <span>{order.customer.phones.filter(Boolean).join(', ')} · </span>}
+              {order.customer?.phones?.filter(Boolean).length > 0 && <span>{order.customer.phones.filter(Boolean).join(', ')} · </span>}
               {formatDate(order.createdAt)}
             </div>
           </div>
@@ -245,12 +312,22 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
 
       {open && (
         <div className="border-t border-slate-100 p-4 bg-slate-50/30 space-y-3">
-          {(order.customer.address || order.customer.orientir) && (
+          {(order.customer?.address || order.customer?.orientir) && (
             <div className="text-sm flex items-start gap-2 text-slate-700">
               <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
               <span>
                 {order.customer.address && <>Manzil: {order.customer.address}</>}
                 {order.customer.orientir && <>{order.customer.address ? ' · ' : ''}{order.customer.orientir}</>}
+              </span>
+            </div>
+          )}
+
+          {muddat.bor && (
+            <div className="text-sm flex items-start gap-2 text-slate-700">
+              <CalendarClock className={`w-4 h-4 mt-0.5 flex-shrink-0 ${muddat.holat === 'kechikkan' ? 'text-red-500' : 'text-slate-400'}`} />
+              <span>
+                Topshirish muddati: <b>{formatDay(muddatSana(order))}</b>
+                <span className={muddat.holat === 'kechikkan' ? 'text-red-600 font-semibold' : 'text-slate-500'}> ({muddat.matn})</span>
               </span>
             </div>
           )}
@@ -267,7 +344,7 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
                 </tr>
               </thead>
               <tbody>
-                {order.items.map((it) => {
+                {(order.items || []).map((it) => {
                   const d = itemDisp(it);
                   return (
                     <tr key={it.id} className="border-b border-slate-100 text-xs">
@@ -282,8 +359,8 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
                     </tr>
                   );
                 })}
-                {(order.kazRows || []).map((r) => (
-                  <tr key={'kaz-' + r.id} className="border-b border-slate-100 text-xs">
+                {(order.kazRows || []).map((r, i) => (
+                  <tr key={'kaz-' + (r.id || i)} className="border-b border-slate-100 text-xs">
                     <td className="py-1.5 pr-2">
                       <div className="text-slate-800 font-medium">{kazRowNom(r)}</div>
                       <div className="text-slate-500">{r.listNom}{r.sizeLabel ? ' · ' + r.sizeLabel : ''}</div>

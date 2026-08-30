@@ -5,11 +5,11 @@
 //  Grafiklar — kutubxonasiz, CSS bilan.
 // ============================================================
 import React, { useMemo, useState } from 'react';
-import { TrendingUp, CalendarDays, Package, Users, Filter, PieChart, Wallet, Hammer, Download, Coins } from 'lucide-react';
+import { TrendingUp, CalendarDays, Package, Users, Filter, PieChart, Wallet, Hammer, Download, Coins, CalendarClock } from 'lucide-react';
 import { Card, SectionTitle, StatBox } from '../../components/ui.jsx';
 import { fmt, formatDate } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
-import { itemDisp } from '../sotuv/Zakazlar.jsx';
+import { itemDisp, muddatHolati } from '../sotuv/Zakazlar.jsx';
 import { downloadCSV } from '../../lib/eksport.js';
 import { Donut, AreaChart } from './charts.jsx';
 
@@ -184,6 +184,20 @@ export function HisobotDashboard({ orders = [] }) {
     return { count: fil.length, tushum, umumiy, qarz, sotuv, foyda, oylar, kunlar, topTovar, topMijoz, holatCount, payCount, ustaIncome };
   }, [orders, from, to, usta]);
 
+  // Muddat holati — SANA FILTRIGA BOG'LIQ EMAS: doim barcha zakaslar bo'yicha
+  // joriy holat (yopilganlar hisobga olinmaydi).
+  const muddatStat = useMemo(() => {
+    let bugun = 0, kechikkan = 0;
+    orders.forEach((o) => {
+      if ((o.holat || 'jarayon') === 'yopilgan') return;
+      const md = muddatHolati(o);
+      if (!md.bor) return;
+      if (md.holat === 'kechikkan') kechikkan += 1;
+      else if (md.holat === 'bugun') bugun += 1;
+    });
+    return { bugun, kechikkan };
+  }, [orders]);
+
   // tezkor oraliqlar
   function preset(kind) {
     const t = new Date();
@@ -261,6 +275,17 @@ export function HisobotDashboard({ orders = [] }) {
         <StatBox label="Zakaslar" value={data.count} />
         <StatBox label="Umumiy summa" value={data.umumiy} suffix="so'm" />
         <StatBox label="Qarz" value={data.qarz} suffix="so'm" color="amber" />
+      </div>
+
+      {/* Topshirish muddati — sana filtriga bog'liq emas, doim joriy holat */}
+      <div>
+        <div className="text-[11px] text-slate-400 mb-1 flex items-center gap-1">
+          <CalendarClock className="w-3 h-3" /> Muddat bo'yicha (joriy holat)
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <StatBox label="Bugun topshiriladi" value={muddatStat.bugun} color="amber" />
+          <StatBox label="Kechikkan" value={muddatStat.kechikkan} color="amber" />
+        </div>
       </div>
 
       {/* Sof foyda (tovarlardan, tan narx = optom) */}

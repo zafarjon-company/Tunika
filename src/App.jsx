@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus, Settings, FileText, Check, AlertCircle, Loader2, Users,
-  CalendarCheck, HardHat, ClipboardList, Tags, Dices, Pin, History, Languages, WifiOff, Search,
+  CalendarCheck, HardHat, ClipboardList, Tags, Dices, Pin, History, Languages, WifiOff, Search, Boxes,
 } from 'lucide-react';
 // Header effekt belgilari — mavzu-detallari uchun professional ikonalar (emoji emas)
 import {
@@ -53,9 +53,15 @@ import {
   DEFAULT_PRODUCTS, DEFAULT_USD_RATE, DEFAULT_AKSESSUARLAR, DEFAULT_KAZIROKLAR, DEFAULT_KAZ_TURLARI, normalizeKazTurlari,
 } from './lib/constants.js';
 import {
-  fmt, genId, calcItem, makeBlankItem, makeBlankPayment, makeBlankDraft,
-  rangTozala, aksRangKerak, orderItemToDraft,
+  fmt, genId, genToken, calcItem, makeBlankItem, makeBlankPayment, makeBlankDraft,
+  rangTozala, aksRangKerak, orderItemToDraft, toDateInput,
 } from './lib/helpers.js';
+import { zakasChiqimlari, kazirokChiqimlari, kamQoldiqlar } from './lib/ombor.js';
+import {
+  AVTO_ISH_BLANK, normAvtoIsh, kunlikHisobotMatni, zaxiraFayli, bugunKerakmi,
+} from './lib/avtoIsh.js';
+import { sendTelegramDocument, sendTelegramMessage, telegramSozlangan } from './lib/telegram.js';
+import { zaxiraMalumot } from './lib/zaxira.js';
 
 import { SmallModal } from './components/ui.jsx';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
@@ -74,6 +80,7 @@ import { IshchilarModule } from './modullar/ishchilar/index.jsx';
 import { YoqlamaModule } from './modullar/yoqlama/index.jsx';
 import { HisobotModule } from './modullar/hisobot/index.jsx';
 import { NarxlarModule } from './modullar/narxlar/index.jsx';
+import { OmborModule } from './modullar/ombor/index.jsx';
 import { JurnalTab } from './modullar/jurnal/index.jsx';
 import { tabKoradi, ruxsat } from './lib/ruxsat.js';
 import { applyTil, getTil, TILLAR } from './lib/til.js';
@@ -343,6 +350,11 @@ export default function App() {
     } catch (e) { /* noop */ }
     return makeBlankDraft(DEFAULT_USD_RATE);
   });
+  // Ombor (material qoldig'i) — obyekt-xarita { id: material }, merge bilan yoziladi
+  const [ombor, setOmbor]           = useState({});
+  const [omborHarakat, setOmborHarakat] = useState({});
+  const [avtoIsh, setAvtoIsh]       = useState(AVTO_ISH_BLANK); // avto-zaxira / kunlik hisobot sozlamasi
+  const [smetaOrder, setSmetaOrder] = useState(null); // saqlanmagan narx taklifi (chek ko'rinishida)
   const [receiptOrder, setReceiptOrder] = useState(null);
   // Tahrirlanayotgan zakas id (null = yangi). localStorage'da ham saqlanadi —
   // sahifa yangilanganda draft qolib editingId yo'qolsa, saqlash DUBLIKAT zakas
@@ -407,6 +419,9 @@ export default function App() {
       ['qobiliyatlar', setQobiliyatlar],
       ['kamchiliklar', setKamchiliklar],
       ['jurnal', setJurnal],
+      ['ombor', (v) => setOmbor(v && typeof v === 'object' ? v : {})],
+      ['ombor-harakat', (v) => setOmborHarakat(v && typeof v === 'object' ? v : {})],
+      ['avto-ish', (v) => setAvtoIsh(normAvtoIsh(v))],
     ];
     // Yuklanish tugashi — har KALIT kamida bir marta kelganda (takror snapshot
     // hisoblagichni noto'g'ri kamaytirmasin, aks holda sekin kalitlar kelmay
@@ -495,6 +510,50 @@ export default function App() {
     return () => clearInterval(id);
   }, [authReady]);
 
+  // ----- AVTOMATIK ISHLAR: kunlik zaxira + kunlik yakun-hisobot (Telegramga) -----
+  // Kuniga BIR MARTA bajariladi. "Oxirgi bajarilgan kun" Firestore'da saqlanadi —
+  // shu sabab bir nechta qurilma ochiq bo'lsa ham takror yuborilmaydi.
+  const avtoRef = useRef({});
+  avtoRef.current = { avtoIsh, orders, yoqlama, ishchilar, ombor, shopName, tgToken, tgChatId, tgChats };
+  useEffect(() => {
+    if (!authReady || loading) return undefined;
+    let ishlayapti = false;
+    async function tekshir() {
+      if (ishlayapti) return;
+      const s = avtoRef.current;
+      const tg = { token: s.tgToken, chatId: s.tgChatId, chats: s.tgChats };
+      if (!telegramSozlangan(tg)) return;           // bot sozlanmagan — hech narsa qilinmaydi
+      const sana = toDateInput();
+      const kerak = bugunKerakmi(s.avtoIsh, sana, new Date().getHours());
+      if (!kerak.zaxira && !kerak.hisobot) return;
+      ishlayapti = true;
+      try {
+        if (kerak.zaxira) {
+          const data = await zaxiraMalumot();
+          const { blob, filename } = zaxiraFayli(data, sana);
+          await sendTelegramDocument(tg, blob, filename, `🗄 ${s.shopName} — avtomatik zaxira (${sana})`);
+          updateAvtoIsh({ ...s.avtoIsh, zaxira: { ...s.avtoIsh.zaxira, oxirgi: sana } });
+          try { localStorage.setItem('oxirgi-zaxira', new Date().toISOString()); } catch (e) { /* noop */ }
+        }
+        if (kerak.hisobot) {
+          const matn = kunlikHisobotMatni({
+            orders: s.orders, yoqlama: s.yoqlama, ishchilar: s.ishchilar,
+            ombor: s.ombor, sana, shopName: s.shopName,
+          });
+          await sendTelegramMessage(tg, matn);
+          updateAvtoIsh({ ...avtoRef.current.avtoIsh, hisobot: { ...avtoRef.current.avtoIsh.hisobot, oxirgi: sana } });
+        }
+      } catch (e) {
+        console.error('Avtomatik ish xatosi:', e);
+      } finally {
+        ishlayapti = false;
+      }
+    }
+    const t = setTimeout(tekshir, 8000);            // ilova ochilgach biroz kutib
+    const id = setInterval(tekshir, 10 * 60 * 1000); // keyin har 10 daqiqada
+    return () => { clearTimeout(t); clearInterval(id); };
+  }, [authReady, loading]);
+
   // Sichqoncha O'RTA tugmasi — brauzerning avto-aylantirish (autoscroll)
   // belgisi chiqmasin (chizmada pan uchun ishlatiladi, boshqa joyda ham kerak emas)
   useEffect(() => {
@@ -576,6 +635,21 @@ export default function App() {
       }
     } catch (e) { /* noop */ }
   }, [loading]);
+
+  // Kam qoldiq eslatmasi — ombor bo'limini ochmasdan ham bilinsin (sessiyada bir marta)
+  useEffect(() => {
+    if (loading || !tabKoradi(role, 'ombor')) return;
+    try {
+      if (sessionStorage.getItem('ombor-eslatma')) return;
+      const kam = kamQoldiqlar(ombor);
+      if (!kam.length) return;
+      sessionStorage.setItem('ombor-eslatma', '1');
+      const nomlar = kam.slice(0, 3).map((m) => m.nomi).join(', ');
+      setTimeout(() => showToast(
+        `Omborda kam qoldi: ${nomlar}${kam.length > 3 ? ` va yana ${kam.length - 3} ta` : ''}`,
+      ), 3200);
+    } catch (e) { /* noop */ }
+  }, [loading, ombor, role]);
 
   async function persist(key, value) {
     try { await storage.save(key, value); }
@@ -692,6 +766,56 @@ export default function App() {
     persistField('yoqlama', { [sana]: map });
   }
   function updateAvanslar(v)   { setAvanslar(v);   persist('avanslar', v); }
+
+  // ----- OMBOR: bitta material / bitta harakat yozuvi (merge — butun hujjat emas) -----
+  // Shu sabab ikki qurilma bir vaqtda kirim qilsa ham yozuvlar bir-birini o'chirmaydi.
+  // Joriy ombor holatiga closure'siz murojaat (saqlash paytida kerak)
+  const omborRef = useRef(ombor);
+  useEffect(() => { omborRef.current = ombor; }, [ombor]);
+
+  function setOmborItem(id, material) {
+    const qiymat = material == null
+      ? { ...(omborRef.current[id] || { id }), ochirilgan: true }
+      : { ...material, id };
+    setOmbor((prev) => ({ ...prev, [id]: qiymat }));
+    persistField('ombor', { [id]: qiymat });
+  }
+  function setHarakat(id, harakat) {
+    const qiymat = { ...harakat, id };
+    setOmborHarakat((prev) => ({ ...prev, [id]: qiymat }));
+    persistField('ombor-harakat', { [id]: qiymat });
+  }
+  // Zakas saqlangach ombordan materialni avtomatik yechish (faqat bog'langan materiallar).
+  // Har bir yechim ombor-harakat jurnaliga ham yoziladi (kim, qaysi zakas uchun).
+  function omborYech(order) {
+    const cur = omborRef.current || {};
+    const chiqimlar = [...zakasChiqimlari(order, cur), ...kazirokChiqimlari(order, cur)];
+    if (!chiqimlar.length) return;
+    // Bitta materialga bir nechta qator to'g'ri kelsa — jamlaymiz
+    const jam = new Map();
+    chiqimlar.forEach((c) => jam.set(c.omborId, (jam.get(c.omborId) || 0) + (Number(c.miqdor) || 0)));
+    const yangiOmbor = {};
+    const yangiHarakat = {};
+    jam.forEach((miqdor, omborId) => {
+      const mat = cur[omborId];
+      if (!mat || !(miqdor > 0)) return;
+      const yangi = { ...mat, qoldiq: Math.max(0, (Number(mat.qoldiq) || 0) - miqdor) };
+      yangiOmbor[omborId] = yangi;
+      const hid = genId();
+      yangiHarakat[hid] = {
+        id: hid, ts: new Date().toISOString(), turi: 'chiqim', omborId, miqdor,
+        narx: Number(mat.tanNarx) || 0, izoh: 'Zakas bo\'yicha avtomatik chiqim',
+        orderId: order.id, orderNumber: order.number, userLogin: currentUser?.login || '—',
+      };
+    });
+    if (!Object.keys(yangiOmbor).length) return;
+    setOmbor((prev) => ({ ...prev, ...yangiOmbor }));
+    setOmborHarakat((prev) => ({ ...prev, ...yangiHarakat }));
+    persistField('ombor', yangiOmbor);
+    persistField('ombor-harakat', yangiHarakat);
+  }
+
+  function updateAvtoIsh(v) { const n = normAvtoIsh(v); setAvtoIsh(n); persist('avto-ish', n); }
   // Avans — faqat BITTA ishchi/oy katagini yozadi (merge, yo'qlama uslubida).
   // Butun hujjatni qayta yozmaydi — ikki qurilma bir vaqtda avans kiritsa,
   // biri ikkinchisining yozuvini o'chirib yubormaydi.
@@ -816,6 +940,7 @@ export default function App() {
       kazData: kazSlim(kazData),
       kazRows: draftCalc.kazRows || [],
       notes: draft.notes,
+      muddat: draft.muddat || '',   // topshirish muddati 'YYYY-MM-DD' ('' = belgilanmagan)
       status,
       // Tahrirlash/nusxa uchun — xom qatorlar (katalog id, narx turi, variant saqlanadi)
       srcItems: draft.items.map((it) => ({ ...it })),
@@ -827,6 +952,7 @@ export default function App() {
       const list = orders.map((o) => {
         if (o.id !== editingId) return o;
         const next = { ...o, ...common };
+        if (!next.viewToken) next.viewToken = genToken(); // eski zakasda QR havolasi yo'q edi
         // Chizma hozir BO'SH, eski zakasda esa kazirok bor — eski kazirok saqlanib
         // qolsin (tahrirlashda chizma qayta yuklanmaydi; aks holda telefon raqamini
         // tuzatib saqlash ham kazirok summasini zakasdan o'chirib yuborardi).
@@ -863,9 +989,12 @@ export default function App() {
       createdAt: new Date().toISOString(),
       ...common,
       holat: 'jarayon', // ishlab chiqarish holati: jarayon → tayyor → yopilgan
+      // Mijozga beriladigan ommaviy holat havolasi (chekdagi QR) uchun maxfiy token
+      viewToken: genToken(),
     };
 
     updateOrders([newOrder, ...orders]);
+    omborYech(newOrder);   // bog'langan materiallar ombordan avtomatik yechiladi
     logAction('zakas_yaratdi', `№${newOrder.number} · ${newOrder.customer.name} · ${fmt(newOrder.totalSum)} so'm`);
     setDraft(makeBlankDraft(usdRate));
     clearSavdoChizma();
@@ -874,6 +1003,40 @@ export default function App() {
     showToast(`Zakas saqlandi, tartib raqami: ${newOrder.number}`);
     setReceiptOrder(newOrder);
     return true;
+  }
+
+  // ----- SMETA (narx taklifi) — zakas SAQLANMAYDI -----
+  // Joriy qoralamadan chek ko'rinishidagi taklif yasaydi: mijozga chop etib yoki
+  // rasm qilib yuboriladi, hisobotga/kassaga umuman tegmaydi.
+  function openSmeta() {
+    if (!draft.items.length && !(draftCalc.kazRows || []).length) { showToast('Avval tovar qo\'shing'); return; }
+    if (draftCalc.totalSum <= 0) { showToast('Uzunlik yoki sonini kiriting'); return; }
+    setSmetaOrder({
+      id: 'smeta',
+      number: null,
+      createdAt: new Date().toISOString(),
+      customer: { ...draft.customer, name: draft.customer.name || 'Mijoz' },
+      masterId: draft.masterId,
+      masterName: draft.masterName,
+      items: draftCalc.items.map((it) => ({
+        id: it.id, kind: it.kind, nomi: it.nomi, tafsilot: it.tafsilot, birlik: it.birlik,
+        uzunlik: parseFloat(it.uzunlik) || 0, soni: parseFloat(it.soni) || 0,
+        zapas: parseFloat(it.zapas) || 0, jamiMeyor: it.jamiMeyor || 0,
+        birBirlikNarxi: it.birBirlikNarxi, jamiSumma: it.jamiSumma,
+        rang: it.rang || '', teskariQuloq: !!it.teskariQuloq,
+      })),
+      kazRows: draftCalc.kazRows || [],
+      kazData: { groups: [] },        // smetada DXF yo'q
+      payments: [],
+      dastafka: { ichida: draftCalc.dastafkaIchida, summa: draftCalc.dastafkaSumma },
+      totalSum: draftCalc.totalSum,
+      totalPaid: 0,
+      debt: draftCalc.totalSum,
+      notes: draft.notes,
+      muddat: draft.muddat || '',
+      status: null,
+      holat: 'jarayon',
+    });
   }
 
   // ----- Saqlangan zakasni tahrirlashga yuklash -----
@@ -909,6 +1072,7 @@ export default function App() {
       items,
       payments: (order.payments && order.payments.length) ? order.payments.map((p) => ({ ...p })) : [makeBlankPayment(usdRate)],
       notes: order.notes || '',
+      muddat: order.muddat || '',
       dastafka: order.dastafka ? { ...order.dastafka } : { ichida: false, summa: '' },
     });
     setEditingId(order.id);
@@ -1211,6 +1375,7 @@ export default function App() {
             { k: 'hisobot',   label: 'Hisobot',       icon: ClipboardList },
             { k: 'ishchilar', label: 'Ishchilar',     icon: HardHat },
             { k: 'narxlar',   label: 'Narxlar',       icon: Tags },
+            { k: 'ombor',     label: 'Ombor',         icon: Boxes },
             { k: 'jurnal',    label: 'Jurnal',        icon: History },
             { k: 'settings',  label: 'Sozlamalar',    icon: Settings },
           ].filter(({ k }) => tabKoradi(role, k)).map(({ k, label, icon: Icon }) => (
@@ -1234,7 +1399,7 @@ export default function App() {
             onOpenProductPicker={() => setProductPicker(true)}
             onOpenClientPicker={() => setClientPicker(true)}
             onOpenMasterPicker={() => setMasterPicker(true)}
-            onSave={saveOrder} usdRate={usdRate} usdOlish={usdOlish}
+            onSave={saveOrder} onSmeta={openSmeta} usdRate={usdRate} usdOlish={usdOlish}
             onCopyLast={copyLastOrder} canCopyLast={orders.length > 0}
             editing={!!editingId} onCancelEdit={cancelEdit}
             editNumber={editingId ? orders.find((o) => o.id === editingId)?.number : null}
@@ -1294,6 +1459,16 @@ export default function App() {
             showToast={showToast}
           />
         )}
+        {tab === 'ombor' && (
+          <OmborModule
+            ombor={ombor} omborHarakat={omborHarakat}
+            setOmborItem={setOmborItem} setHarakat={setHarakat}
+            tunikaBaza={tunikaBaza} metrlilar={metrlilar}
+            aksessuarlar={aksessuarlar} kaziroklar={kaziroklar}
+            ranglar={ranglar} currentUser={currentUser}
+            canEdit={ruxsat(role, 'ombor')} showToast={showToast}
+          />
+        )}
         {tab === 'jurnal' && (
           <JurnalTab jurnal={jurnal} canClear={role === 'founder'}
             onClear={() => { if (window.confirm('Butun amallar jurnali tozalansinmi?')) updateJurnal([]); }} />
@@ -1314,6 +1489,7 @@ export default function App() {
             tgToken={tgToken} updateTgToken={updateTgToken}
             tgChatId={tgChatId} updateTgChatId={updateTgChatId}
             tgChats={tgChats} updateTgChats={updateTgChats}
+            avtoIsh={avtoIsh} updateAvtoIsh={updateAvtoIsh}
             libName={libHandle ? libHandle.name : null} libSupported={fsSupported()}
             onPickLib={pickLibraryFolder} onClearLib={clearLibraryFolder}
             onLogout={doLogout}
@@ -1350,6 +1526,15 @@ export default function App() {
           telegram={{ token: tgToken, chatId: tgChatId, chats: tgChats }} libRoot={libHandle}
           onChatMigrated={onTgChatMigrated}
           onClose={() => setReceiptOrder(null)} />
+      )}
+
+      {/* SMETA — saqlanmagan narx taklifi (chek ko'rinishida, DXF/to'lovsiz) */}
+      {smetaOrder && (
+        <ReceiptModal order={smetaOrder} smeta shopName={shopName} shopPhone={shopPhone}
+          usdRate={usdRate} usdOlish={usdOlish}
+          kazData={{ groups: [] }} kazRows={[]} tunikaBaza={tunikaBaza} ustalar={ustalar}
+          telegram={{ token: '', chatId: '', chats: [] }} libRoot={null}
+          onClose={() => setSmetaOrder(null)} />
       )}
 
       {searchOpen && (

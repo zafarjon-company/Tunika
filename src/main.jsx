@@ -2,13 +2,25 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { InstallPrompt } from './components/InstallPrompt.jsx';
+import { ZakasHolat } from './ommaviy/ZakasHolat.jsx';
 import './index.css';
 
+// Ommaviy (loginsiz) sahifa: /z/<token> — mijoz chekdagi QR orqali kiradi va
+// faqat O'Z zakasining holatini ko'radi. Ilovaning qolgan qismi yuklanmaydi.
+const yol = typeof window !== 'undefined' ? window.location.pathname : '';
+const zakasToken = yol.startsWith('/z/') ? decodeURIComponent(yol.slice(3).replace(/\/+$/, '')) : '';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-    <InstallPrompt />
-  </React.StrictMode>
+  zakasToken ? (
+    <React.StrictMode>
+      <ZakasHolat token={zakasToken} />
+    </React.StrictMode>
+  ) : (
+    <React.StrictMode>
+      <App />
+      <InstallPrompt />
+    </React.StrictMode>
+  )
 );
 
 // Service worker — offline rejim (faqat ishlab chiqarish/prod build'da)

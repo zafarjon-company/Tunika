@@ -15,14 +15,23 @@ export const ZAXIRA_KEYS = [
   'camera-links', 'camera-unlinked',
   // YOLO kamera / yangi Telegram yo'qlama tizimi kalitlari
   'telegram_config', 'telegram_links', 'yolo_cameras', 'yolo_control', 'yolo_kelish', 'yolo_settings', 'arrival-log',
+  // Ombor (material qoldig'i) va avtomatik ishlar sozlamasi
+  'ombor', 'ombor-harakat', 'avto-ish',
 ];
 
-export async function eksportZaxira() {
+// Barcha zaxira kalitlarini Firestore'dan o'qib bitta obyektga yig'adi.
+// (Qo'lda yuklab olish ham, avtomatik Telegram zaxirasi ham shundan foydalanadi.)
+export async function zaxiraMalumot() {
   const data = {};
   await Promise.all(ZAXIRA_KEYS.map(async (k) => {
     const snap = await getDoc(doc(db, 'shop', k));
     if (snap.exists()) data[k] = snap.data().value;
   }));
+  return data;
+}
+
+export async function eksportZaxira() {
+  const data = await zaxiraMalumot();
 
   const payload = { __app: 'tunika', __version: 2, sana: toDateInput(), data };
   const json = JSON.stringify(payload, null, 2);

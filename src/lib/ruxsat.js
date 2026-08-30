@@ -22,15 +22,18 @@ const ISHCHI_TABS = ['new', 'orders', 'mijozlar', 'yoqlama', 'settings'];
 
 export function tabKoradi(role, tab) {
   if (tab === 'jurnal') return role === 'founder' || role === 'admin';
+  if (tab === 'ombor') return role === 'founder' || role === 'admin';
   if (role === 'ishchi') return ISHCHI_TABS.includes(tab);
   return true; // founder, admin — barchasi
 }
 
-// amal: 'zakasOchirish' | 'narx' | 'foydalanuvchi' | 'jurnal' | 'kurs' | 'zaxira'
+// amal: 'zakasOchirish' | 'narx' | 'foydalanuvchi' | 'jurnal' | 'kurs' | 'zaxira' | 'ombor'
+// ombor — material qoldig'ini o'zgartirish (kirim/chiqim/tahrir). Ishchi ombor bo'limini
+// umuman ko'rmaydi (ISHCHI_TABS da yo'q), admin va asoschi to'liq boshqaradi.
 const MATRITSA = {
-  founder: { zakasOchirish: true,  narx: true,  foydalanuvchi: true,  jurnal: true,  kurs: true,  zaxira: true },
-  admin:   { zakasOchirish: true,  narx: true,  foydalanuvchi: false, jurnal: true,  kurs: true,  zaxira: true },
-  ishchi:  { zakasOchirish: false, narx: false, foydalanuvchi: false, jurnal: false, kurs: false, zaxira: false },
+  founder: { zakasOchirish: true,  narx: true,  foydalanuvchi: true,  jurnal: true,  kurs: true,  zaxira: true,  ombor: true },
+  admin:   { zakasOchirish: true,  narx: true,  foydalanuvchi: false, jurnal: true,  kurs: true,  zaxira: true,  ombor: true },
+  ishchi:  { zakasOchirish: false, narx: false, foydalanuvchi: false, jurnal: false, kurs: false, zaxira: false, ombor: false },
 };
 
 export function ruxsat(role, amal) {

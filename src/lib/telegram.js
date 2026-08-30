@@ -12,6 +12,30 @@
 // ============================================================
 
 const MAX_ITEMS = 10;   // Telegram media-albomga ko'pi bilan 10 ta element
+const MAX_CAPTION = 1024; // Telegram izohi (caption) chegarasi
+const MAX_TEXT = 4096;    // Telegram matnli xabar chegarasi
+
+// Chegaradan uzun izohni qisqartiradi (aks holda Telegram butun yuborishni rad etadi)
+function kes(s, n) {
+  const t = String(s == null ? '' : s);
+  return t.length > n ? t.slice(0, n - 1) + '…' : t;
+}
+
+// Uzun matnni Telegram chegarasiga mos bo'laklarga bo'ladi (imkon qadar qator bo'yicha)
+function matnBolaklar(text, n = MAX_TEXT) {
+  const t = String(text == null ? '' : text);
+  if (t.length <= n) return [t];
+  const out = [];
+  let qoldi = t;
+  while (qoldi.length > n) {
+    let kesish = qoldi.lastIndexOf('\n', n);
+    if (kesish <= 0) kesish = n;
+    out.push(qoldi.slice(0, kesish));
+    qoldi = qoldi.slice(kesish).replace(/^\n/, '');
+  }
+  if (qoldi) out.push(qoldi);
+  return out;
+}
 
 // Sozlangan manzillarni yagona ro'yxatga keltiradi: [{ chatId, nom }]
 // Yangi ko'p manzilli model (tg.chats) + eski yagona tg.chatId (zaxira) birga.
@@ -35,7 +59,7 @@ export function telegramSozlangan(tg) {
   return !!(tg && tg.token && tgChatList(tg).length);
 }
 
-function dxfBlob(text) { return new Blob([text], { type: 'application/dxf' }); }
+function dxfBlob(text) { return new Blob([String(text == null ? '' : text)], { type: 'application/dxf' }); }
 
 // Bitta albom (yoki bitta hujjat) ni bitta chatga yuboradi.
 // items = [{ field, blob, filename, caption? }]
@@ -46,7 +70,7 @@ async function postAlbum(base, chatId, items) {
     const it = items[0];
     const fd = new FormData();
     fd.append('chat_id', String(chatId));
-    if (it.caption) fd.append('caption', it.caption);
+    if (it.caption) fd.append('caption', kes(it.caption, MAX_CAPTION));
     fd.append('document', it.blob, it.filename);
     const r = await fetch(base + '/sendDocument', { method: 'POST', body: fd });
     const j = await r.json().catch(() => ({}));
@@ -54,7 +78,7 @@ async function postAlbum(base, chatId, items) {
   }
   const media = items.map((it) => {
     const m = { type: 'document', media: 'attach://' + it.field };
-    if (it.caption) m.caption = it.caption;
+    if (it.caption) m.caption = kes(it.caption, MAX_CAPTION);
     return m;
   });
   const fd = new FormData();
@@ -80,8 +104,11 @@ export async function sendDxfAlbumToTelegram(tg, opts = {}) {
 
   // Tartibli element ro'yxati: AVVAL chek rasmi (hujjat), keyin DXF fayllar.
   const all = [];
-  if (imageBlob) all.push({ blob: imageBlob, filename: imageName });
-  files.forEach((f) => all.push({ blob: dxfBlob(f.text), filename: f.name }));
+  if (imageBlob) all.push({ blob: imageBlob, filename: imageName || 'chek.png' });
+  (Array.isArray(files) ? files : []).forEach((f, i) => {
+    if (!f) return;
+    all.push({ blob: dxfBlob(f.text), filename: f.name || `chizma-${i + 1}.dxf` });
+  });
   if (!all.length) throw new Error('Yuboriladigan fayl yo\'q');
 
   // 10 talik albomlarga bo'lamiz; izoh faqat eng birinchi elementda.
@@ -102,8 +129,16 @@ export async function sendDxfAlbumToTelegram(tg, opts = {}) {
       const items = chunks[ci].map((it, idx) => ({
         field: 'm' + ci + '_' + idx, blob: it.blob, filename: it.filename,
       }));
-      // Izoh — HAR albomning birinchi elementiga (ko'p albom bo'lsa qism raqami bilan)
-      if (caption) items[0].caption = chunks.length > 1 ? `${caption}\n(qism ${ci + 1}/${chunks.length})` : caption;
+      // Izoh — HAR albomning birinchi elementiga (ko'p albom bo'lsa qism raqami bilan).
+      // "qism" qo'shimchasi kesilib qolmasligi uchun asosiy izoh oldindan qisqartiriladi.
+      if (caption) {
+        if (chunks.length > 1) {
+          const qism = `\n(qism ${ci + 1}/${chunks.length})`;
+          items[0].caption = kes(caption, MAX_CAPTION - qism.length) + qism;
+        } else {
+          items[0].caption = kes(caption, MAX_CAPTION);
+        }
+      }
 
       // Migratsiya va flood uchun ALOHIDA hisoblagich — biri ikkinchisining
       // qayta urinishini "yeb qo'ymasin" (superguruh ID doim bir marta sinaladi).
@@ -157,22 +192,57 @@ export async function sendDxfAlbumToTelegram(tg, opts = {}) {
   return { sent, errors, migrations };
 }
 
-// Ixtiyoriy: oddiy matnli xabar (barcha sozlangan manzillarga)
+// Ixtiyoriy: oddiy matnli xabar (barcha sozlangan manzillarga).
+// 4096 belgidan uzun matn bir necha xabarga bo'lib yuboriladi.
 export async function sendTelegramMessage(tg, text) {
   const chats = tgChatList(tg);
   if (!tg || !tg.token || !chats.length) throw new Error('Telegram bot sozlanmagan');
+  const bolaklar = matnBolaklar(text);
+  if (!bolaklar.length || !bolaklar[0]) throw new Error('Yuboriladigan matn yo\'q');
+  const base = 'https://api.telegram.org/bot' + tg.token;
+  const sent = [];
+  for (const chat of chats) {
+    let ok = true;
+    for (const bolak of bolaklar) {
+      try {
+        const r = await fetch(base + '/sendMessage', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: String(chat.chatId), text: bolak }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!(r.ok && j.ok)) { ok = false; break; }
+      } catch (e) { ok = false; break; }
+    }
+    if (ok) sent.push(chat.chatId);
+  }
+  if (!sent.length) throw new Error('Telegram: hech qaysi manzilga yuborilmadi');
+  return { sent };
+}
+
+// Ixtiyoriy: bitta hujjatni (Blob) barcha sozlangan manzillarga yuborish.
+// Masalan kunlik avtomatik zaxira (JSON fayl).
+//   blob     — yuboriladigan fayl (Blob/File)
+//   filename — Telegramda ko'rinadigan nom
+//   caption  — ixtiyoriy izoh (1024 belgigacha)
+// sendTelegramMessage uslubida: xato bo'lsa keyingi manzilga o'tadi;
+// hech qaysisiga bormasa — throw. Qaytaradi { sent: [chatId...] }.
+export async function sendTelegramDocument(tg, blob, filename, caption = '') {
+  const chats = tgChatList(tg);
+  if (!tg || !tg.token || !chats.length) throw new Error('Telegram bot sozlanmagan');
+  if (!blob) throw new Error('Yuboriladigan fayl yo\'q');
   const base = 'https://api.telegram.org/bot' + tg.token;
   const sent = [];
   for (const chat of chats) {
     try {
-      const r = await fetch(base + '/sendMessage', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: String(chat.chatId), text }),
-      });
+      const fd = new FormData();
+      fd.append('chat_id', String(chat.chatId));
+      if (caption) fd.append('caption', kes(caption, MAX_CAPTION));
+      fd.append('document', blob, filename || 'fayl');
+      const r = await fetch(base + '/sendDocument', { method: 'POST', body: fd });
       const j = await r.json().catch(() => ({}));
       if (r.ok && j.ok) sent.push(chat.chatId);
     } catch (e) { /* keyingisiga o'tamiz */ }
   }
-  if (!sent.length) throw new Error('Telegram: hech qaysi manzilga yuborilmadi');
+  if (!sent.length) throw new Error('Telegram: hujjat hech qaysi manzilga yuborilmadi');
   return { sent };
 }

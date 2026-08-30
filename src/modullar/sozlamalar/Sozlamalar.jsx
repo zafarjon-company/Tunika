@@ -167,7 +167,7 @@ function KeybindRow({ action, combo, onSet }) {
   );
 }
 
-export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], updateUsers, tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, tgChats = [], updateTgChats = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
+export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], updateUsers, tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, tgChats = [], updateTgChats = () => {}, avtoIsh = null, updateAvtoIsh = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
   const [shopDraft, setShopDraft] = useState(shopName);
   const [phoneDraft, setPhoneDraft] = useState(shopPhone);
   const [tgTokenDraft, setTgTokenDraft] = useState(tgToken);
@@ -519,6 +519,51 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
         <p className="text-[11px] text-amber-700 mt-2">
           Diqqat: "Fayldan yuklash" mavjud ma'lumot ustiga yozadi.
         </p>
+
+        {/* ----- AVTOMATIK ISHLAR: kunlik zaxira + kunlik yakun-hisobot ----- */}
+        {avtoIsh && (
+          <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Avtomatik (Telegram bot orqali)</div>
+            {!tgSozlangan && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                Avval yuqorida Telegram bot tokeni va manzilini sozlang — avtomatik ishlar shu bot orqali yuboriladi.
+              </p>
+            )}
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={!!avtoIsh.zaxira?.yoqilgan}
+                onChange={(e) => updateAvtoIsh({ ...avtoIsh, zaxira: { ...avtoIsh.zaxira, yoqilgan: e.target.checked } })}
+                className="w-4 h-4 mt-0.5 accent-slate-900 flex-shrink-0" />
+              <span className="text-sm text-slate-700">
+                Har kuni zaxira faylini Telegramga yuborish
+                <span className="block text-[11px] text-slate-400">
+                  Kuniga bir marta, ilova ochilganda. Oxirgi yuborilgan: {avtoIsh.zaxira?.oxirgi || '—'}
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={!!avtoIsh.hisobot?.yoqilgan}
+                onChange={(e) => updateAvtoIsh({ ...avtoIsh, hisobot: { ...avtoIsh.hisobot, yoqilgan: e.target.checked } })}
+                className="w-4 h-4 mt-0.5 accent-slate-900 flex-shrink-0" />
+              <span className="text-sm text-slate-700">
+                Kunlik yakun-hisobot yuborish (savdo, kassa, yo'qlama, kam qoldiq)
+                <span className="block text-[11px] text-slate-400">
+                  Oxirgi yuborilgan: {avtoIsh.hisobot?.oxirgi || '—'}
+                </span>
+              </span>
+            </label>
+            {avtoIsh.hisobot?.yoqilgan && (
+              <div className="flex items-center gap-2 pl-6">
+                <label className="text-xs text-slate-500 flex-shrink-0">Soat</label>
+                <select value={avtoIsh.hisobot?.soat ?? 19}
+                  onChange={(e) => updateAvtoIsh({ ...avtoIsh, hisobot: { ...avtoIsh.hisobot, soat: Number(e.target.value) } })}
+                  className="px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white text-sm">
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                </select>
+                <span className="text-[11px] text-slate-400">dan keyin ilova ochiq bo'lsa yuboriladi</span>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
       )}
 
