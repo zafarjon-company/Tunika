@@ -13,6 +13,8 @@ export const ZAXIRA_KEYS = [
   'kaziroklar', 'kazirok-turlari', 'jurnal',
   'telegram-bot-token', 'telegram-chat-id', 'telegram-dxf-chats', 'telegram-settings', 'telegram-links',
   'camera-links', 'camera-unlinked',
+  // YOLO kamera / yangi Telegram yo'qlama tizimi kalitlari
+  'telegram_config', 'telegram_links', 'yolo_cameras', 'yolo_control', 'yolo_kelish', 'yolo_settings', 'arrival-log',
 ];
 
 export async function eksportZaxira() {
