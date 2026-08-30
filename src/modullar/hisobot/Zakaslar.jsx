@@ -40,7 +40,9 @@ export function HisobotZakaslar({ orders = [] }) {
   const qarz = orders.reduce((s, o) => s + (o.debt || 0), 0);
 
   const holat = (h) => orders.filter((o) => (o.holat || 'jarayon') === h).length;
-  const pay = (s) => orders.filter((o) => o.status === s).length;
+  // to'lov holati (status yo'q eski zakaslarda qarz/to'lovdan keltirib chiqaramiz)
+  const payStatus = (o) => o.status || ((o.debt || 0) <= 0 ? 'paid' : (o.totalPaid || 0) > 0 ? 'partial' : 'unpaid');
+  const pay = (s) => orders.filter((o) => payStatus(o) === s).length;
 
   // Vaqt o'rtachalari
   const tayyorAvg = avgMs(orders, 'createdAt', 'tayyorAt');   // qabuldan tayyorgacha
@@ -58,7 +60,8 @@ export function HisobotZakaslar({ orders = [] }) {
       const soni = parseFloat(it.soni) || 0;
       const uz = parseFloat(it.uzunlik) || 0;
       if (it.kind === 'aksessuar') { if ((it.birlik || 'dona') === 'kg') g.kg += soni; else g.dona += soni; }
-      else if (it.kind === 'metrli') { g.metr += uz; }
+      // metrli: mijoz to'lagan metr = uzunlik*soni + zapas (jamiMeyor); eski zakaslarda uz + zapas
+      else if (it.kind === 'metrli') { g.metr += it.jamiMeyor != null ? Number(it.jamiMeyor) : uz + (parseFloat(it.zapas) || 0); }
       else { g.metr += uz * soni; g.dona += soni; }
       g.jami += (it.jamiSumma || 0);
       g.lines += 1;

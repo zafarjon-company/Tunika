@@ -153,7 +153,7 @@ export function rangFon(nom) {
 
 // "Oq" har doim eng tepada
 function oqTepadaCmp(a, b) {
-  const ao = /oq/i.test(a) ? 0 : 1; const bo = /oq/i.test(b) ? 0 : 1;
+  const ao = /\boq\b/i.test(a) ? 0 : 1; const bo = /\boq\b/i.test(b) ? 0 : 1;
   return ao !== bo ? ao - bo : a.localeCompare(b);
 }
 // Barcha mavjud ranglar: Listlardan (tozalangan) + qo'shimcha ranglar, takrorsiz, Oq tepada

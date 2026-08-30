@@ -15,8 +15,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   // Yangi SW boshqaruvni olganda sahifani BIR MARTA avtomatik yangilaymiz —
   // shunda eski kesh hech qachon eski kodni ushlab turmaydi (qo'lda Ctrl+Shift+R shart emas).
+  // Birinchi o'rnatishda (sahifa hali controller'siz — clients.claim) reload qilmaymiz,
+  // aks holda foydalanuvchi forma to'ldirayotganda sahifa yangilanib ketadi.
   let reloaded = false;
+  let hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return; }
     if (reloaded) return;
     reloaded = true;
     window.location.reload();

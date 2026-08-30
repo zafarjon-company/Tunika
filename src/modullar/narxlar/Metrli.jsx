@@ -49,19 +49,29 @@ export function MetrliTab({ metrlilar, updateMetrlilar, ranglar = [], showToast 
 
   function save() {
     if (!form.nomi.trim()) { showToast('Nom kiriting'); return; }
+    // Bo'lak soni faqat musbat butun son bo'lishi kerak — kasr kiritilsa yaxlitlanadi
+    let sonYaxlitlandi = false;
     const data = {
       nomi: form.nomi.trim(),
       metriNarx: parseFloat(form.metriNarx) || 0,
       rang: form.rang || '',
-      variantlar: form.variantlar.map((v) => ({ son: parseFloat(v.son) || 0, razmer: String(v.razmer || '') })),
+      variantlar: form.variantlar.map((v) => {
+        const raw = parseFloat(v.son) || 0;
+        const son = Math.max(0, Math.round(raw)) || 0;
+        if (raw > 0 && raw !== son) sonYaxlitlandi = true;
+        return { son, razmer: String(v.razmer || '') };
+      }),
     };
     if (adding) { updateMetrlilar([...metrlilar, { id: genId(), ...data }]); showToast('Qo\'shildi'); }
     else { updateMetrlilar(metrlilar.map((m) => (m.id === editingId ? { id: m.id, ...data } : m))); showToast('Saqlandi'); }
+    if (sonYaxlitlandi) showToast("Bo'lak soni butun songa yaxlitlandi");
     setAdding(false); setEditingId(null);
   }
 
   function remove(id) {
-    updateMetrlilar(metrlilar.filter((m) => m.id !== id));
+    const m = metrlilar.find((x) => x.id === id);
+    if (!window.confirm(`"${m?.nomi || 'Tovar'}" o'chirilsinmi?`)) return;
+    updateMetrlilar(metrlilar.filter((x) => x.id !== id));
     setEditingId(null); setAdding(false);
     showToast('O\'chirildi');
   }
@@ -106,7 +116,7 @@ export function MetrliTab({ metrlilar, updateMetrlilar, ranglar = [], showToast 
             <div key={i} className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-slate-500 mb-1">{i + 1}-variant: bo'lak soni</label>
-                <input type="number" value={v.son} onWheel={(e) => e.target.blur()} onChange={(e) => setVariant(i, { son: e.target.value })} placeholder="—" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+                <input type="number" min="1" step="1" value={v.son} onWheel={(e) => e.target.blur()} onChange={(e) => setVariant(i, { son: e.target.value })} placeholder="—" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
               </div>
               <div>
                 <label className="block text-slate-500 mb-1">{i + 1}-variant: razmer</label>

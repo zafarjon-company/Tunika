@@ -46,6 +46,9 @@ const KR_PAIRS = [
 export function lotinToKrill(s) {
   if (!s) return s;
   let t = normApos(s);
+  // So'z boshidagi e/E → э/Э ("Eslatma" → "Эслатма"). Harfdan keyingi e
+  // ('kerak', 'Yer'dagi kabi) tegilmaydi — uni pastdagi e→е / ye→е juftlari oladi.
+  t = t.replace(/(^|[^A-Za-zʼ'’`])e/g, '$1э').replace(/(^|[^A-Za-zʼ'’`])E/g, '$1Э');
   for (const [a, b] of KR_PAIRS) t = t.split(a).join(b);
   return t;
 }

@@ -6,6 +6,15 @@ import { Plus, Trash2, Calendar } from 'lucide-react';
 import { fmt, makeBlankPayment } from '../../lib/helpers.js';
 import { PAYMENT_METHODS } from '../../lib/constants.js';
 
+// ISO vaqtni <input type="datetime-local"> uchun LOKAL formatga o'girish.
+// (toISOString UTC beradi — slice(0,16) ko'rsatilsa vaqt 5 soat orqaga surilardi.)
+function toLocalDT(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function DynamicPaymentsSection({ payments, onChange, usdRate, qoldiq = 0 }) {
   function updatePaymentItem(pId, patch) {
     onChange(payments.map((p) => (p.id === pId ? { ...p, ...patch } : p)));
@@ -51,14 +60,14 @@ export function DynamicPaymentsSection({ payments, onChange, usdRate, qoldiq = 0
                   </label>
                   {qoldiq > 0 && (
                     <button type="button"
-                      onClick={() => updatePaymentItem(p.id, { amount: String(p.method === 'Dollorda' ? Math.round((qoldiq / (parseFloat(p.rate) || usdRate)) * 100) / 100 : Math.round(qoldiq)) })}
+                      onClick={() => updatePaymentItem(p.id, { amount: String(p.method === 'Dollorda' ? Math.ceil((qoldiq / (parseFloat(p.rate) || usdRate)) * 100) / 100 : Math.round(qoldiq)) })}
                       className="text-[11px] font-semibold text-emerald-700 hover:underline">
                       Qoldiq: {fmt(qoldiq)}
                     </button>
                   )}
                 </div>
-                <input type="number" value={p.amount} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                  onChange={(e) => updatePaymentItem(p.id, { amount: e.target.value })}
+                <input type="text" inputMode="decimal" value={p.amount} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                  onChange={(e) => { const v = e.target.value.replace(/,/g, '.'); if (/^\d*\.?\d*$/.test(v) || v === '') updatePaymentItem(p.id, { amount: v }); }}
                   placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs tabular-nums" />
               </div>
             </div>
@@ -81,7 +90,7 @@ export function DynamicPaymentsSection({ payments, onChange, usdRate, qoldiq = 0
             <div className="grid grid-cols-1 gap-2">
               <div className="flex gap-2 items-center">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <input type="datetime-local" value={p.createdAt.slice(0, 16)}
+                <input type="datetime-local" value={toLocalDT(p.createdAt)}
                   onChange={(e) => updatePaymentItem(p.id, { createdAt: e.target.value ? new Date(e.target.value).toISOString() : new Date().toISOString() })}
                   className="px-2 py-1 border border-slate-300 rounded text-xs text-slate-700 bg-white" />
               </div>

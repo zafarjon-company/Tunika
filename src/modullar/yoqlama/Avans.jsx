@@ -33,7 +33,7 @@ export function avansSumma(entries) {
   }, 0);
 }
 
-export function AvansTab({ ishchilar, avanslar, updateAvanslar, usdRate, showToast }) {
+export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, usdRate, showToast }) {
   const [oy, setOy] = useState(toMonthInput());
   const [modal, setModal] = useState(null); // { ishchiId, payments: [...] }
 
@@ -44,24 +44,37 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, usdRate, showToa
     setModal({ ishchiId, payments: [makeBlankPayment(usdRate)] });
   }
 
+  // Faqat o'zgargan ishchi/oy katagini yozadi (merge) — butun hujjatni emas.
+  // Eski updateAvanslar (to'liq qayta yozish) zaxira sifatida qoladi.
+  function yozKatak(ishchiId, list) {
+    if (setAvansYozuv) setAvansYozuv(oy, ishchiId, list);
+    else updateAvanslar({ ...avanslar, [oy]: { ...oyAvanslar, [ishchiId]: list } });
+  }
+
   function saveModal() {
     if (!modal) return;
     const valid = modal.payments
       .filter((p) => (parseFloat(p.amount) || 0) > 0)
-      .map((p) => ({ ...p, amount: parseFloat(p.amount) || 0 }));
+      .map((p) => {
+        const y = { ...p, amount: parseFloat(p.amount) || 0 };
+        // Sana tanlangan oyga mos bo'lsin: o'tgan oyga avans kiritilayotganda
+        // sukut "bugun" bo'lib qolsa, hisobot uni boshqa oyga qo'yib yuborardi.
+        if ((y.createdAt || '').slice(0, 7) !== oy) {
+          y.createdAt = new Date(`${oy}-01T12:00:00`).toISOString();
+        }
+        return y;
+      });
     if (valid.length === 0) { showToast('Summani kiriting'); return; }
 
     const oldList = normEntries(oyAvanslar[modal.ishchiId]);
-    const next = { ...avanslar, [oy]: { ...oyAvanslar, [modal.ishchiId]: [...oldList, ...valid] } };
-    updateAvanslar(next);
+    yozKatak(modal.ishchiId, [...oldList, ...valid]);
     setModal(null);
     showToast('Avans qo\'shildi');
   }
 
   function deleteEntry(ishchiId, entryId) {
     const list = normEntries(oyAvanslar[ishchiId]).filter((e) => e.id !== entryId);
-    const next = { ...avanslar, [oy]: { ...oyAvanslar, [ishchiId]: list } };
-    updateAvanslar(next);
+    yozKatak(ishchiId, list);
     showToast('Avans o\'chirildi');
   }
 

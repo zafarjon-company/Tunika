@@ -2815,11 +2815,12 @@ export function mountChizma(root, opts) {
 
   // ----- KAZIROK ma'lumotini savdo "Tovarlar" bo'limiga chiqarish -----
   // Bir bo'lak eni (sm) → 1.25 m (1250 mm) listga sig'adigan bo'lak soni.
-  // "Asosiy" preset bo'lsa o'shaning bo'lak soni; bo'lmasa round(1250/eni_mm).
+  // "Asosiy" preset bo'lsa o'shaning bo'lak soni; bo'lmasa floor(1250/eni_mm)
+  // — sig'MAgan bo'lak hisobga kirmasin (round bilan kam metr chiqar edi).
   function kazBolak(kind, eniCm) {
     const p = kazActivePreset(kind, eniCm);
     if (p) return p.bolak;
-    return Math.max(1, Math.round(1250 / (Math.max(1, eniCm) * 10)));
+    return Math.max(1, Math.floor(1250 / (Math.max(1, eniCm) * 10)));
   }
   // Har offset guruhi bo'yicha to'liq payload (savdo bo'limi uchun). "Kerak emas"
   // guruhlar va dona = 0 bo'laklar chiqarilmaydi. List metri:
@@ -3477,27 +3478,39 @@ export function mountChizma(root, opts) {
 
   /* ---------------- SAQLASH / YUKLASH (localStorage) ---------------- */
   let _saveT = null;
+  // Haqiqiy saqlash tanasi — kechiktirmasdan darhol localStorage'ga yozadi.
+  function saveStateNow() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        points: state.points, lines: state.lines,
+        ents: state.editEntities, ne: state.nextEntId,
+        layers: state.layers, curLayer: state.curLayer, curColor: state.curColor, curWidth: state.curWidth,
+        np: state.nextPointId, nl: state.nextLineId,
+        color: state.color, unit: state.unit,
+        unitDevor: state.unitDevor, unitQosh: state.unitQosh,
+        unitKazirok: state.unitKazirok, unitKazirokArea: state.unitKazirokArea, unitCorner: state.unitCorner,
+        unitDarvozaArea: state.unitDarvozaArea, unitDarvozaHovuz: state.unitDarvozaHovuz,
+        showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showDarvozaPlus: state.showDarvozaPlus, showQozon: state.showQozon,
+        showRazmer: state.showRazmer, showRef: state.showRef, showKazTiles: state.showKazTiles, impUnit: state.impUnit,
+        scale: state.scale, panX: state.panX, panY: state.panY,
+        kazUiClosed: state.kazUiClosed,   // kazirok/qozon kartalari yig'ilgan holati (UI)
+      }));
+    } catch (e) { /* noop */ }
+  }
   function saveStateLS() {
     if (_saveT) return;
     _saveT = setTimeout(() => {
       _saveT = null;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          points: state.points, lines: state.lines,
-          ents: state.editEntities, ne: state.nextEntId,
-          layers: state.layers, curLayer: state.curLayer, curColor: state.curColor, curWidth: state.curWidth,
-          np: state.nextPointId, nl: state.nextLineId,
-          color: state.color, unit: state.unit,
-          unitDevor: state.unitDevor, unitQosh: state.unitQosh,
-          unitKazirok: state.unitKazirok, unitKazirokArea: state.unitKazirokArea, unitCorner: state.unitCorner,
-          unitDarvozaArea: state.unitDarvozaArea, unitDarvozaHovuz: state.unitDarvozaHovuz,
-          showDevorPlus: state.showDevorPlus, showQoshPlus: state.showQoshPlus, showDarvozaPlus: state.showDarvozaPlus, showQozon: state.showQozon,
-          showRazmer: state.showRazmer, showRef: state.showRef, showKazTiles: state.showKazTiles, impUnit: state.impUnit,
-          scale: state.scale, panX: state.panX, panY: state.panY,
-          kazUiClosed: state.kazUiClosed,   // kazirok/qozon kartalari yig'ilgan holati (UI)
-        }));
-      } catch (e) { /* noop */ }
+      saveStateNow();
     }, 250);
+  }
+  // Kutilayotgan (debounce) saqlash bo'lsa — bekor qilmay DARHOL yozamiz:
+  // destroy/pagehide'da oxirgi tahrir yo'qolib qolmasin.
+  function flushSaveLS() {
+    if (!_saveT) return;
+    clearTimeout(_saveT);
+    _saveT = null;
+    saveStateNow();
   }
 
   function loadStateLS() {
@@ -3552,6 +3565,9 @@ export function mountChizma(root, opts) {
   // tozalaydi (clearAll: render → publishKazirok/Latok/Qozon bo'sh chiqadi,
   // shu sabab Kazirok ham yo'qoladi). "Bekor qilish" (undo) bilan qaytariladi.
   on(window, 'chizma:clear', () => clearAll());
+
+  // Sahifa yopilsa/yashirilsa — kutilayotgan (debounce) saqlashni darhol yozamiz.
+  on(window, 'pagehide', flushSaveLS);
 
   // Quti hodisalari.
   on(lengthInput, 'keydown', (e) => {
@@ -3701,13 +3717,14 @@ export function mountChizma(root, opts) {
     // Kiritish/chizish rejimi FAQAT Esc bilan yopiladi — fokus qayerda
     // bo'lishidan qat'i nazar (input ichidagi Esc o'zi to'xtatadi).
     if (state.activeInput) {
-      if (e.key === 'Escape') { closeInput(); render(); }
+      // preventDefault — to'liq ekran (Chizma.jsx) Esc'ni qayta ishlatmasin.
+      if (e.key === 'Escape') { e.preventDefault(); closeInput(); render(); }
       return;
     }
     // "Nuqta qo'shish" rejimi — Esc bilan bekor qilinadi.
-    if (state.placingPoint && e.key === 'Escape') { setPlacingPoint(false); return; }
+    if (state.placingPoint && e.key === 'Escape') { e.preventDefault(); setPlacingPoint(false); return; }
     // "Nuqta o'chirish" rejimi — Esc bilan bekor qilinadi.
-    if (state.removingPoint && e.key === 'Escape') { setRemovingPoint(false); return; }
+    if (state.removingPoint && e.key === 'Escape') { e.preventDefault(); setRemovingPoint(false); return; }
     // TAHRIR rejimi qisqartmalari (Ctrl+Z/Y/E pastda umumiy ishlayveradi).
     if (state.editMode) {
       if (e.key === 'Escape') { e.preventDefault(); editEscape(); return; }
@@ -3925,7 +3942,7 @@ export function mountChizma(root, opts) {
       renderKazirokBolim();
     },
     destroy() {
-      if (_saveT) { clearTimeout(_saveT); _saveT = null; }
+      flushSaveLS();   // kutilayotgan saqlash bo'lsa — bekor qilmay darhol yozamiz
       themeObs.disconnect();
       resizeObs.disconnect();
       cleanups.forEach((fn) => fn());

@@ -41,7 +41,9 @@ export function AksessuarlarTab({ aksessuarlar, updateAksessuarlar, ranglar = []
   }
 
   function remove(id) {
-    updateAksessuarlar(aksessuarlar.filter((a) => a.id !== id));
+    const a = aksessuarlar.find((x) => x.id === id);
+    if (!window.confirm(`"${a?.nomi || 'Aksessuar'}" o'chirilsinmi?`)) return;
+    updateAksessuarlar(aksessuarlar.filter((x) => x.id !== id));
     showToast('O\'chirildi');
   }
 
@@ -104,8 +106,9 @@ export function AksessuarlarTab({ aksessuarlar, updateAksessuarlar, ranglar = []
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Narx (so'm)</label>
-                    <input type="number" value={a.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                      onChange={(e) => setNarx(a.id, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+                    {/* Har tugmada emas — fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
+                    <input type="number" key={`${a.id}-${a.narx}`} defaultValue={a.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                      onBlur={(e) => { if ((parseFloat(e.target.value) || 0) !== (parseFloat(a.narx) || 0)) setNarx(a.id, e.target.value); }} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Birlik</label>

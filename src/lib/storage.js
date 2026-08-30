@@ -21,10 +21,15 @@ export const storage = {
   async saveField(key, partial) {
     await setDoc(doc(db, 'shop', key), { value: partial }, { merge: true });
   },
+  // cb(value, meta) — meta.fromCache: snapshot lokal keshdan (server tasdiqlamagan).
+  // Bo'sh keshdan kelgan null'ga qarab seed/overwrite qilish XAVFLI — meta bilan ajratiladi.
   subscribe(key, cb) {
     return onSnapshot(
       doc(db, 'shop', key),
-      (snap) => cb(snap.exists() ? snap.data().value : null),
+      (snap) => cb(
+        snap.exists() ? snap.data().value : null,
+        { fromCache: snap.metadata.fromCache, exists: snap.exists() },
+      ),
       (err) => console.error('subscribe xatosi:', key, err),
     );
   },

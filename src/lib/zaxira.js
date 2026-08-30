@@ -10,6 +10,9 @@ export const ZAXIRA_KEYS = [
   'klentlar', 'usd-rate', 'usd-olish', 'dynamic-products', 'aksessuarlar', 'metrlilar',
   'ishchilar', 'lavozimlar', 'qobiliyatlar', 'kamchiliklar', 'yoqlama',
   'avanslar', 'ranglar', 'users',
+  'kaziroklar', 'kazirok-turlari', 'jurnal',
+  'telegram-bot-token', 'telegram-chat-id', 'telegram-dxf-chats', 'telegram-settings', 'telegram-links',
+  'camera-links', 'camera-unlinked',
 ];
 
 export async function eksportZaxira() {

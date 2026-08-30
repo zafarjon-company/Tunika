@@ -8,7 +8,7 @@ import { YoqlamaKalendar } from './Kalendar.jsx';
 import { AvansTab } from './Avans.jsx';
 import { YoloControl } from './YoloControl.jsx';
 
-export function YoqlamaModule({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBulk, avanslar, updateAvanslar, usdRate, showToast }) {
+export function YoqlamaModule({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBulk, avanslar, updateAvanslar, setAvansYozuv, usdRate, showToast }) {
   const [sub, setSub] = useState('belgilash');
 
   return (
@@ -32,7 +32,7 @@ export function YoqlamaModule({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBul
 
       {sub === 'belgilash' && <YoqlamaBelgilash ishchilar={ishchilar} yoqlama={yoqlama} setYoqlamaKun={setYoqlamaKun} setYoqlamaBulk={setYoqlamaBulk} showToast={showToast} />}
       {sub === 'kalendar' && <YoqlamaKalendar ishchilar={ishchilar} yoqlama={yoqlama} setYoqlamaKun={setYoqlamaKun} />}
-      {sub === 'avans' && <AvansTab ishchilar={ishchilar} avanslar={avanslar} updateAvanslar={updateAvanslar} usdRate={usdRate} showToast={showToast} />}
+      {sub === 'avans' && <AvansTab ishchilar={ishchilar} avanslar={avanslar} updateAvanslar={updateAvanslar} setAvansYozuv={setAvansYozuv} usdRate={usdRate} showToast={showToast} />}
     </div>
   );
 }

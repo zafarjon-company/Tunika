@@ -55,17 +55,25 @@ function piecesByKindList(data) {
 }
 
 // Bitta List bo'laklarini listlarга (sheets) FFDH bilan joylaymiz.
+// Qaytaradi: { sheets, oversize } — oversize: list o'lchamiga sig'magan bo'laklar.
 function packList(pieces, sheetW, sheetL) {
   // Balandlik (keyin eni) bo'yicha kamayuvchi — barqaror tartib (label bilan tie-break)
   const sorted = pieces.slice().sort((a, b) =>
     (b.h - a.h) || (b.w - a.w) || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
 
   const sheets = [];
+  const oversize = [];   // list o'lchamidan KATTA bo'laklar (kontur chetdan chiqadi)
   let cur = null;
   const newSheet = () => ({ pieces: [], shelves: [], usedL: 0 });
   const EPS = 0.01;
 
   for (const p of sorted) {
+    // List o'lchamiga sig'magan bo'lak — baribir joylaymiz (natija ishlatilsin),
+    // lekin ro'yxatga olamiz: foydalanuvchi ogohlantirilsin, DXF chetdan chiqadi.
+    if (p.w > sheetW + EPS || p.h > sheetL + EPS) {
+      oversize.push({ label: p.label, w: p.w, h: p.h });
+      console.warn(`[nesting] Bo'lak list o'lchamidan katta: ${p.label} — ${p.w}×${p.h} mm (list ${sheetW}×${sheetL} mm)`);
+    }
     if (!cur) cur = newSheet();
     let placed = false;
     // 1) mavjud javonlardan biriga sig'adimi (eni bo'ylab)?
@@ -93,7 +101,7 @@ function packList(pieces, sheetW, sheetL) {
   if (cur && cur.pieces.length) sheets.push(cur);
 
   // Har list uchun foydalanish ko'rsatkichi
-  return sheets.map((s, i) => {
+  const outSheets = sheets.map((s, i) => {
     const usedArea = s.pieces.reduce((a, pc) => a + pc.w * pc.h, 0);
     const sheetArea = sheetW * sheetL;
     return {
@@ -106,6 +114,7 @@ function packList(pieces, sheetW, sheetL) {
       pieces: s.pieces,
     };
   });
+  return { sheets: outSheets, oversize };
 }
 
 // Asosiy: kazirok payloadini (List × kind) bo'yicha listlarga sartirovka qiladi.
@@ -115,10 +124,18 @@ export function nestKazirok(data, opts = {}) {
   const sheetW = opts.sheetW || SHEET_W_MM;
   const sheetL = opts.sheetL || SHEET_LENGTHS['6m'];
   const out = [];
+  const oversizeAll = [];
   for (const grp of piecesByKindList(data)) {
     if (!grp.pieces.length) continue;
-    const sheets = packList(grp.pieces, sheetW, sheetL);
-    out.push({ listId: grp.listId, kind: grp.kind, totalPieces: grp.pieces.length, sheets });
+    const packed = packList(grp.pieces, sheetW, sheetL);
+    oversizeAll.push(...packed.oversize);
+    out.push({ listId: grp.listId, kind: grp.kind, totalPieces: grp.pieces.length, sheets: packed.sheets, oversize: packed.oversize });
+  }
+  // List o'lchamiga sig'magan bo'lak bo'lsa — foydalanuvchini BIR marta (har eksportda)
+  // ogohlantiramiz: DXF baribir yasaladi, lekin kontur list chetidan chiqadi.
+  if (oversizeAll.length && typeof window !== 'undefined' && typeof window.alert === 'function') {
+    const labels = [...new Set(oversizeAll.map((o) => o.label))].join(', ');
+    window.alert("Diqqat: ba'zi bo'laklar list eniga sig'maydi (razmer juda katta) — DXF chetdan chiqadi: " + labels);
   }
   return out;
 }

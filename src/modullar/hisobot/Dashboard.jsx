@@ -97,11 +97,8 @@ export function HisobotDashboard({ orders = [] }) {
     const ustaMap = new Map();
 
     fil.forEach((o) => {
-      const d = new Date(o.createdAt);
       const paid = o.totalPaid || 0;
-      tushum += paid; umumiy += o.totalSum || 0; qarz += o.debt || 0;
-      oyMap[monKey(d)] = (oyMap[monKey(d)] || 0) + paid;
-      kunMap[dayKey(d)] = (kunMap[dayKey(d)] || 0) + paid;
+      umumiy += o.totalSum || 0; qarz += o.debt || 0;
       // holat taqsimoti
       const h = o.holat || 'jarayon';
       if (holatCount[h] != null) holatCount[h] += 1;
@@ -127,16 +124,48 @@ export function HisobotDashboard({ orders = [] }) {
       mijozMap.set(nm, m);
     });
 
+    // Tushum — to'lov darajasida: har bir to'lov o'z sanasi (p.createdAt) bo'yicha
+    // filtr oralig'iga tushsa qo'shiladi (zakas boshqa kunda ochilgan bo'lsa ham)
+    orders.forEach((o) => {
+      if (usta && (o.masterName || '').trim() !== usta) return;
+      const pays = o.payments || [];
+      if (pays.length > 0) {
+        pays.forEach((p) => {
+          if (!p.createdAt) return;
+          const pd = new Date(p.createdAt);
+          const dk = dayKey(pd);
+          if (from && dk < from) return;
+          if (to && dk > to) return;
+          const som = p.method === 'Dollorda' ? (parseFloat(p.amount) || 0) * (p.rate || 0) : (parseFloat(p.amount) || 0);
+          tushum += som;
+          oyMap[monKey(pd)] = (oyMap[monKey(pd)] || 0) + som;
+          kunMap[dk] = (kunMap[dk] || 0) + som;
+        });
+      } else if ((o.totalPaid || 0) > 0) {
+        // zaxira: juda eski zakaslarda payments yo'q — avvalgidek o.createdAt ga yoziladi
+        const d = new Date(o.createdAt);
+        const dk = dayKey(d);
+        if ((from && dk < from) || (to && dk > to)) return;
+        const paid = o.totalPaid || 0;
+        tushum += paid;
+        oyMap[monKey(d)] = (oyMap[monKey(d)] || 0) + paid;
+        kunMap[dk] = (kunMap[dk] || 0) + paid;
+      }
+    });
+
+    // grafik oynalari filtrga bog'lanadi: 'to' bo'lsa — oxirgi nuqta o'sha, aks holda bugun
+    let anchor = now;
+    if (to) { const [ty, tm, td] = to.split('-').map(Number); anchor = new Date(ty, tm - 1, td); }
     // oxirgi 6 oy
     const oylar = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const d = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1);
       oylar.push({ label: OY_NOMLARI[d.getMonth()].slice(0, 3), full: `${OY_NOMLARI[d.getMonth()]} ${d.getFullYear()}`, value: oyMap[monKey(d)] || 0 });
     }
     // oxirgi 14 kun
     const kunlar = [];
     for (let i = 13; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const d = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() - i);
       kunlar.push({ label: pad2(d.getDate()), full: dayKey(d), value: kunMap[dayKey(d)] || 0 });
     }
 

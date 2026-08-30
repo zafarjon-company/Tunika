@@ -164,10 +164,11 @@ export function kazActivePreset(kind, eni) {
   return KAZ_DETS[kind].presets.find((p) => Math.abs(p.eni - eni) < 0.05) || null;
 }
 // Bir bo'lak eni (sm) → 1.25 m (1250 mm) listga sig'adigan bo'lak soni.
+// floor — sig'MAgan bo'lak hisobga kirmasin (round bilan kam metr chiqar edi).
 export function kazBolak(kind, eniCm) {
   const p = kazActivePreset(kind, eniCm);
   if (p) return p.bolak;
-  return Math.max(1, Math.round(1250 / (Math.max(1, eniCm) * 10)));
+  return Math.max(1, Math.floor(1250 / (Math.max(1, eniCm) * 10)));
 }
 
 /* ---- Bitta detal (patalok/paloska) uchun to'liq hisob ----

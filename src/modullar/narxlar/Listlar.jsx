@@ -48,14 +48,20 @@ function OmmaviyModal({ tunikaBaza, onClose, onApply }) {
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">{tur === 'foiz' ? 'Necha foiz?' : "Necha so'm?"}</label>
-          <input type="number" inputMode="numeric" value={qiymat} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-            onChange={(e) => setQiymat(e.target.value)} placeholder={tur === 'foiz' ? '5' : '2000'}
+          <input type="number" inputMode={tur === 'foiz' ? 'decimal' : 'numeric'} value={qiymat} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+            onChange={(e) => setQiymat(e.target.value.replace(',', '.'))} placeholder={tur === 'foiz' ? '5' : '2000'}
             className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white tabular-nums focus:border-slate-900 outline-none" />
         </div>
         {namuna && v > 0 && (
           <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
             <span className="text-slate-500">Namuna ({namuna.nomi}):</span>{' '}
-            <span className="tabular-nums">Chakana {fmt(namuna.chakana)} → <b>{fmt(qaysi === 'optom' ? namuna.chakana : bulkCalc(namuna.chakana, { tur, yon, v }))}</b></span>
+            {(qaysi === 'chakana' || qaysi === 'ikkala') && (
+              <span className="tabular-nums">Chakana {fmt(namuna.chakana)} → <b>{fmt(bulkCalc(namuna.chakana, { tur, yon, v }))}</b></span>
+            )}
+            {qaysi === 'ikkala' && <span className="text-slate-400"> · </span>}
+            {(qaysi === 'optom' || qaysi === 'ikkala') && (
+              <span className="tabular-nums">Optom {fmt(namuna.optom)} → <b>{fmt(bulkCalc(namuna.optom, { tur, yon, v }))}</b></span>
+            )}
           </div>
         )}
         <div className="flex gap-2 pt-1">
@@ -70,10 +76,18 @@ function OmmaviyModal({ tunikaBaza, onClose, onApply }) {
 
 export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToast }) {
   const [editingId, setEditingId] = useState(null);
+  // Tahrir lokal buferda yuritiladi — bazaga faqat "Tayyor" bosilganda bir marta yoziladi
+  const [editForm, setEditForm] = useState(null);
   const [adding, setAdding] = useState(false);
   const [bulk, setBulk] = useState(false);
   const [form, setForm] = useState(BLANK);
   const rangGuruh = rangGuruhlari(ranglar); // Sozlamalardagi guruhlangan to'liq palitra
+
+  function startEdit(t) {
+    setEditForm({ nomi: t.nomi, qalinlik: t.qalinlik, optom: t.optom, chakana: t.chakana, rang: t.rang || '' });
+    setEditingId(t.id);
+    setAdding(false);
+  }
 
   function ommaviyApply({ tur, yon, qaysi, v }) {
     updateTunikaBaza(tunikaBaza.map((t) => ({
@@ -105,8 +119,11 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToa
   }
 
   function remove(id) {
+    const t = tunikaBaza.find((x) => x.id === id);
+    if (!window.confirm(`"${t?.nomi || 'List'}" o'chirilsinmi?`)) return;
     updateTunikaBaza(tunikaBaza.filter((x) => x.id !== id));
     setEditingId(null);
+    setEditForm(null);
     showToast('O\'chirildi');
   }
 
@@ -171,24 +188,33 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToa
           <div className="text-center py-8 text-slate-400"><Layers className="w-10 h-10 mx-auto mb-2 opacity-40" /><p className="text-sm">Listlar mavjud emas</p></div>
         ) : tunikaBaza.map((t) => (
           <div key={t.id} className="border border-slate-200 rounded-xl overflow-hidden text-xs bg-white">
-            {editingId === t.id ? (
+            {editingId === t.id && editForm ? (
               <div className="p-3 bg-slate-50 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  <input value={t.nomi} onChange={(e) => patch(t.id, { nomi: e.target.value })} className="px-2 py-1 border bg-white rounded" />
-                  <input value={t.qalinlik} onChange={(e) => patch(t.id, { qalinlik: e.target.value })} className="px-2 py-1 border bg-white rounded" />
-                  <input type="number" value={t.optom} onWheel={(e) => e.target.blur()} onChange={(e) => patch(t.id, { optom: parseFloat(e.target.value) || 0 })} className="px-2 py-1 border bg-white rounded" />
-                  <input type="number" value={t.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => patch(t.id, { chakana: parseFloat(e.target.value) || 0 })} className="px-2 py-1 border bg-white rounded" />
+                  <input value={editForm.nomi} onChange={(e) => setEditForm({ ...editForm, nomi: e.target.value })} className="px-2 py-1 border bg-white rounded" />
+                  <input value={editForm.qalinlik} onChange={(e) => setEditForm({ ...editForm, qalinlik: e.target.value })} className="px-2 py-1 border bg-white rounded" />
+                  <input type="number" value={editForm.optom} onWheel={(e) => e.target.blur()} onChange={(e) => setEditForm({ ...editForm, optom: e.target.value })} className="px-2 py-1 border bg-white rounded" />
+                  <input type="number" value={editForm.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => setEditForm({ ...editForm, chakana: e.target.value })} className="px-2 py-1 border bg-white rounded" />
                 </div>
-                <RangTanla value={t.rang || ''} onPick={(r) => patch(t.id, { rang: r })} groups={rangGuruh} />
+                <RangTanla value={editForm.rang} onPick={(r) => setEditForm({ ...editForm, rang: r })} groups={rangGuruh} />
                 <div className="flex gap-2">
                   <button onClick={() => remove(t.id)} className="py-1.5 px-3 border-2 border-red-200 text-red-700 rounded bg-white"><Trash2 className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-slate-900 text-white rounded">Tayyor</button>
+                  <button onClick={() => {
+                    patch(t.id, {
+                      nomi: editForm.nomi,
+                      qalinlik: editForm.qalinlik,
+                      optom: parseFloat(editForm.optom) || 0,
+                      chakana: parseFloat(editForm.chakana) || 0,
+                      rang: editForm.rang,
+                    });
+                    setEditingId(null); setEditForm(null);
+                  }} className="flex-1 py-1.5 bg-slate-900 text-white rounded">Tayyor</button>
                 </div>
               </div>
             ) : (
               <div className="group p-3 flex items-center gap-3 hover:bg-slate-50">
                 <RangBadge rang={t.rang || rangTozala(t.nomi)} nomi={t.nomi} kind="tunika" />
-                <button onClick={() => { setEditingId(t.id); setAdding(false); }} className="flex-1 min-w-0 text-left">
+                <button onClick={() => startEdit(t)} className="flex-1 min-w-0 text-left">
                   <b className="text-sm text-slate-900 truncate block">{t.nomi}</b><div className="text-slate-400 text-[10px]">{t.qalinlik} mm</div>
                 </button>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -196,7 +222,7 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToa
                   <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 tabular-nums">Optom: {fmt(t.optom)}</span>
                 </div>
                 <div className="flex items-center gap-0.5 flex-shrink-0 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                  <button title="Tahrirlash" onClick={() => { setEditingId(t.id); setAdding(false); }} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><Edit3 className="w-4 h-4" /></button>
+                  <button title="Tahrirlash" onClick={() => startEdit(t)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><Edit3 className="w-4 h-4" /></button>
                   <button title="Nusxalash" onClick={() => nusxa(t)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><Copy className="w-4 h-4" /></button>
                   <button title="O'chirish" onClick={() => remove(t.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /></button>
                 </div>

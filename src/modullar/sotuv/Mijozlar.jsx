@@ -31,11 +31,16 @@ function mijozZakaslari(orders, c) {
       : norm(o.customer?.name) === norm(c.name),
   );
 }
+// Haqiqiy qarz: to'lov umuman kiritilmagan zakas "Hisob (xom)" hisoblanadi
+// (Zakaslar bo'limidagi qoida bilan bir xil) — u qarz statistikasiga kirmaydi.
+function realQarz(o) {
+  return (o.debt > 0 && (o.totalPaid || 0) > 0) ? o.debt : 0;
+}
 function jamla(os) {
   return os.reduce((a, o) => ({
     jami: a.jami + (o.totalSum || 0),
     tolangan: a.tolangan + (o.totalPaid || 0),
-    qarz: a.qarz + (o.debt || 0),
+    qarz: a.qarz + realQarz(o),
     n: a.n + 1,
   }), { jami: 0, tolangan: 0, qarz: 0, n: 0 });
 }
@@ -122,7 +127,7 @@ function MijozDetailModal({ customer, orders, onClose, onEdit }) {
 export function MijozlarTab({ klentlar, updateKlentlar, ustalar, updateUstalar, orders = [], shopName = '', showToast }) {
   const [sub, setSub] = useState('klentlar');
 
-  const qarzJami = useMemo(() => orders.reduce((s, o) => s + (o.debt > 0 ? o.debt : 0), 0), [orders]);
+  const qarzJami = useMemo(() => orders.reduce((s, o) => s + realQarz(o), 0), [orders]);
 
   return (
     <div className="space-y-4">
@@ -282,7 +287,7 @@ function QarzdorlarSubTab({ orders, klentlar, qarzJami, shopName = '' }) {
   const debtors = useMemo(() => {
     const map = new Map();
     orders.forEach((o) => {
-      if (!(o.debt > 0)) return;
+      if (!(realQarz(o) > 0)) return; // xom "hisob" (to'lovsiz) zakas qarzdor emas
       const key = o.customer?.clientId || `nom:${norm(o.customer?.name)}`;
       let g = map.get(key);
       if (!g) {

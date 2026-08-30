@@ -46,7 +46,7 @@ function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan kat
       <label className="block text-xs text-slate-500 mb-1">{label}</label>
       <input type="text" inputMode="decimal" value={value}
         onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()} onKeyDown={focusNextNav}
-        onChange={(e) => { const v = e.target.value; if (/^-?\d*\.?\d*$/.test(v) || v === '') onChange(v); }}
+        onChange={(e) => { const v = e.target.value.replace(/,/g, '.'); if (/^\d*\.?\d*$/.test(v) || v === '') onChange(v); }}
         placeholder={placeholder}
         className={`js-nav w-full px-3 py-2 border-2 rounded-lg bg-white tabular-nums text-sm outline-none transition ${
           invalid ? `input-error ${shake ? 'anim-shake' : ''}` : 'border-slate-200 focus:border-slate-900'
@@ -412,9 +412,9 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <input type="number" inputMode="numeric" value={draft.dastafka?.summa ?? ''}
+                    <input type="text" inputMode="numeric" value={draft.dastafka?.summa ?? ''}
                       onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                      onChange={(e) => setDraft({ ...draft, dastafka: { ...draft.dastafka, summa: e.target.value } })}
+                      onChange={(e) => { const v = e.target.value.replace(/,/g, '.'); if (/^\d*\.?\d*$/.test(v) || v === '') setDraft({ ...draft, dastafka: { ...draft.dastafka, summa: v } }); }}
                       placeholder="Dastafka summasi"
                       className="flex-1 min-w-0 px-3 py-2 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-sm focus:border-slate-900 outline-none" />
                     <span className="text-xs text-slate-500 flex-shrink-0">so'm</span>

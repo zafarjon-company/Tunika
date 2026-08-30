@@ -46,6 +46,11 @@ export function ChizmaCard({ tunikaBaza = [] }) {
     document.body.style.overflow = 'hidden';
     function onKey(e) {
       if (e.key !== 'Escape') return;
+      // Dvigatel Esc'ni o'zi ishlatgan bo'lsa (chizish/nuqta rejimini bekor
+      // qilish, kiritish qutisini yopish) — to'liq ekrandan chiqmaymiz.
+      // Dvigatelning window tinglovchisi mount'da (bungacha) qo'shilgani
+      // uchun avval ishlaydi va defaultPrevented shu yerda ko'rinadi.
+      if (e.defaultPrevented) return;
       // Chizmaning uzunlik kiritish qutisi ochiq bo'lsa — avval u yopilsin.
       if (rootRef.current?.querySelector('.chz-inputbox.show')) return;
       setFull(false);

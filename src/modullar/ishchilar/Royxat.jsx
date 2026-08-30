@@ -143,6 +143,9 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
       oylikHaqq: parseFloat(form.oylikHaqq) || 0,
       qobiliyatlar: form.qobiliyatlar.filter((q) => q.nomi.trim()).map((q) => ({ nomi: q.nomi.trim(), ball: q.ball || 0 })),
       kamchiliklar: form.kamchiliklar.filter((k) => k.nomi.trim()).map((k) => ({ nomi: k.nomi.trim(), ball: k.ball || 0 })),
+      // Eski format maydonini ham sinxronlaymiz — aks holda lavozim olib
+      // tashlanganda `...i` orqali eski satr qolib, lavozim "qayta tirilardi"
+      lavozim: form.lavozimlar[0] || '',
     };
 
     if (adding) { updateIshchilar([{ id: genId(), ...finalData }, ...ishchilar]); showToast('Ishchi qo\'shildi'); }
@@ -151,6 +154,10 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
   }
 
   function removeIshchi(id) {
+    // Tasdiqsiz o'chirish xavfli: yo'qlama/avans tarixi "yetim" qolib,
+    // hisobotlardan g'oyib bo'ladi. Avval so'raymiz.
+    const kim = ishchilar.find((i) => i.id === id);
+    if (!window.confirm(`"${kim?.name || 'Ishchi'}" o'chirilsinmi? Yo'qlama va avans tarixi hisobotlarda ko'rinmay qoladi.`)) return;
     updateIshchilar(ishchilar.filter((i) => i.id !== id));
     setEditing(null); setAdding(false);
     showToast('Ishchi o\'chirildi');

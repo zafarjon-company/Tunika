@@ -6,8 +6,11 @@
 // ============================================================
 
 function esc(v) {
-  const s = String(v ?? '');
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  let s = String(v ?? '');
+  // Formula-injektsiyadan himoya: =, +, -, @ bilan boshlansa Excel formula deb
+  // o'qimasligi uchun oldiga apostrof qo'yamiz
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export function downloadCSV(filename, headers, rows) {

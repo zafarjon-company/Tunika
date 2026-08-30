@@ -89,7 +89,10 @@ function TuriDetail({ turi, onBack, onPatch }) {
 
   const setItems = (kind, arr) => onPatch({ [KEY[kind]]: arr });
   const patchItem = (kind, id, p) => setItems(kind, items(kind).map((it) => (it.id === id ? { ...it, ...p } : it)));
-  const removeItem = (kind, id) => setItems(kind, items(kind).filter((it) => it.id !== id));
+  const removeItem = (kind, id) => {
+    if (!window.confirm(`${KIND_TITLE[kind]} o'chirilsinmi?`)) return;
+    setItems(kind, items(kind).filter((it) => it.id !== id));
+  };
   const dupItem = (kind, it) => {
     const arr = items(kind);
     const i = arr.findIndex((x) => x.id === it.id);
@@ -123,8 +126,9 @@ function TuriDetail({ turi, onBack, onPatch }) {
       <div className="mb-4 p-3 rounded-xl border-2 border-emerald-200 bg-emerald-50/50">
         <label className="block text-[11px] font-semibold text-emerald-800 mb-1.5">Foyda foizi (%)</label>
         <div className="flex items-center gap-2">
-          <input type="number" inputMode="decimal" value={turi.foyda ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-            onChange={(e) => onPatch({ foyda: e.target.value })}
+          {/* Fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
+          <input type="number" inputMode="decimal" key={`foyda-${turi.foyda ?? ''}`} defaultValue={turi.foyda ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+            onBlur={(e) => { if (e.target.value !== String(turi.foyda ?? '')) onPatch({ foyda: e.target.value }); }}
             className="w-28 px-2.5 py-2 border-2 border-emerald-200 rounded-lg bg-white tabular-nums text-sm outline-none focus:border-emerald-600 transition" />
           <span className="text-[11px] text-slate-500">
             Sotuv narxi = material × (1 + foyda%). Har detalga shu foiz qo'llanadi.
@@ -182,8 +186,9 @@ function NumField({ label, value, onChange, unit = 'sm' }) {
     <label className="block">
       <span className="block text-[10px] text-slate-400 mb-0.5">{label}</span>
       <div className="flex items-center gap-1">
-        <input type="number" inputMode="decimal" step="0.5" value={value ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-          onChange={(e) => onChange(e.target.value)}
+        {/* Fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
+        <input type="number" inputMode="decimal" step="0.5" key={String(value ?? '')} defaultValue={value ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          onBlur={(e) => { if (e.target.value !== String(value ?? '')) onChange(e.target.value); }}
           className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
         <span className="text-[10px] text-slate-400">{unit}</span>
       </div>
@@ -235,8 +240,9 @@ function PriceBlock({ metrNarx, onMetrNarx, material, foyda, sotuv }) {
     <div className="rounded-lg border border-slate-200 overflow-hidden">
       <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-100">
         <span className="text-[11px] text-slate-500 whitespace-nowrap">1 metr narxi</span>
-        <input type="number" inputMode="decimal" value={metrNarx ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-          onChange={(e) => onMetrNarx(e.target.value)}
+        {/* Fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
+        <input type="number" inputMode="decimal" key={String(metrNarx ?? '')} defaultValue={metrNarx ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          onBlur={(e) => { if (e.target.value !== String(metrNarx ?? '')) onMetrNarx(e.target.value); }}
           className="w-28 px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
         <span className="text-[11px] text-slate-400">so'm / m</span>
       </div>
@@ -379,7 +385,9 @@ function FlatKazirokList({ kaziroklar, updateKaziroklar, ranglar = [], showToast
   }
 
   function remove(id) {
-    updateKaziroklar(kaziroklar.filter((k) => k.id !== id));
+    const k = kaziroklar.find((x) => x.id === id);
+    if (!window.confirm(`"${k?.nomi || 'Kazirok'}" o'chirilsinmi?`)) return;
+    updateKaziroklar(kaziroklar.filter((x) => x.id !== id));
     showToast("O'chirildi");
   }
 
@@ -443,8 +451,9 @@ function FlatKazirokList({ kaziroklar, updateKaziroklar, ranglar = [], showToast
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Narx (so'm)</label>
-                    <input type="number" value={k.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                      onChange={(e) => setNarx(k.id, e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+                    {/* Har tugmada emas — fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
+                    <input type="number" key={`${k.id}-${k.narx}`} defaultValue={k.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                      onBlur={(e) => { if ((parseFloat(e.target.value) || 0) !== (parseFloat(k.narx) || 0)) setNarx(k.id, e.target.value); }} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Birlik</label>

@@ -33,9 +33,10 @@ export function HisobotKassa({ orders = [] }) {
   }, [orders, kun]);
 
   function shift(delta) {
-    const d = new Date(kun);
-    d.setDate(d.getDate() + delta);
-    setKun(dayKey(d));
+    // new Date('YYYY-MM-DD') UTC deb o'qiydi — mahalliy kun siljib ketmasligi uchun qo'lda ajratamiz
+    const [y, m, d] = kun.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + delta);
+    setKun(dayKey(dt));
   }
 
   return (

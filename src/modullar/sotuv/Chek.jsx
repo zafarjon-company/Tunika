@@ -244,13 +244,12 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
   const [dxfBusy, setDxfBusy] = useState('');       // '' | '4m' | '6m' — DXF tayyorlanyapti
   const [dxfMsg, setDxfMsg] = useState(null);       // { ok, t } — natija xabari
 
-  // Kazirok manbai: AVVAL zakasникidan (saqlangan), bo'lmasa joriy chizmadan (jonli).
-  const kData = (order && order.kazData && (
-      (order.kazData.groups && order.kazData.groups.length) ||
-      (order.kazData.qoz && order.kazData.qoz.length)
-    ))
-    ? order.kazData : kazData;
-  const kRows = (order && order.kazRows && order.kazRows.length) ? order.kazRows : kazRows;
+  // Kazirok manbai: FAQAT zakasning o'zidan (saqlangan). Joriy chizmaga
+  // qaytish (fallback) olib tashlandi — aks holda eski/kaziroksiz zakas cheki
+  // hozir chizilayotgan BOSHQA mijoz kazirogini "meros" qilib olardi.
+  // (Saqlangan zakasda kazData/kazRows doim bor — saveOrder yozadi.)
+  const kData = (order && order.kazData) || { groups: [] };
+  const kRows = (order && order.kazRows) || [];
   const kazGroups = (kData && kData.groups) || [];
   const kazQoz = (kData && kData.qoz) || [];   // tashqi burchak qozonlar
   const hasKaz = kazGroups.length > 0 || kazQoz.length > 0;
@@ -421,7 +420,9 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
         openMatn(app);
       }
     } catch (e) {
-      openMatn(app);
+      // Foydalanuvchi ulashish oynasini o'zi yopgan bo'lsa — bu xato emas,
+      // matn oynasini majburan ochmaymiz.
+      if (!(e && e.name === 'AbortError')) openMatn(app);
     } finally {
       setBusy(false);
     }

@@ -344,7 +344,12 @@ export default function App() {
     return makeBlankDraft(DEFAULT_USD_RATE);
   });
   const [receiptOrder, setReceiptOrder] = useState(null);
-  const [editingId, setEditingId]   = useState(null); // tahrirlanayotgan zakas id (null = yangi)
+  // Tahrirlanayotgan zakas id (null = yangi). localStorage'da ham saqlanadi —
+  // sahifa yangilanganda draft qolib editingId yo'qolsa, saqlash DUBLIKAT zakas
+  // yaratib yuborardi.
+  const [editingId, setEditingId]   = useState(() => {
+    try { return localStorage.getItem('tunika-edit-id') || null; } catch (e) { return null; }
+  });
   const [toast, setToast]           = useState('');
   const [savedAnim, setSavedAnim]   = useState(false);
   const [payModal, setPayModal]     = useState(null);
@@ -403,15 +408,21 @@ export default function App() {
       ['kamchiliklar', setKamchiliklar],
       ['jurnal', setJurnal],
     ];
-    let pending = subs.length;
+    // Yuklanish tugashi — har KALIT kamida bir marta kelganda (takror snapshot
+    // hisoblagichni noto'g'ri kamaytirmasin, aks holda sekin kalitlar kelmay
+    // turib skeleton yopilib DEFAULT narxlar ko'rinardi).
+    const kelgan = new Set();
     const unsubs = subs.map(([key, set]) => storage.subscribe(key, (value) => {
       if (value != null) set(value);
-      if (pending > 0) { pending -= 1; if (pending === 0) setLoading(false); }
+      kelgan.add(key);
+      if (kelgan.size === subs.length) setLoading(false);
     }));
-    // Foydalanuvchilar (login/adminlar) — alohida; bo'sh bo'lsa asoschi seed qilinadi
-    const unsubUsers = storage.subscribe('users', (value) => {
+    // Foydalanuvchilar (login/adminlar) — alohida; bo'sh bo'lsa asoschi seed qilinadi.
+    // MUHIM: faqat SERVER tasdiqlagan bo'sh hujjatda seed qilinadi — offline keshdan
+    // kelgan bo'sh snapshot butun ro'yxatni [FOUNDER] bilan yozib yubormasin.
+    const unsubUsers = storage.subscribe('users', (value, meta) => {
       if (value && value.length) setUsers(value);
-      else { setUsers([FOUNDER]); storage.save('users', [FOUNDER]); }
+      else if (!meta?.fromCache) { setUsers([FOUNDER]); storage.save('users', [FOUNDER]); }
       setUsersReady(true);
     });
     return () => { unsubs.forEach((u) => u()); unsubUsers(); };
@@ -421,6 +432,14 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('tunika-draft', JSON.stringify(draft)); } catch (e) { /* noop */ }
   }, [draft]);
+
+  // Tahrirlash rejimi ham sahifa yangilanishidan omon qolsin (draft bilan juft)
+  useEffect(() => {
+    try {
+      if (editingId) localStorage.setItem('tunika-edit-id', editingId);
+      else localStorage.removeItem('tunika-edit-id');
+    } catch (e) { /* noop */ }
+  }, [editingId]);
 
   // Mavzu qo'llash + saqlash
   useEffect(() => {
@@ -673,6 +692,13 @@ export default function App() {
     persistField('yoqlama', { [sana]: map });
   }
   function updateAvanslar(v)   { setAvanslar(v);   persist('avanslar', v); }
+  // Avans — faqat BITTA ishchi/oy katagini yozadi (merge, yo'qlama uslubida).
+  // Butun hujjatni qayta yozmaydi — ikki qurilma bir vaqtda avans kiritsa,
+  // biri ikkinchisining yozuvini o'chirib yubormaydi.
+  function setAvansYozuv(oy, ishchiId, list) {
+    setAvanslar((prev) => ({ ...prev, [oy]: { ...(prev[oy] || {}), [ishchiId]: list } }));
+    persistField('avanslar', { [oy]: { [ishchiId]: list } });
+  }
 
   // ----- Kazirok (chizmadan, avtomatik) — savdo hisobiga ulanadi -----
   // Chizma `chizma:kazirok` hodisasidan kelgan ma'lumot + qo'lda tahrirlangan
@@ -720,12 +746,16 @@ export default function App() {
     const kaz = computeKazRows(kazData, tunikaBaza, kazNarx);
     // Dastafka: "ichida" bo'lsa narxga kiritilgan (qo'shilmaydi), aks holda summa qo'shiladi
     const dastafkaIchida = !!draft.dastafka?.ichida;
-    const dastafkaSumma = dastafkaIchida ? 0 : (parseFloat(draft.dastafka?.summa) || 0);
-    const totalSum = tovarSum + kaz.totalJami + dastafkaSumma;
-    const totalPaid = draft.payments.reduce((sum, p) => {
+    const dastafkaSumma = dastafkaIchida ? 0 : Math.max(0, parseFloat(draft.dastafka?.summa) || 0);
+    // So'mgacha yaxlitlanadi — kasr metr/dollar kursi tufayli 0.33 so'mlik "qarz"
+    // qolib status noto'g'ri 'partial' bo'lmasin.
+    const totalSum = Math.round(tovarSum + kaz.totalJami + dastafkaSumma);
+    // Faqat musbat to'lovlar (saveOrder'dagi filtr bilan bir xil qoida)
+    const totalPaid = Math.round(draft.payments.reduce((sum, p) => {
       const amt = parseFloat(p.amount) || 0;
+      if (amt <= 0) return sum;
       return sum + (p.method === 'Dollorda' ? amt * p.rate : amt);
-    }, 0);
+    }, 0));
 
     const debt = Math.max(0, totalSum - totalPaid);
     return {
@@ -737,7 +767,8 @@ export default function App() {
   // ----- Zakas saqlash -----
   function saveOrder() {
     if (!draft.customer.name.trim()) { showToast('Mijozni tanlang'); return false; }
-    if (draft.items.length === 0)    { showToast('Kamida 1 ta tovar qo\'shing'); return false; }
+    // Chizmadan kazirok bo'lsa, tovarsiz (faqat kazirok) zakas ham saqlanadi
+    if (draft.items.length === 0 && !(draftCalc.kazRows || []).length) { showToast('Kamida 1 ta tovar qo\'shing'); return false; }
     if (draftCalc.totalSum <= 0)     { showToast('Uzunlik yoki sonini kiriting'); return false; }
 
     const status = draftCalc.debt === 0 ? 'paid' : draftCalc.totalPaid > 0 ? 'partial' : 'unpaid';
@@ -766,6 +797,8 @@ export default function App() {
         bolishLabel: it.bolishLabel,
         uzunlik: parseFloat(it.uzunlik) || 0,
         soni: parseFloat(it.soni) || 0,
+        zapas: parseFloat(it.zapas) || 0,          // metrli: qo'shimcha metr — ko'rsatishda kerak
+        jamiMeyor: it.jamiMeyor || 0,              // umumiy o'lchov (metr) — summa bilan mos tursin
         birBirlikNarxi: it.birBirlikNarxi,
         jamiSumma: it.jamiSumma,
         tanNarx: Math.round((it.tanNarxBirlik || 0) * (it.jamiMeyor || 0)), // foyda hisobi uchun tan narx
@@ -791,7 +824,23 @@ export default function App() {
     // ----- TAHRIRLASH: mavjud zakasni yangilaymiz (raqam/sana/holat/vaqtlar saqlanadi) -----
     if (editingId) {
       let upd = null;
-      const list = orders.map((o) => (o.id === editingId ? (upd = { ...o, ...common }) : o));
+      const list = orders.map((o) => {
+        if (o.id !== editingId) return o;
+        const next = { ...o, ...common };
+        // Chizma hozir BO'SH, eski zakasda esa kazirok bor — eski kazirok saqlanib
+        // qolsin (tahrirlashda chizma qayta yuklanmaydi; aks holda telefon raqamini
+        // tuzatib saqlash ham kazirok summasini zakasdan o'chirib yuborardi).
+        const eskiKaz = o.kazRows || [];
+        if (!(draftCalc.kazRows || []).length && eskiKaz.length) {
+          const eskiKazJami = eskiKaz.reduce((s, r) => s + (Number(r.jami) || 0), 0);
+          next.kazData = o.kazData;
+          next.kazRows = eskiKaz;
+          next.totalSum = Math.round(common.totalSum + eskiKazJami);
+          next.debt = Math.max(0, next.totalSum - common.totalPaid);
+          next.status = next.debt === 0 ? 'paid' : common.totalPaid > 0 ? 'partial' : 'unpaid';
+        }
+        return (upd = next);
+      });
       if (!upd) { setEditingId(null); showToast('Tahrirlanayotgan zakas topilmadi'); return false; }
       updateOrders(list);
       logAction('zakas_tahrirladi', `№${upd.number} · ${upd.customer.name} · ${fmt(upd.totalSum)} so'm`);
@@ -808,7 +857,9 @@ export default function App() {
     // ----- YANGI ZAKAS -----
     const newOrder = {
       id: genId(),
-      number: (orders[0]?.number || 0) + 1,
+      // Eng katta raqam + 1 (ro'yxat tartibiga tayanmaydi; oxirgisi o'chirilsa ham
+      // raqam takrorlanmasligi uchun)
+      number: orders.reduce((m, o) => Math.max(m, Number(o.number) || 0), 0) + 1,
       createdAt: new Date().toISOString(),
       ...common,
       holat: 'jarayon', // ishlab chiqarish holati: jarayon → tayyor → yopilgan
@@ -828,12 +879,27 @@ export default function App() {
   // ----- Saqlangan zakasni tahrirlashga yuklash -----
   function editOrder(order) {
     const ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar };
+    // Kelishilgan (saqlangan) narxni qotiramiz — katalog narxi keyin o'zgargan
+    // bo'lsa ham, tahrirlash zakas summasini indamay oshirib yubormasin.
+    // (Qatorda "Eski narx" chipi chiqadi — xohlasa joriy narxga qaytariladi.)
+    const narxById = {};
+    (order.items || []).forEach((it) => { if (it.birBirlikNarxi > 0) narxById[it.id] = it.birBirlikNarxi; });
     let items;
+    let skipped = 0;
     if (order.srcItems?.length) {
-      items = order.srcItems.map((it) => ({ ...it, id: genId() }));
+      items = order.srcItems.map((it) => {
+        const yangi = { ...it, id: genId() };
+        if (!(parseFloat(yangi.narxOverride) > 0) && narxById[it.id] > 0) yangi.narxOverride = narxById[it.id];
+        return yangi;
+      });
     } else {
       items = [];
-      (order.items || []).forEach((it) => { const d = orderItemToDraft(it, ctx); if (d) items.push(d); });
+      (order.items || []).forEach((it) => {
+        const d = orderItemToDraft(it, ctx);
+        if (!d) { skipped += 1; return; }
+        if (it.birBirlikNarxi > 0) d.narxOverride = it.birBirlikNarxi;
+        items.push(d);
+      });
       if (!items.length) { showToast('Bu zakasni tahrirlab bo\'lmaydi (tovarlar katalogda yo\'q)'); return; }
     }
     setDraft({
@@ -847,7 +913,9 @@ export default function App() {
     });
     setEditingId(order.id);
     setTab('new');
-    showToast(`Zakas №${order.number} tahrirlanmoqda`);
+    showToast(skipped
+      ? `Zakas №${order.number} tahrirlanmoqda — DIQQAT: ${skipped} ta tovar katalogda topilmay tushib qoldi!`
+      : `Zakas №${order.number} tahrirlanmoqda`);
   }
 
   // Tahrirlashni bekor qilish — bo'sh holatga qaytaramiz
@@ -910,10 +978,12 @@ export default function App() {
 
   function applyLaterPayment() {
     if (!payModal) return;
-    const addedSum = payModal.payments.reduce((sum, p) => {
+    // Faqat musbat to'lovlar — payments ro'yxatiga yoziladigan filtri bilan bir xil
+    const addedSum = Math.round(payModal.payments.reduce((sum, p) => {
       const amt = parseFloat(p.amount) || 0;
+      if (amt <= 0) return sum;
       return sum + (p.method === 'Dollorda' ? amt * p.rate : amt);
-    }, 0);
+    }, 0));
 
     if (addedSum <= 0) { showToast('To\'lov summasini kiriting'); return; }
 
@@ -922,8 +992,8 @@ export default function App() {
       const validNewPayments = payModal.payments.filter((p) => (parseFloat(p.amount) || 0) > 0).map((p) => ({
         ...p, amount: parseFloat(p.amount) || 0
       }));
-      const newPaid = o.totalPaid + addedSum;
-      const newDebt = Math.max(0, o.totalSum - newPaid);
+      const newPaid = Math.round(o.totalPaid + addedSum);
+      const newDebt = Math.max(0, Math.round(o.totalSum - newPaid));
       return {
         ...o,
         payments: [...(o.payments || []), ...validNewPayments],
@@ -1194,7 +1264,7 @@ export default function App() {
           <YoqlamaModule
             ishchilar={ishchilar} yoqlama={yoqlama}
             setYoqlamaKun={setYoqlamaKun} setYoqlamaBulk={setYoqlamaBulk}
-            avanslar={avanslar} updateAvanslar={updateAvanslar}
+            avanslar={avanslar} updateAvanslar={updateAvanslar} setAvansYozuv={setAvansYozuv}
             usdRate={usdRate} showToast={showToast}
           />
         )}
