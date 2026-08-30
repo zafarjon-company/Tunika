@@ -13,7 +13,6 @@ export function YoqlamaModule({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBul
 
   return (
     <div className="space-y-4">
-      <YoloControl />
       <div className="flex gap-2">
         {[
           { k: 'belgilash', label: 'Belgilash', icon: CalendarCheck },
@@ -33,6 +32,9 @@ export function YoqlamaModule({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBul
       {sub === 'belgilash' && <YoqlamaBelgilash ishchilar={ishchilar} yoqlama={yoqlama} setYoqlamaKun={setYoqlamaKun} setYoqlamaBulk={setYoqlamaBulk} showToast={showToast} />}
       {sub === 'kalendar' && <YoqlamaKalendar ishchilar={ishchilar} yoqlama={yoqlama} setYoqlamaKun={setYoqlamaKun} />}
       {sub === 'avans' && <AvansTab ishchilar={ishchilar} avanslar={avanslar} updateAvanslar={updateAvanslar} setAvansYozuv={setAvansYozuv} yoqlama={yoqlama} usdRate={usdRate} showToast={showToast} />}
+
+      {/* Kamera nazorati (YOLO) — kundalik ish emas, shuning uchun eng pastda */}
+      <YoloControl />
     </div>
   );
 }
