@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Check, Wallet } from 'lucide-react';
 import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
-import { fmt, toMonthInput, formatDate, makeBlankPayment } from '../../lib/helpers.js';
+import { fmt, toMonthInput, formatDate, makeBlankPayment, ishchiHisobi } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 function oyLabel(oy) {
@@ -33,7 +33,7 @@ export function avansSumma(entries) {
   }, 0);
 }
 
-export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, usdRate, showToast }) {
+export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, yoqlama = {}, usdRate, showToast }) {
   const [oy, setOy] = useState(toMonthInput());
   const [modal, setModal] = useState(null); // { ishchiId, payments: [...] }
 
@@ -103,6 +103,9 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, u
         ishchilar.map((i) => {
           const entries = normEntries(oyAvanslar[i.id]);
           const summa = avansSumma(oyAvanslar[i.id]);
+          // Butun davr bo'yicha hisob (Hisobot > Ishchilar bilan bir xil) — avans
+          // berishdan oldin ishchining haqiqiy qoldig'i ko'rinib tursin.
+          const h = ishchiHisobi(i, yoqlama, avanslar);
           return (
             <Card key={i.id}>
               <div className="flex items-center justify-between gap-2 mb-2">
@@ -114,8 +117,26 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, u
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400">Avans</div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400">Avans ({oyLabel(oy)})</div>
                   <div className="font-bold tabular-nums text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">{fmt(summa)} so'm</div>
+                </div>
+              </div>
+
+              {/* Umumiy hisob — Ishlangan · Avans · Hozirgi haqqi (butun davr) */}
+              <div className="grid grid-cols-3 gap-1.5 mb-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Ishlangan</div>
+                  <div className="text-xs font-bold tabular-nums text-slate-700 leading-tight">{fmt(h.ishlangan)}</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Avans (jami)</div>
+                  <div className="text-xs font-bold tabular-nums text-amber-700 leading-tight">{fmt(h.avans)}</div>
+                </div>
+                <div className={`rounded-lg border px-2 py-1.5 text-center ${
+                  h.haqqi >= 0 ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'
+                }`}>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Hozirgi haqqi</div>
+                  <div className={`text-xs font-bold tabular-nums leading-tight ${h.haqqi >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{fmt(h.haqqi)}</div>
                 </div>
               </div>
 

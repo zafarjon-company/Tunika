@@ -11,15 +11,20 @@ export const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('uz-UZ');
 //  yaroqsiz deb hisoblab qiymatni butunlay bo'shatib yuboradi — natijada "3,5"
 //  yozib bo'lmaydi. O'rniga: type="text" inputMode="decimal" + shu yordamchi.
 //
-//  sonMatn(xom) -> tozalangan satr yoki null (null = bu belgi qabul qilinmaydi).
+//  sonMatn(xom) -> QABUL QILINSA satrni O'ZGARTIRMASDAN qaytaradi, aks holda null.
 //  butun=true — faqat butun son (masalan "necha bo'lak").
 //  manfiy=true — minus ham mumkin (o'lchov/summada kerak emas).
+//
+//  DIQQAT: vergul NUQTAGA ALMASHTIRILMAYDI — foydalanuvchi nima yozsa, maydonda
+//  aynan shu turadi. Sababi: qiymatni yozayotgan paytda o'zgartirsak, React
+//  maydonni qayta yozadi va KURSOR sakrab ketadi ("1," -> ".1"). Vergul faqat
+//  hisoblash paytida (sonQiymat) nuqtaga aylanadi.
 export function sonMatn(xom, { butun = false, manfiy = false } = {}) {
-  const s = String(xom == null ? '' : xom).replace(/,/g, '.');
+  const s = String(xom == null ? '' : xom);
   if (s === '') return '';
   const re = manfiy
-    ? (butun ? /^-?\d*$/ : /^-?\d*\.?\d*$/)
-    : (butun ? /^\d*$/ : /^\d*\.?\d*$/);
+    ? (butun ? /^-?\d*$/ : /^-?\d*[.,]?\d*$/)
+    : (butun ? /^\d*$/ : /^\d*[.,]?\d*$/);
   return re.test(s) ? s : null;
 }
 
@@ -69,7 +74,7 @@ export function metrliVariantlar(m) {
   if (!m) return [];
   if (Array.isArray(m.variantlar)) {
     return m.variantlar
-      .map((v) => ({ son: parseFloat(v.son) || 0, razmer: v.razmer || '' }))
+      .map((v) => ({ son: sonQiymat(v.son), razmer: v.razmer || '' }))
       .filter((v) => v.son > 0);
   }
   const out = [];
@@ -254,8 +259,9 @@ function applyOverride(r, item) {
 // Zakas qatori hisob-kitobi. ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products }
 export function calcItem(item, ctx = {}) {
   const { tunikaBaza = [], metrlilar = [], aksessuarlar = [], kaziroklar = [], products = [] } = ctx;
-  const soni = parseFloat(item.soni) || 0;
-  const uzunlik = parseFloat(item.uzunlik) || 0;
+  // sonQiymat — vergulli qiymatni ham to'g'ri o'qiydi ("1,5" = 1.5)
+  const soni = sonQiymat(item.soni);
+  const uzunlik = sonQiymat(item.uzunlik);
 
   // ----- Kazirok -----
   if (item.kind === 'kazirok') {
@@ -296,7 +302,7 @@ export function calcItem(item, ctx = {}) {
     const base = item.priceType === 'optom' ? Number(tunika.optom) : Number(tunika.chakana);
     const birBirlikNarxi = base / (v.son || 1) + metrliAddon(m);
     const tanNarxBirlik = Number(tunika.optom) / (v.son || 1) + metrliAddon(m); // tan narx = optom asosida
-    const zapas = parseFloat(item.zapas) || 0; // qo'shimcha (zapas) metr — umumiy metrga qo'shiladi
+    const zapas = sonQiymat(item.zapas); // qo'shimcha (zapas) metr — umumiy metrga qo'shiladi
     const jamiMeyor = uzunlik * soni + zapas;
     return applyOverride({
       nomi: m.nomi,
@@ -546,4 +552,39 @@ export function oylikYoqlama(yoqlama, oy, ishchiId) {
     else if (holat === 'yarim') yarim += 1;
   }
   return { toliq, yarim, jamiKun: toliq + yarim * 0.5 };
+}
+
+// Avans yozuvlarini bir xil massivga keltirish (eski sonli format ham qo'llanadi)
+export function avansYozuvlari(v, oy = '') {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'number' && v > 0) {
+    return [{ id: 'eski', method: "So'mda", amount: v, createdAt: oy ? `${oy}-01` : null, notes: '' }];
+  }
+  return [];
+}
+
+// Ishchining BUTUN DAVR bo'yicha hisobi — Hisobot > Ishchilar bilan bir xil qoida:
+//   ishlangan = yo'qlamadan yig'ilgan haq (keldi = oylik/oydagi kunlar, yarim = yarmi)
+//   avans     = olingan avanslar (dollar bo'lsa kursda so'mga)
+//   haqqi     = ishlangan − avans (hozirgi qo'lga tegadigan qoldiq)
+export function ishchiHisobi(ishchi, yoqlama = {}, avanslar = {}) {
+  if (!ishchi) return { ishlangan: 0, avans: 0, haqqi: 0 };
+  const oylik = Number(ishchi.oylikHaqq) || 0;
+  let ishlangan = 0;
+  for (const sana in yoqlama) {
+    const holat = yoqlama[sana]?.[ishchi.id];
+    if (!holat) continue;
+    const kun = daysInMonth(sana.slice(0, 7));
+    const kunlikHaq = kun ? oylik / kun : 0;
+    if (holat === 'keldi') ishlangan += kunlikHaq;
+    else if (holat === 'yarim') ishlangan += kunlikHaq / 2;
+  }
+  let avans = 0;
+  for (const oy in avanslar) {
+    avansYozuvlari(avanslar[oy]?.[ishchi.id], oy).forEach((p) => {
+      const amt = sonQiymat(p.amount);
+      avans += p.method === 'Dollorda' ? amt * (Number(p.rate) || 0) : amt;
+    });
+  }
+  return { ishlangan, avans, haqqi: ishlangan - avans };
 }

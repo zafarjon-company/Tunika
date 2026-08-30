@@ -54,7 +54,7 @@ import {
 } from './lib/constants.js';
 import {
   fmt, genId, genToken, calcItem, makeBlankItem, makeBlankPayment, makeBlankDraft,
-  rangTozala, aksRangKerak, orderItemToDraft, toDateInput,
+  rangTozala, aksRangKerak, orderItemToDraft, toDateInput, sonQiymat,
 } from './lib/helpers.js';
 import { zakasChiqimlari, kazirokChiqimlari, kamQoldiqlar } from './lib/ombor.js';
 import {
@@ -850,7 +850,18 @@ export default function App() {
   // ----- Draft buyurtma hisob-kitoblari -----
   const draftCalc = useMemo(() => {
     const ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products };
-    const items = draft.items.map((it) => ({ ...it, ...calcItem(it, ctx) }));
+    // MUHIM: calcItem soni/uzunlik/zapas ni SONGA aylantirib qaytaradi. Agar shu
+    // son inputga qaytsa, "1," yozilgan payt parseFloat("1.") = 1 bo'lib nuqta
+    // darhol o'chib ketadi va kasr son kiritib bo'lmaydi ("1,5" -> "15").
+    // Shuning uchun inputga bog'langan maydonlarni XOM (satr) holida qoldiramiz —
+    // hisob-kitob baribir calcItem ichida parseFloat bilan bajarilgan.
+    const items = draft.items.map((it) => ({
+      ...it,
+      ...calcItem(it, ctx),
+      soni: it.soni,
+      uzunlik: it.uzunlik,
+      zapas: it.zapas,
+    }));
 
     // Semichka 3.1 — har doim "xomid"da turgan rang bilan bir xil
     const xomid = items.find((x) => /xomid/i.test(x.nomi || ''));
@@ -870,13 +881,13 @@ export default function App() {
     const kaz = computeKazRows(kazData, tunikaBaza, kazNarx);
     // Dastafka: "ichida" bo'lsa narxga kiritilgan (qo'shilmaydi), aks holda summa qo'shiladi
     const dastafkaIchida = !!draft.dastafka?.ichida;
-    const dastafkaSumma = dastafkaIchida ? 0 : Math.max(0, parseFloat(draft.dastafka?.summa) || 0);
+    const dastafkaSumma = dastafkaIchida ? 0 : Math.max(0, sonQiymat(draft.dastafka?.summa));
     // So'mgacha yaxlitlanadi — kasr metr/dollar kursi tufayli 0.33 so'mlik "qarz"
     // qolib status noto'g'ri 'partial' bo'lmasin.
     const totalSum = Math.round(tovarSum + kaz.totalJami + dastafkaSumma);
     // Faqat musbat to'lovlar (saveOrder'dagi filtr bilan bir xil qoida)
     const totalPaid = Math.round(draft.payments.reduce((sum, p) => {
-      const amt = parseFloat(p.amount) || 0;
+      const amt = sonQiymat(p.amount);
       if (amt <= 0) return sum;
       return sum + (p.method === 'Dollorda' ? amt * p.rate : amt);
     }, 0));
@@ -919,9 +930,9 @@ export default function App() {
         tafsilot: it.tafsilot,
         birlik: it.birlik,
         bolishLabel: it.bolishLabel,
-        uzunlik: parseFloat(it.uzunlik) || 0,
-        soni: parseFloat(it.soni) || 0,
-        zapas: parseFloat(it.zapas) || 0,          // metrli: qo'shimcha metr — ko'rsatishda kerak
+        uzunlik: sonQiymat(it.uzunlik),
+        soni: sonQiymat(it.soni),
+        zapas: sonQiymat(it.zapas),                // metrli: qo'shimcha metr — ko'rsatishda kerak
         jamiMeyor: it.jamiMeyor || 0,              // umumiy o'lchov (metr) — summa bilan mos tursin
         birBirlikNarxi: it.birBirlikNarxi,
         jamiSumma: it.jamiSumma,
@@ -929,8 +940,8 @@ export default function App() {
         rang: it.rang || '',
         teskariQuloq: !!it.teskariQuloq,
       })),
-      payments: draft.payments.filter((p) => (parseFloat(p.amount) || 0) > 0).map((p) => ({
-        ...p, amount: parseFloat(p.amount) || 0
+      payments: draft.payments.filter((p) => sonQiymat(p.amount) > 0).map((p) => ({
+        ...p, amount: sonQiymat(p.amount)
       })),
       dastafka: { ichida: draftCalc.dastafkaIchida, summa: draftCalc.dastafkaSumma },
       totalSum: draftCalc.totalSum,
@@ -1020,8 +1031,8 @@ export default function App() {
       masterName: draft.masterName,
       items: draftCalc.items.map((it) => ({
         id: it.id, kind: it.kind, nomi: it.nomi, tafsilot: it.tafsilot, birlik: it.birlik,
-        uzunlik: parseFloat(it.uzunlik) || 0, soni: parseFloat(it.soni) || 0,
-        zapas: parseFloat(it.zapas) || 0, jamiMeyor: it.jamiMeyor || 0,
+        uzunlik: sonQiymat(it.uzunlik), soni: sonQiymat(it.soni),
+        zapas: sonQiymat(it.zapas), jamiMeyor: it.jamiMeyor || 0,
         birBirlikNarxi: it.birBirlikNarxi, jamiSumma: it.jamiSumma,
         rang: it.rang || '', teskariQuloq: !!it.teskariQuloq,
       })),
@@ -1144,7 +1155,7 @@ export default function App() {
     if (!payModal) return;
     // Faqat musbat to'lovlar — payments ro'yxatiga yoziladigan filtri bilan bir xil
     const addedSum = Math.round(payModal.payments.reduce((sum, p) => {
-      const amt = parseFloat(p.amount) || 0;
+      const amt = sonQiymat(p.amount);
       if (amt <= 0) return sum;
       return sum + (p.method === 'Dollorda' ? amt * p.rate : amt);
     }, 0));
@@ -1153,8 +1164,8 @@ export default function App() {
 
     const updated = orders.map((o) => {
       if (o.id !== payModal.orderId) return o;
-      const validNewPayments = payModal.payments.filter((p) => (parseFloat(p.amount) || 0) > 0).map((p) => ({
-        ...p, amount: parseFloat(p.amount) || 0
+      const validNewPayments = payModal.payments.filter((p) => sonQiymat(p.amount) > 0).map((p) => ({
+        ...p, amount: sonQiymat(p.amount)
       }));
       const newPaid = Math.round(o.totalPaid + addedSum);
       const newDebt = Math.max(0, Math.round(o.totalSum - newPaid));

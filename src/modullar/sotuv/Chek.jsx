@@ -469,7 +469,7 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
   function mijozTel() {
     const raw = ((order.customer && order.customer.phones) || []).filter(Boolean)[0] || '';
     let d = raw.replace(/\D/g, '');
-    if (d.startsWith('998')) return d;
+    if (d.length > 9 && d.startsWith('998')) return d; // davlat kodi bor
     if (d.length === 9) return `998${d}`;
     return d;
   }

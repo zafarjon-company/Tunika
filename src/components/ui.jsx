@@ -317,6 +317,9 @@ function maskPhone(digits) {
 }
 
 // Saqlangan qiymatdan foydalanuvchi raqamlarini ajratib olish (998 davlat kodisiz, maks 9 ta).
+// Saqlangan qiymat DOIM "+998 ..." ko'rinishida bo'ladi (formatPhone shunday yozadi),
+// shuning uchun birinchi "998" har doim davlat kodi — uni kesamiz. Foydalanuvchi
+// raqamining o'zi 998 bilan boshlansa (99 operatori), u prefiksdan KEYIN turadi.
 export function phoneDigits(value) {
   let d = (value || '').replace(/\D/g, '');
   if (d.startsWith('998')) d = d.slice(3);
@@ -338,6 +341,9 @@ export function PhoneInput({ value, onChange, className }) {
 
   function handleChange(e) {
     const all = e.target.value.replace(/\D/g, '');
+    // Maydonda "+998 " prefiksi DOIM ko'rinib turadi, shuning uchun raqamlar
+    // har doim "998" bilan boshlanadi — uni kesamiz. (Foydalanuvchi raqami ham
+    // 998 bilan boshlansa, u prefiksdan KEYIN keladi va joyida qoladi.)
     let ud = all.startsWith('998') ? all.slice(3) : all;
     ud = ud.slice(0, 9);
 
@@ -355,6 +361,9 @@ export function PhoneInput({ value, onChange, className }) {
 
   function handleFocus() {
     const p = caretPos(digits.length);
+    // Darhol ham qo'yamiz (rAF ba'zan kechikadi — kursor shablon oxirida qolib,
+    // yozilgan raqamlar noto'g'ri joyga tushardi), keyin kadr boshida takrorlaymiz.
+    try { ref.current?.setSelectionRange(p, p); } catch (err) { /* noop */ }
     requestAnimationFrame(() => {
       try { ref.current?.setSelectionRange(p, p); } catch (err) { /* noop */ }
     });

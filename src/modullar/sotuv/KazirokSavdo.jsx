@@ -13,7 +13,7 @@
 // ============================================================
 import React, { useState } from 'react';
 import { ChevronDown, Ruler, Layers } from 'lucide-react';
-import { fmt, rangTozala } from '../../lib/helpers.js';
+import { fmt, rangTozala, sonMatn } from '../../lib/helpers.js';
 
 export const KAZ_NARX_KEY = 'kazirok-narx-v1'; // { [listId]: 1 metr narxi (qo'lda tahrir) }
 export function readKazNarx() { try { return JSON.parse(localStorage.getItem(KAZ_NARX_KEY)) || {}; } catch (e) { return {}; } }
@@ -250,7 +250,7 @@ export function KazirokSavdo({ data, rows = [], tunikaBaza = [], narx = {}, onPr
                 <div className="flex items-center gap-1.5 flex-1 min-w-0">
                   <input type="text" inputMode="decimal" value={narxInputVal(r.listId)}
                     onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                    onChange={(e) => { const v = e.target.value.replace(/,/g, '.'); if (/^\d*\.?\d*$/.test(v) || v === '') onPrice && onPrice(r.listId, v); }}
+                    onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null && onPrice) onPrice(r.listId, v); }}
                     className="w-28 px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-xs outline-none focus:border-slate-900 transition" />
                   <span className="text-[11px] text-slate-400 whitespace-nowrap">so'm / m</span>
                 </div>

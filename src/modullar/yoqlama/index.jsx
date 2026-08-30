@@ -32,7 +32,7 @@ export function YoqlamaModule({ ishchilar, yoqlama, setYoqlamaKun, setYoqlamaBul
 
       {sub === 'belgilash' && <YoqlamaBelgilash ishchilar={ishchilar} yoqlama={yoqlama} setYoqlamaKun={setYoqlamaKun} setYoqlamaBulk={setYoqlamaBulk} showToast={showToast} />}
       {sub === 'kalendar' && <YoqlamaKalendar ishchilar={ishchilar} yoqlama={yoqlama} setYoqlamaKun={setYoqlamaKun} />}
-      {sub === 'avans' && <AvansTab ishchilar={ishchilar} avanslar={avanslar} updateAvanslar={updateAvanslar} setAvansYozuv={setAvansYozuv} usdRate={usdRate} showToast={showToast} />}
+      {sub === 'avans' && <AvansTab ishchilar={ishchilar} avanslar={avanslar} updateAvanslar={updateAvanslar} setAvansYozuv={setAvansYozuv} yoqlama={yoqlama} usdRate={usdRate} showToast={showToast} />}
     </div>
   );
 }
