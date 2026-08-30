@@ -15,7 +15,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronRight, Printer, HardHat } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, StatBox } from '../../components/ui.jsx';
-import { fmt, formatDay, daysInMonth } from '../../lib/helpers.js';
+import { fmt, formatDay, daysInMonth, sonQiymat } from '../../lib/helpers.js';
 import { IshchiChek } from './IshchiChek.jsx';
 
 // Eski (sonli) yoki yangi (massiv) avans formatini massivga keltirish
@@ -46,7 +46,7 @@ function buildAmallar(ishchi, yoqlama, avanslar) {
   // Avans amallari
   for (const oy in avanslar) {
     normEntries(avanslar[oy]?.[ishchi.id], oy).forEach((p) => {
-      const amt = parseFloat(p.amount) || 0;
+      const amt = sonQiymat(p.amount);
       const som = p.method === 'Dollorda' ? amt * (p.rate || 0) : amt;
       const sana = p.createdAt ? p.createdAt.slice(0, 10) : `${oy}-01`;
       ops.push({ id: `a-${p.id}`, turi: 'avans', nom: `Avans${p.notes ? ` · ${p.notes}` : ''}`, sana, qiymat: -som });

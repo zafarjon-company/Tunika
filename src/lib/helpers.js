@@ -19,8 +19,12 @@ export const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('uz-UZ');
 //  aynan shu turadi. Sababi: qiymatni yozayotgan paytda o'zgartirsak, React
 //  maydonni qayta yozadi va KURSOR sakrab ketadi ("1," -> ".1"). Vergul faqat
 //  hisoblash paytida (sonQiymat) nuqtaga aylanadi.
+// Ajratuvchi bo'shliqlar (oddiy, uzilmas va tor uzilmas probel) — 3 talab
+// ajratishda ishlatiladi va o'qishdan oldin tashlab yuboriladi.
+const BOSHLIQ = /[\s  ]/g;
+
 export function sonMatn(xom, { butun = false, manfiy = false } = {}) {
-  const s = String(xom == null ? '' : xom);
+  const s = String(xom == null ? '' : xom).replace(BOSHLIQ, '');
   if (s === '') return '';
   const re = manfiy
     ? (butun ? /^-?\d*$/ : /^-?\d*[.,]?\d*$/)
@@ -28,8 +32,36 @@ export function sonMatn(xom, { butun = false, manfiy = false } = {}) {
   return re.test(s) ? s : null;
 }
 
-// Kiritilgan satrni songa aylantirish (vergul ham tushunarli). Bo'sh/xato -> 0.
-export const sonQiymat = (xom) => parseFloat(String(xom == null ? '' : xom).replace(/,/g, '.')) || 0;
+// Kiritilgan satrni songa aylantirish (vergul va 3 talik bo'shliqlar tushunarli).
+// Bo'sh/xato -> 0.
+export const sonQiymat = (xom) =>
+  parseFloat(String(xom == null ? '' : xom).replace(BOSHLIQ, '').replace(/,/g, '.')) || 0;
+
+// Yozilayotgan summani KO'RSATISH uchun 3 talab ajratadi: "1500000" -> "1 500 000".
+// Kasr qismi va tugallanmagan ajratgich ("1500,") saqlanadi — yozishga xalaqit bermaydi.
+export function sonAjrat(xom) {
+  const s = String(xom == null ? '' : xom).replace(BOSHLIQ, '');
+  if (s === '') return '';
+  const m = s.match(/^(-?)(\d*)([.,]?)(\d*)$/);
+  if (!m) return s;                      // kutilmagan belgi — tegmaymiz
+  const [, ishora, butun, ajr, kasr] = m;
+  const butunAjratilgan = butun.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return ishora + butunAjratilgan + ajr + kasr;
+}
+
+// Formatlangan (bo'shliqli) matnda kursor o'rnini RAQAMLAR soni bo'yicha topish.
+// Maydonni qayta formatlagach kursorni o'z joyida ushlab turish uchun kerak.
+export function kursorOrni(formatlangan, raqamSoni) {
+  if (raqamSoni <= 0) return 0;
+  let k = 0;
+  for (let i = 0; i < formatlangan.length; i += 1) {
+    if (/\d/.test(formatlangan[i])) {
+      k += 1;
+      if (k === raqamSoni) return i + 1;
+    }
+  }
+  return formatlangan.length;
+}
 
 // Foydalanuvchi harakatni kamaytirishni yoqqanmi? (animatsiyalarni o'tkazib yuborish uchun)
 export const reducedMotion = () =>

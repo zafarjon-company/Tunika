@@ -7,10 +7,10 @@
 //  Model: avanslar = { 'YYYY-MM': { ishchiId: [ {id,method,amount,rate,createdAt,notes} ] } }
 // ============================================================
 import React, { useState } from 'react';
-import { Plus, Trash2, Check, Wallet } from 'lucide-react';
+import { Plus, Trash2, Check, Wallet, ChevronDown } from 'lucide-react';
 import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
-import { fmt, toMonthInput, formatDate, makeBlankPayment, ishchiHisobi } from '../../lib/helpers.js';
+import { fmt, toMonthInput, formatDate, makeBlankPayment, ishchiHisobi, sonQiymat } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 function oyLabel(oy) {
@@ -28,7 +28,7 @@ function normEntries(v) {
 // Yozuvlar yig'indisi (dollar → so'mga kursda)
 export function avansSumma(entries) {
   return normEntries(entries).reduce((s, p) => {
-    const amt = parseFloat(p.amount) || 0;
+    const amt = sonQiymat(p.amount);
     return s + (p.method === 'Dollorda' ? amt * (p.rate || 0) : amt);
   }, 0);
 }
@@ -36,6 +36,9 @@ export function avansSumma(entries) {
 export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, yoqlama = {}, usdRate, showToast }) {
   const [oy, setOy] = useState(toMonthInput());
   const [modal, setModal] = useState(null); // { ishchiId, payments: [...] }
+  // Har bir ishchining yozuvlar ro'yxati alohida ochiladi. Sukut — yopiq.
+  const [ochiq, setOchiq] = useState({}); // { [ishchiId]: true }
+  const toggle = (id) => setOchiq((o) => ({ ...o, [id]: !o[id] }));
 
   const oyAvanslar = avanslar[oy] || {};
   const jami = ishchilar.reduce((s, i) => s + avansSumma(oyAvanslar[i.id]), 0);
@@ -54,9 +57,9 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
   function saveModal() {
     if (!modal) return;
     const valid = modal.payments
-      .filter((p) => (parseFloat(p.amount) || 0) > 0)
+      .filter((p) => sonQiymat(p.amount) > 0)
       .map((p) => {
-        const y = { ...p, amount: parseFloat(p.amount) || 0 };
+        const y = { ...p, amount: sonQiymat(p.amount), rate: sonQiymat(p.rate) || usdRate };
         // Sana tanlangan oyga mos bo'lsin: o'tgan oyga avans kiritilayotganda
         // sukut "bugun" bo'lib qolsa, hisobot uni boshqa oyga qo'yib yuborardi.
         if ((y.createdAt || '').slice(0, 7) !== oy) {
@@ -68,6 +71,8 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
 
     const oldList = normEntries(oyAvanslar[modal.ishchiId]);
     yozKatak(modal.ishchiId, [...oldList, ...valid]);
+    // Yangi qo'shilgan yozuv darhol ko'rinsin — shu ishchining ro'yxatini ochamiz
+    setOchiq((o) => ({ ...o, [modal.ishchiId]: true }));
     setModal(null);
     showToast('Avans qo\'shildi');
   }
@@ -140,7 +145,16 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
                 </div>
               </div>
 
+              {/* Yozuvlar ro'yxati — sukut bo'yicha yopiq, bosib ochiladi */}
               {entries.length > 0 && (
+                <button type="button" onClick={() => toggle(i.id)} aria-expanded={!!ochiq[i.id]}
+                  className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs text-slate-600 mb-2">
+                  <span>{entries.length} ta yozuv · {ochiq[i.id] ? 'yashirish' : "ko'rish"}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${ochiq[i.id] ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+
+              {entries.length > 0 && ochiq[i.id] && (
                 <div className="space-y-1 mb-2 text-xs">
                   {entries.map((p) => (
                     <div key={p.id} className="flex items-center justify-between gap-2 border border-slate-100 bg-slate-50 rounded-lg px-2.5 py-1.5">
@@ -154,7 +168,7 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="font-semibold tabular-nums text-slate-800">
                           {p.method === 'Dollorda'
-                            ? `${fmt(p.amount)} $ (${fmt((parseFloat(p.amount) || 0) * (p.rate || 0))} so'm)`
+                            ? `${fmt(p.amount)} $ (${fmt(sonQiymat(p.amount) * sonQiymat(p.rate))} so'm)`
                             : `${fmt(p.amount)} so'm`}
                         </span>
                         <button onClick={() => deleteEntry(i.id, p.id)} className="text-slate-400 hover:text-red-600">

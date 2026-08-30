@@ -7,7 +7,7 @@
 import React, { useMemo, useState } from 'react';
 import { TrendingUp, CalendarDays, Package, Users, Filter, PieChart, Wallet, Hammer, Download, Coins, CalendarClock } from 'lucide-react';
 import { Card, SectionTitle, StatBox } from '../../components/ui.jsx';
-import { fmt, formatDate } from '../../lib/helpers.js';
+import { fmt, formatDate, sonQiymat } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 import { itemDisp, muddatHolati } from '../sotuv/Zakazlar.jsx';
 import { downloadCSV } from '../../lib/eksport.js';
@@ -136,7 +136,7 @@ export function HisobotDashboard({ orders = [] }) {
           const dk = dayKey(pd);
           if (from && dk < from) return;
           if (to && dk > to) return;
-          const som = p.method === 'Dollorda' ? (parseFloat(p.amount) || 0) * (p.rate || 0) : (parseFloat(p.amount) || 0);
+          const som = p.method === 'Dollorda' ? sonQiymat(p.amount) * (p.rate || 0) : sonQiymat(p.amount);
           tushum += som;
           oyMap[monKey(pd)] = (oyMap[monKey(pd)] || 0) + som;
           kunMap[dk] = (kunMap[dk] || 0) + som;

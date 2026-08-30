@@ -7,7 +7,7 @@
 import React, { useMemo, useState } from 'react';
 import { Banknote, Wallet, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, SectionTitle, StatBox } from '../../components/ui.jsx';
-import { fmt } from '../../lib/helpers.js';
+import { fmt, sonQiymat } from '../../lib/helpers.js';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -22,7 +22,7 @@ export function HisobotKassa({ orders = [] }) {
     const zakaslar = new Set();
     orders.forEach((o) => (o.payments || []).forEach((p) => {
       if (!p.createdAt || dayKey(new Date(p.createdAt)) !== kun) return;
-      const amt = parseFloat(p.amount) || 0;
+      const amt = sonQiymat(p.amount);
       const som = p.method === 'Dollorda' ? amt * (parseFloat(p.rate) || 0) : amt;
       if (som <= 0) return;
       const g = byMethod.get(p.method) || { method: p.method, som: 0, n: 0 };
