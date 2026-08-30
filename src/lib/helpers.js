@@ -5,6 +5,27 @@ import { DEFAULT_USD_RATE, STANOK_OPTIONS, RANG_PALETTE, RANG_GROUPS } from './c
 
 export const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('uz-UZ');
 
+// ----- RAQAM KIRITISH (vergul ham, nuqta ham) -----
+//  MUHIM: raqam maydonlarida <input type="number"> ISHLATILMAYDI. Telefon
+//  klaviaturasida kasr belgisi ko'pincha VERGUL bo'ladi, type="number" esa uni
+//  yaroqsiz deb hisoblab qiymatni butunlay bo'shatib yuboradi — natijada "3,5"
+//  yozib bo'lmaydi. O'rniga: type="text" inputMode="decimal" + shu yordamchi.
+//
+//  sonMatn(xom) -> tozalangan satr yoki null (null = bu belgi qabul qilinmaydi).
+//  butun=true — faqat butun son (masalan "necha bo'lak").
+//  manfiy=true — minus ham mumkin (o'lchov/summada kerak emas).
+export function sonMatn(xom, { butun = false, manfiy = false } = {}) {
+  const s = String(xom == null ? '' : xom).replace(/,/g, '.');
+  if (s === '') return '';
+  const re = manfiy
+    ? (butun ? /^-?\d*$/ : /^-?\d*\.?\d*$/)
+    : (butun ? /^\d*$/ : /^\d*\.?\d*$/);
+  return re.test(s) ? s : null;
+}
+
+// Kiritilgan satrni songa aylantirish (vergul ham tushunarli). Bo'sh/xato -> 0.
+export const sonQiymat = (xom) => parseFloat(String(xom == null ? '' : xom).replace(/,/g, '.')) || 0;
+
 // Foydalanuvchi harakatni kamaytirishni yoqqanmi? (animatsiyalarni o'tkazib yuborish uchun)
 export const reducedMotion = () =>
   typeof window !== 'undefined'

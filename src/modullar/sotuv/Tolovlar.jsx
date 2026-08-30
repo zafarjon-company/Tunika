@@ -3,7 +3,7 @@
 // ============================================================
 import React from 'react';
 import { Plus, Trash2, Calendar } from 'lucide-react';
-import { fmt, makeBlankPayment } from '../../lib/helpers.js';
+import { fmt, makeBlankPayment, sonMatn, sonQiymat } from '../../lib/helpers.js';
 import { PAYMENT_METHODS } from '../../lib/constants.js';
 
 // ISO vaqtni <input type="datetime-local"> uchun LOKAL formatga o'girish.
@@ -31,8 +31,10 @@ export function DynamicPaymentsSection({ payments, onChange, usdRate, qoldiq = 0
     <div className="space-y-3">
       <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">To'lovlar</div>
       {payments.map((p, index) => {
-        const localAmount = parseFloat(p.amount) || 0;
-        const convertedSum = p.method === 'Dollorda' ? localAmount * p.rate : localAmount;
+        const localAmount = sonQiymat(p.amount);
+        // Kurs yozilayotganda vaqtincha satr bo'lishi mumkin — sonQiymat bilan o'qiymiz
+        const kurs = sonQiymat(p.rate) || usdRate;
+        const convertedSum = p.method === 'Dollorda' ? localAmount * kurs : localAmount;
 
         return (
           <div key={p.id} className="p-3 border border-slate-200 bg-slate-50 rounded-lg space-y-2.5">
@@ -60,14 +62,14 @@ export function DynamicPaymentsSection({ payments, onChange, usdRate, qoldiq = 0
                   </label>
                   {qoldiq > 0 && (
                     <button type="button"
-                      onClick={() => updatePaymentItem(p.id, { amount: String(p.method === 'Dollorda' ? Math.ceil((qoldiq / (parseFloat(p.rate) || usdRate)) * 100) / 100 : Math.round(qoldiq)) })}
+                      onClick={() => updatePaymentItem(p.id, { amount: String(p.method === 'Dollorda' ? Math.ceil((qoldiq / kurs) * 100) / 100 : Math.round(qoldiq)) })}
                       className="text-[11px] font-semibold text-emerald-700 hover:underline">
                       Qoldiq: {fmt(qoldiq)}
                     </button>
                   )}
                 </div>
                 <input type="text" inputMode="decimal" value={p.amount} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                  onChange={(e) => { const v = e.target.value.replace(/,/g, '.'); if (/^\d*\.?\d*$/.test(v) || v === '') updatePaymentItem(p.id, { amount: v }); }}
+                  onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) updatePaymentItem(p.id, { amount: v }); }}
                   placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded text-xs tabular-nums" />
               </div>
             </div>
@@ -76,8 +78,11 @@ export function DynamicPaymentsSection({ payments, onChange, usdRate, qoldiq = 0
               <div className="grid grid-cols-2 gap-2 bg-white p-2 border border-slate-200 rounded text-xs">
                 <div>
                   <span className="text-slate-500 block">Kurs:</span>
-                  <input type="number" value={p.rate} onWheel={(e) => e.target.blur()}
-                    onChange={(e) => updatePaymentItem(p.id, { rate: parseFloat(e.target.value) || usdRate })}
+                  {/* Yozayotganda satr (masalan "12500," yoki "12500.") bo'lishi mumkin,
+                      maydondan chiqilganda esa albatta SONga aylantiramiz. */}
+                  <input type="text" inputMode="decimal" value={p.rate} onWheel={(e) => e.target.blur()}
+                    onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) updatePaymentItem(p.id, { rate: v }); }}
+                    onBlur={(e) => updatePaymentItem(p.id, { rate: sonQiymat(e.target.value) || usdRate })}
                     className="w-full border-b border-slate-200 focus:border-slate-900 outline-none p-0.5 text-xs font-bold tabular-nums" />
                 </div>
                 <div className="text-right flex flex-col justify-end">

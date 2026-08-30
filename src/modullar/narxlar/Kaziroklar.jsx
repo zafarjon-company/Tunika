@@ -12,7 +12,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Triangle, Edit3, Copy, ChevronRight, ArrowLeft, Ruler } from 'lucide-react';
 import { Card, SectionTitle, RangTanla, RangBadge } from '../../components/ui.jsx';
-import { genId, fmt, rangGuruhlari } from '../../lib/helpers.js';
+import { genId, fmt, rangGuruhlari, sonMatn, sonQiymat } from '../../lib/helpers.js';
 import { KAZ_DETS, kazSvg, kazItemCalc, cornerSvg, cornerItemCalc, QOZ_RAZ0, QOZ_PESH0 } from '../../lib/kazirokGeom.js';
 
 // Detal turi sarlavhasi (KAZ_DETS faqat pat/pal; qoz alohida).
@@ -83,7 +83,7 @@ function TurlarSection({ kazTurlari, onOpen }) {
    2-QISM: Tur batafsil — pataloklar + paloskalar + foyda %
    ============================================================ */
 function TuriDetail({ turi, onBack, onPatch }) {
-  const foyda = Number(turi.foyda) || 0;
+  const foyda = sonQiymat(turi.foyda); // vergulli satr qolib ketsa ham to'g'ri o'qiladi
   const KEY = { pat: 'pataloklar', pal: 'paloskalar', qoz: 'qozonlar' };
   const items = (kind) => turi[KEY[kind]] || [];
 
@@ -127,7 +127,8 @@ function TuriDetail({ turi, onBack, onPatch }) {
         <label className="block text-[11px] font-semibold text-emerald-800 mb-1.5">Foyda foizi (%)</label>
         <div className="flex items-center gap-2">
           {/* Fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
-          <input type="number" inputMode="decimal" key={`foyda-${turi.foyda ?? ''}`} defaultValue={turi.foyda ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          <input type="text" inputMode="decimal" key={`foyda-${turi.foyda ?? ''}`} defaultValue={turi.foyda ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+            onChange={(e) => { const v = sonMatn(e.target.value); if (v === null) { e.target.value = e.target.value.slice(0, -1); } else if (v !== e.target.value) { e.target.value = v; } }}
             onBlur={(e) => { if (e.target.value !== String(turi.foyda ?? '')) onPatch({ foyda: e.target.value }); }}
             className="w-28 px-2.5 py-2 border-2 border-emerald-200 rounded-lg bg-white tabular-nums text-sm outline-none focus:border-emerald-600 transition" />
           <span className="text-[11px] text-slate-500">
@@ -187,7 +188,8 @@ function NumField({ label, value, onChange, unit = 'sm' }) {
       <span className="block text-[10px] text-slate-400 mb-0.5">{label}</span>
       <div className="flex items-center gap-1">
         {/* Fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
-        <input type="number" inputMode="decimal" step="0.5" key={String(value ?? '')} defaultValue={value ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+        <input type="text" inputMode="decimal" key={String(value ?? '')} defaultValue={value ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          onChange={(e) => { const v = sonMatn(e.target.value); if (v === null) { e.target.value = e.target.value.slice(0, -1); } else if (v !== e.target.value) { e.target.value = v; } }}
           onBlur={(e) => { if (e.target.value !== String(value ?? '')) onChange(e.target.value); }}
           className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
         <span className="text-[10px] text-slate-400">{unit}</span>
@@ -241,7 +243,8 @@ function PriceBlock({ metrNarx, onMetrNarx, material, foyda, sotuv }) {
       <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-100">
         <span className="text-[11px] text-slate-500 whitespace-nowrap">1 metr narxi</span>
         {/* Fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
-        <input type="number" inputMode="decimal" key={String(metrNarx ?? '')} defaultValue={metrNarx ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+        <input type="text" inputMode="decimal" key={String(metrNarx ?? '')} defaultValue={metrNarx ?? ''} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+          onChange={(e) => { const v = sonMatn(e.target.value); if (v === null) { e.target.value = e.target.value.slice(0, -1); } else if (v !== e.target.value) { e.target.value = v; } }}
           onBlur={(e) => { if (e.target.value !== String(metrNarx ?? '')) onMetrNarx(e.target.value); }}
           className="w-28 px-2 py-1.5 border-2 border-slate-200 rounded-lg bg-white tabular-nums text-xs outline-none focus:border-slate-900" />
         <span className="text-[11px] text-slate-400">so'm / m</span>
@@ -282,7 +285,7 @@ function Drawing({ svg }) {
 // Patalok / Paloska kartasi — jonli chizma, eni/peshona/razmeri, hisob, narx.
 function KazDetCard({ kind, it, foyda, onPatch, onRemove, onDup }) {
   const c = kazItemCalc(kind, it);                 // bolak / pieceLenCm / listMetri (clamp qilingan)
-  const metrNarx = Number(it.metrNarx) || 0;
+  const metrNarx = sonQiymat(it.metrNarx); // vergul ham tushunarli
   const material = c.listMetri * metrNarx;         // 1 dona material qiymati
   const sotuv = material * (1 + foyda / 100);      // 1 dona sotuv narxi (foyda bilan)
   const svg = kazSvg(kind, c.eni, c.peshona, c.razmeri, c.fold);
@@ -317,7 +320,7 @@ function KazDetCard({ kind, it, foyda, onPatch, onRemove, onDup }) {
 // Qozon (burchak) kartasi — har tomon alohida razmeri/peshona (tepa = X, chap = Y).
 function KazQozCard({ it, foyda, onPatch, onRemove, onDup }) {
   const c = cornerItemCalc(it);
-  const metrNarx = Number(it.metrNarx) || 0;
+  const metrNarx = sonQiymat(it.metrNarx); // vergul ham tushunarli
   const material = c.listMetri * metrNarx;
   const sotuv = material * (1 + foyda / 100);
   const svg = cornerSvg(c.razX, c.peshX, c.razY, c.peshY);
@@ -362,7 +365,7 @@ function FlatKazirokList({ kaziroklar, updateKaziroklar, ranglar = [], showToast
   const [form, setForm] = useState({ nomi: '', narx: '', birlik: 'dona', rang: '' });
 
   function setNarx(id, val) {
-    updateKaziroklar(kaziroklar.map((k) => (k.id === id ? { ...k, narx: parseFloat(val) || 0 } : k)));
+    updateKaziroklar(kaziroklar.map((k) => (k.id === id ? { ...k, narx: sonQiymat(val) } : k)));
   }
   function patch(id, p) {
     updateKaziroklar(kaziroklar.map((k) => (k.id === id ? { ...k, ...p } : k)));
@@ -378,7 +381,7 @@ function FlatKazirokList({ kaziroklar, updateKaziroklar, ranglar = [], showToast
 
   function addNew() {
     if (!form.nomi.trim()) { showToast('Nom kiriting'); return; }
-    updateKaziroklar([...kaziroklar, { id: genId(), nomi: form.nomi.trim(), narx: parseFloat(form.narx) || 0, birlik: form.birlik, rang: form.rang || '' }]);
+    updateKaziroklar([...kaziroklar, { id: genId(), nomi: form.nomi.trim(), narx: sonQiymat(form.narx), birlik: form.birlik, rang: form.rang || '' }]);
     setForm({ nomi: '', narx: '', birlik: 'dona', rang: '' });
     setAdding(false);
     showToast("Kazirok qo'shildi");
@@ -413,7 +416,9 @@ function FlatKazirokList({ kaziroklar, updateKaziroklar, ranglar = [], showToast
             </div>
             <div>
               <label className="block text-slate-500 mb-1">Narx (so'm)</label>
-              <input type="number" value={form.narx} onWheel={(e) => e.target.blur()} onChange={(e) => setForm({ ...form, narx: e.target.value })} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+              <input type="text" inputMode="decimal" value={form.narx} onWheel={(e) => e.target.blur()}
+                onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setForm({ ...form, narx: v }); }}
+                placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
             </div>
             <div>
               <label className="block text-slate-500 mb-1">Birlik</label>
@@ -452,8 +457,9 @@ function FlatKazirokList({ kaziroklar, updateKaziroklar, ranglar = [], showToast
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Narx (so'm)</label>
                     {/* Har tugmada emas — fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
-                    <input type="number" key={`${k.id}-${k.narx}`} defaultValue={k.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                      onBlur={(e) => { if ((parseFloat(e.target.value) || 0) !== (parseFloat(k.narx) || 0)) setNarx(k.id, e.target.value); }} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+                    <input type="text" inputMode="decimal" key={`${k.id}-${k.narx}`} defaultValue={k.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                      onChange={(e) => { const v = sonMatn(e.target.value); if (v === null) { e.target.value = e.target.value.slice(0, -1); } else if (v !== e.target.value) { e.target.value = v; } }}
+                      onBlur={(e) => { if (sonQiymat(e.target.value) !== sonQiymat(k.narx)) setNarx(k.id, e.target.value); }} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Birlik</label>

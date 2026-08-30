@@ -18,7 +18,7 @@ import {
 import { Card, SectionTitle, SegmentedControl, rangChipStyle } from '../../components/ui.jsx';
 import { DEFAULT_USD_RATE, RANG_PALETTE, RANG_GROUPS } from '../../lib/constants.js';
 import { eksportZaxira, importZaxira } from '../../lib/zaxira.js';
-import { genId, rangTozala } from '../../lib/helpers.js';
+import { genId, rangTozala, sonMatn, sonQiymat } from '../../lib/helpers.js';
 import { fetchKurslar } from '../../lib/kurs.js';
 import { ROLLAR, rolNomi } from '../../lib/ruxsat.js';
 import { TILLAR } from '../../lib/til.js';
@@ -239,11 +239,11 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
   // sifatida yashirin saqlanadi — avtomatik yangilanганда farq saqlanib qoladi.
   function saveKurs() {
     if (koris === 'olish') {
-      const v = Number(olishDraft) || DEFAULT_USD_RATE;
+      const v = sonQiymat(olishDraft) || DEFAULT_USD_RATE;
       updateUsdOlish(v);
       if (baza > 0) { try { localStorage.setItem('usd-ust-olish', String(v - baza)); } catch (e) { /* noop */ } }
     } else {
-      const v = Number(sotishDraft) || DEFAULT_USD_RATE;
+      const v = sonQiymat(sotishDraft) || DEFAULT_USD_RATE;
       updateUsdRate(v);
       if (baza > 0) { try { localStorage.setItem('usd-ust-sotish', String(v - baza)); } catch (e) { /* noop */ } }
     }
@@ -424,8 +424,10 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
             <SegmentedControl value={koris} onChange={setKoris}
               options={[{ value: 'olish', label: 'Olish' }, { value: 'sotish', label: 'Sotish' }]} />
             <div className="flex gap-2 mt-2">
-              <input type="number" value={koris === 'olish' ? olishDraft : sotishDraft} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                onChange={(e) => (koris === 'olish' ? setOlishDraft(parseFloat(e.target.value) || '') : setSotishDraft(parseFloat(e.target.value) || ''))}
+              {/* Telefon klaviaturasida kasr belgisi vergul (,) — shuning uchun text+decimal.
+                  Draft vaqtincha satr bo'lishi mumkin, saqlashda sonQiymat songa aylantiradi. */}
+              <input type="text" inputMode="decimal" value={koris === 'olish' ? olishDraft : sotishDraft} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                onChange={(e) => { const v = sonMatn(e.target.value); if (v === null) return; if (koris === 'olish') setOlishDraft(v); else setSotishDraft(v); }}
                 className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none tabular-nums" />
               <button onClick={saveKurs} className="px-4 py-2 bg-emerald-700 text-white font-medium rounded-lg hover:bg-emerald-800">Saqlash</button>
             </div>

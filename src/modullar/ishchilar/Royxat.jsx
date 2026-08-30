@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Search, Edit3, Star, X, ArrowUp, ArrowDown, Send, Check, Copy } from 'lucide-react';
 import { Card, PhoneInput } from '../../components/ui.jsx';
-import { fmt, genId, formatDate } from '../../lib/helpers.js';
+import { fmt, genId, formatDate, sonMatn, sonQiymat } from '../../lib/helpers.js';
 import { storage } from '../../lib/storage.js';
 import { DarajaNishon, StarRating } from './Lavozimlar.jsx';
 import { NegativeRating } from './Kamchiliklar.jsx';
@@ -89,9 +89,9 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
   }
 
   function oylikKotarTushir(sign) {
-    const d = parseFloat(oylikDelta) || 0;
+    const d = sonQiymat(oylikDelta);
     if (d <= 0) { showToast('Summani kiriting'); return; }
-    const cur = parseFloat(form.oylikHaqq) || 0;
+    const cur = sonQiymat(form.oylikHaqq);
     const next = sign > 0 ? cur + d : Math.max(0, cur - d);
     const entry = { id: genId(), sana: new Date().toISOString(), turi: sign > 0 ? 'kotar' : 'tushir', summa: d, eski: cur, yangi: next };
     setForm({ ...form, oylikHaqq: next, oylikTarix: [entry, ...(form.oylikTarix || [])] });
@@ -140,7 +140,7 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
     const finalData = {
       ...form,
       phones: cleaned.length ? cleaned : [''],
-      oylikHaqq: parseFloat(form.oylikHaqq) || 0,
+      oylikHaqq: sonQiymat(form.oylikHaqq),
       qobiliyatlar: form.qobiliyatlar.filter((q) => q.nomi.trim()).map((q) => ({ nomi: q.nomi.trim(), ball: q.ball || 0 })),
       kamchiliklar: form.kamchiliklar.filter((k) => k.nomi.trim()).map((k) => ({ nomi: k.nomi.trim(), ball: k.ball || 0 })),
       // Eski format maydonini ham sinxronlaymiz — aks holda lavozim olib
@@ -204,11 +204,11 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
 
           <div>
             <label className="block text-xs text-slate-600 mb-1 font-medium">Oylik ish haqi (so'm)</label>
-            <input type="number" value={form.oylikHaqq} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()} onChange={(e) => setForm({ ...form, oylikHaqq: e.target.value })} placeholder="0" className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white text-sm tabular-nums" />
+            <input type="text" inputMode="decimal" value={form.oylikHaqq} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()} onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setForm({ ...form, oylikHaqq: v }); }} placeholder="0" className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white text-sm tabular-nums" />
             {/* Ko'tarish / Tushirish — alohida summa qo'shish yoki ayirish */}
             <div className="flex flex-col sm:flex-row gap-2 mt-2">
-              <input type="number" value={oylikDelta} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                onChange={(e) => setOylikDelta(e.target.value)} placeholder="Summa"
+              <input type="text" inputMode="decimal" value={oylikDelta} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setOylikDelta(v); }} placeholder="Summa"
                 className="w-full sm:flex-1 sm:min-w-0 px-3 py-2 border-2 border-slate-200 rounded-lg bg-white text-sm tabular-nums" />
               <div className="flex gap-2">
                 <button type="button" onClick={() => oylikKotarTushir(1)}

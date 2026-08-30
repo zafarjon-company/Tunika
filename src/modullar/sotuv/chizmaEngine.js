@@ -12,10 +12,18 @@
 //  mountChizma(root) — DOM quradi, { destroy } qaytaradi.
 // ============================================================
 
+import { sonMatn, sonQiymat } from '../../lib/helpers.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PLUS_OFFSET = 26;   // yashil "+" (chizish) nuqtadan necha piksel narida
 const OFFSET_BTN  = 30;   // offset "+" chiziq o'rtasidan necha piksel narida
 const SNAP_PX     = 14;   // yopishish (snap) chegarasi, pikselda
+
+/* Input qiymatini songa aylantirish — VERGULGA chidamli.
+   Telefon klaviaturasida kasr belgisi "," bo'lgani uchun barcha raqamli
+   maydonlar type="text" + inputmode="decimal"; o'qiyotganda vergulni
+   nuqtaga aylantiramiz. Bo'sh yoki noto'g'ri qiymat -> 0. */
+const sonOl = (el) => sonQiymat(el && el.value);
 
 /* Kazirok bo'laklari (devor↔qosh orasidagi yo'lak) — chiziq bo'ylab enlari.
    Bo'yi har doim offset masofasiga teng. Juft-juft (asosiy=Patalok + paloska)
@@ -359,7 +367,7 @@ const TEMPLATE = `
       <svg data-chz="svg" xmlns="${SVG_NS}"></svg>
       <div class="chz-selbox" data-chz="selBox"></div>
       <div class="chz-inputbox" data-chz="inputBox">
-        <input data-chz="lengthInput" type="number" min="0" step="any" placeholder="Uzunlik" />
+        <input data-chz="lengthInput" type="text" inputmode="decimal" min="0" step="any" placeholder="Uzunlik" />
         <select data-chz="unitSelect">
           <option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option>
         </select>
@@ -1148,7 +1156,7 @@ export function mountChizma(root, opts) {
     return '<span class="chz-kaz-cnt">' +
       '<button type="button" class="chz-kaz-cntreset' + (isOv ? ' on' : '') + '" ' + attrs +
         ' title="Avtomatik hisobga qaytarish (' + autoCount + ' ta)" aria-label="Avtomatik hisobga qaytarish">↻</button>' +
-      '<input type="number" class="chz-kaz-cntinp" min="0" step="1" ' + attrs + ' value="' + val + '" />' +
+      '<input type="text" inputmode="numeric" class="chz-kaz-cntinp" min="0" step="1" ' + attrs + ' value="' + val + '" />' +
       '<span class="chz-kaz-cntu">dona</span>' +
     '</span>';
   }
@@ -1407,7 +1415,7 @@ export function mountChizma(root, opts) {
     const v = b[kind];
     const disabled = !!b.off;
     const field = (k, lbl, val) =>
-      '<label>' + lbl + '<input type="number" min="0" step="0.5" data-off="' + offCm + '" data-chz-det="' + kind + '" data-chz-k="' + k + '" value="' + (+(+val).toFixed(2)) + '" /><i>sm</i></label>';
+      '<label>' + lbl + '<input type="text" inputmode="decimal" min="0" step="0.5" data-off="' + offCm + '" data-chz-det="' + kind + '" data-chz-k="' + k + '" value="' + (+(+val).toFixed(2)) + '" /><i>sm</i></label>';
     const presets = d.presets.map((pr) =>
       '<button type="button" class="chz-kaz-preset' + (Math.abs(pr.eni - v.eni) < 0.05 ? ' on' : '') + '" data-off="' + offCm + '" data-chz-det="' + kind + '" data-eni="' + pr.eni + '"><b>' + pr.bolak + ' bo\'lak</b><span>' + pr.eni + ' sm</span></button>').join('');
     const fold = d.foldable
@@ -1447,7 +1455,7 @@ export function mountChizma(root, opts) {
       return t ? escHtml(t.nomi) : 'List tanlanmagan';
     })();
     const cf = (key, qk, lbl, val) =>
-      '<label>' + lbl + '<input type="number" min="0" step="0.5" data-chz-qsz="' + key + '" data-qk="' + qk + '" value="' + (+(+val).toFixed(2)) + '" /><i>sm</i></label>';
+      '<label>' + lbl + '<input type="text" inputmode="decimal" min="0" step="0.5" data-chz-qsz="' + key + '" data-qk="' + qk + '" value="' + (+(+val).toFixed(2)) + '" /><i>sm</i></label>';
     // Bitta blok (tur bo'yicha: tashqi/ichki)
     const block = (items, ctype, title, grp) => {
       if (!items.length) return '';
@@ -1528,7 +1536,7 @@ export function mountChizma(root, opts) {
         const off = +inp.getAttribute('data-off');
         const kind = inp.getAttribute('data-chz-det');
         const k = inp.getAttribute('data-chz-k');
-        const val = inp.value === '' ? 0 : Math.max(0, parseFloat(inp.value) || 0);
+        const val = Math.max(0, sonOl(inp));   // vergul ham tushunarli
         const patch = {};
         if (k === 'eni') patch[kind === 'pat' ? 'patEni' : 'palEni'] = val;
         else if (k === 'peshona') patch[kind === 'pat' ? 'patPesh' : 'palPesh'] = val;
@@ -1597,7 +1605,7 @@ export function mountChizma(root, opts) {
         if (inp.value === '') return;   // bo'sh — hali commit qilinmaydi (blur'da tiklanadi)
         const off = +inp.getAttribute('data-off');
         const kind = inp.getAttribute('data-chz-det');
-        const val = Math.max(0, Math.round(parseFloat(inp.value) || 0));
+        const val = Math.max(0, Math.round(sonOl(inp)));
         setKazByOffset(off, kind === 'pat' ? { patCountOv: val } : { palCountOv: val });
         const rbtn = body.querySelector('button.chz-kaz-cntreset[data-off="' + off + '"][data-chz-det="' + kind + '"]');
         if (rbtn) rbtn.classList.add('on');
@@ -1630,7 +1638,7 @@ export function mountChizma(root, opts) {
       inp.addEventListener('input', () => {
         if (inp.value === '') return;
         const key = inp.getAttribute('data-chz-qoz');
-        const val = Math.max(0, Math.round(parseFloat(inp.value) || 0));
+        const val = Math.max(0, Math.round(sonOl(inp)));
         state.kazCornerOv[key] = val; saveKazCornerOv();
         const rbtn = body.querySelector('button.chz-kaz-cntreset[data-chz-qoz="' + key + '"]');
         if (rbtn) rbtn.classList.add('on');
@@ -1664,7 +1672,7 @@ export function mountChizma(root, opts) {
         if (inp.value === '') return;
         const key = inp.getAttribute('data-chz-qsz');
         const qk = inp.getAttribute('data-qk');
-        const val = Math.max(0, parseFloat(inp.value) || 0);
+        const val = Math.max(0, sonOl(inp));
         state.kazCornerSize[key] = Object.assign({}, state.kazCornerSize[key], { [qk]: val });
         saveKazCornerSize();
         const it = buildCornerPayload().find((x) => x.key === key);
@@ -2389,7 +2397,7 @@ export function mountChizma(root, opts) {
   function commitInput() {
     if (!state.activeInput) return;
     const ai = state.activeInput;
-    const val = parseFloat(lengthInput.value);
+    const val = sonOl(lengthInput);   // vergul ham tushunarli
 
     if (ai.mode === 'draw' && !(val > 0)) { finalizeDraw(); return; }
 
@@ -3561,6 +3569,36 @@ export function mountChizma(root, opts) {
     cleanups.push(() => target.removeEventListener(ev, fn, opts));
   }
 
+  // VERGUL -> NUQTA + BEGONA BELGILARNI RAD ETISH (delegatsiya).
+  // Telefon klaviaturasida kasr belgisi "," bo'ladi; raqamli maydonlar
+  // type="text" bo'lgani uchun yozayotgan paytda vergulni darhol nuqtaga
+  // almashtiramiz va raqam bo'lmagan belgilarni tashlab yuboramiz.
+  // Bo'sh satr QABUL qilinadi (maydonni tozalash mumkin), kursor joyi saqlanadi.
+  const RAQAMLI_SEL = '[data-chz="lengthInput"], [data-chz-k], [data-chz-qsz], .chz-kaz-cntinp';
+  // sonMatn null qaytarsa (masalan harf yozilsa yoki ikkinchi nuqta qo'yilsa) —
+  // qo'pol tozalash: faqat raqamlar va birinchi nuqta qoldiriladi.
+  const tozala = (s, butun) => {
+    s = String(s).replace(/,/g, '.');
+    if (butun) return s.replace(/\D/g, '');
+    s = s.replace(/[^\d.]/g, '');
+    const i = s.indexOf('.');
+    return i < 0 ? s : s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '');
+  };
+  on(root, 'input', (e) => {
+    const t = e.target;
+    if (!t || t.tagName !== 'INPUT' || t.type !== 'text') return;
+    if (!t.matches(RAQAMLI_SEL)) return;
+    const butun = t.classList.contains('chz-kaz-cntinp');   // dona soni — butun son
+    const xom = t.value;
+    const v = sonMatn(xom, { butun });
+    const yangi = (v === null) ? tozala(xom, butun) : v;
+    if (yangi === xom) return;
+    const p = t.selectionStart;
+    const farq = xom.length - yangi.length;   // nechta belgi olib tashlandi
+    t.value = yangi;
+    try { t.setSelectionRange(Math.max(0, p - farq), Math.max(0, p - farq)); } catch (err) { /* e'tiborsiz */ }
+  });
+
   // Tashqi "chizma:clear" — zakas saqlangach Savdo bo'limi butun chizmani
   // tozalaydi (clearAll: render → publishKazirok/Latok/Qozon bo'sh chiqadi,
   // shu sabab Kazirok ham yo'qoladi). "Bekor qilish" (undo) bilan qaytariladi.
@@ -3577,7 +3615,7 @@ export function mountChizma(root, opts) {
   on(unitSelect, 'change', () => {
     const oldUnit = lengthInput.dataset.unit || state.unit;
     const newUnit = unitSelect.value;
-    const v = parseFloat(lengthInput.value);
+    const v = sonOl(lengthInput);
     if (v > 0) {
       const conv = v * UNITS[oldUnit] / UNITS[newUnit];
       lengthInput.value = String(Math.round(conv * 1000) / 1000);

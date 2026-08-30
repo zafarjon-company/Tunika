@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Package, Edit3, Copy } from 'lucide-react';
 import { Card, SectionTitle, TovarIcon, RangTanla, RangBadge } from '../../components/ui.jsx';
-import { genId, fmt, rangGuruhlari } from '../../lib/helpers.js';
+import { genId, fmt, rangGuruhlari, sonMatn, sonQiymat } from '../../lib/helpers.js';
 
 export function AksessuarlarTab({ aksessuarlar, updateAksessuarlar, ranglar = [], showToast }) {
   const rangGuruh = rangGuruhlari(ranglar); // Sozlamalardagi guruhlangan to'liq palitra
@@ -18,7 +18,7 @@ export function AksessuarlarTab({ aksessuarlar, updateAksessuarlar, ranglar = []
   const [form, setForm] = useState({ nomi: '', narx: '', birlik: 'dona', rang: '' });
 
   function setNarx(id, val) {
-    updateAksessuarlar(aksessuarlar.map((a) => (a.id === id ? { ...a, narx: parseFloat(val) || 0 } : a)));
+    updateAksessuarlar(aksessuarlar.map((a) => (a.id === id ? { ...a, narx: sonQiymat(val) } : a)));
   }
   function patch(id, p) {
     updateAksessuarlar(aksessuarlar.map((a) => (a.id === id ? { ...a, ...p } : a)));
@@ -34,7 +34,7 @@ export function AksessuarlarTab({ aksessuarlar, updateAksessuarlar, ranglar = []
 
   function addNew() {
     if (!form.nomi.trim()) { showToast('Nom kiriting'); return; }
-    updateAksessuarlar([...aksessuarlar, { id: genId(), nomi: form.nomi.trim(), narx: parseFloat(form.narx) || 0, birlik: form.birlik, rang: form.rang || '' }]);
+    updateAksessuarlar([...aksessuarlar, { id: genId(), nomi: form.nomi.trim(), narx: sonQiymat(form.narx), birlik: form.birlik, rang: form.rang || '' }]);
     setForm({ nomi: '', narx: '', birlik: 'dona', rang: '' });
     setAdding(false);
     showToast('Aksessuar qo\'shildi');
@@ -69,7 +69,8 @@ export function AksessuarlarTab({ aksessuarlar, updateAksessuarlar, ranglar = []
             </div>
             <div>
               <label className="block text-slate-500 mb-1">Narx (so'm)</label>
-              <input type="number" value={form.narx} onWheel={(e) => e.target.blur()} onChange={(e) => setForm({ ...form, narx: e.target.value })} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+              {/* Kg bilan sotiladigan tovarlar (masalan semichka) uchun kasr narx kerak */}
+              <input type="text" inputMode="decimal" value={form.narx} onWheel={(e) => e.target.blur()} onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setForm({ ...form, narx: v }); }} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
             </div>
             <div>
               <label className="block text-slate-500 mb-1">Birlik</label>
@@ -107,8 +108,23 @@ export function AksessuarlarTab({ aksessuarlar, updateAksessuarlar, ranglar = []
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Narx (so'm)</label>
                     {/* Har tugmada emas — fokusdan chiqqanda bir marta saqlanadi; key tashqi o'zgarishda qayta chizadi */}
-                    <input type="number" key={`${a.id}-${a.narx}`} defaultValue={a.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-                      onBlur={(e) => { if ((parseFloat(e.target.value) || 0) !== (parseFloat(a.narx) || 0)) setNarx(a.id, e.target.value); }} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+                    <input type="text" inputMode="decimal" key={`${a.id}-${a.narx}`} defaultValue={a.narx} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const v = sonMatn(e.target.value);
+                        // Nazoratsiz maydon — DOM qiymatini o'zimiz to'g'rilaymiz.
+                        // Qabul qilinmaydigan belgi bo'lsa: raqam va bitta nuqtadan boshqasini tozalaymiz
+                        // (o'rtaga yopishtirilgan matn ham to'g'ri tozalansin).
+                        if (v !== null) { if (v !== e.target.value) e.target.value = v; return; }
+                        const t = e.target.value.replace(/,/g, '.').replace(/[^\d.]/g, '');
+                        const [butunQism, ...qolgan] = t.split('.');
+                        e.target.value = qolgan.length ? `${butunQism}.${qolgan.join('')}` : butunQism;
+                      }}
+                      onBlur={(e) => {
+                        const n = sonQiymat(e.target.value);
+                        if (n !== sonQiymat(a.narx)) { setNarx(a.id, e.target.value); return; }
+                        // Qiymat o'zgarmagan bo'lsa ham ko'rinishini tartibga solamiz ("3." -> "3")
+                        if (String(n) !== e.target.value) e.target.value = String(n);
+                      }} className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Birlik</label>

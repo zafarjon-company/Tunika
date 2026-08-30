@@ -8,8 +8,8 @@
 // ============================================================
 import React, { useState } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Ruler, Edit3, Copy } from 'lucide-react';
-import { Card, SectionTitle, TovarIcon, RangTanla, RangBadge } from '../../components/ui.jsx';
-import { fmt, genId, metrliVariantlar, metrliAddon, rangGuruhlari } from '../../lib/helpers.js';
+import { Card, SectionTitle, RangTanla, RangBadge } from '../../components/ui.jsx';
+import { fmt, genId, metrliVariantlar, metrliAddon, rangGuruhlari, sonMatn, sonQiymat } from '../../lib/helpers.js';
 
 function toSlots(m) {
   let arr = [];
@@ -53,10 +53,10 @@ export function MetrliTab({ metrlilar, updateMetrlilar, ranglar = [], showToast 
     let sonYaxlitlandi = false;
     const data = {
       nomi: form.nomi.trim(),
-      metriNarx: parseFloat(form.metriNarx) || 0,
+      metriNarx: sonQiymat(form.metriNarx),
       rang: form.rang || '',
       variantlar: form.variantlar.map((v) => {
-        const raw = parseFloat(v.son) || 0;
+        const raw = sonQiymat(v.son);
         const son = Math.max(0, Math.round(raw)) || 0;
         if (raw > 0 && raw !== son) sonYaxlitlandi = true;
         return { son, razmer: String(v.razmer || '') };
@@ -107,7 +107,9 @@ export function MetrliTab({ metrlilar, updateMetrlilar, ranglar = [], showToast 
             </div>
             <div>
               <label className="block text-slate-500 mb-1">Metri uchun narx (so'm)</label>
-              <input type="number" value={form.metriNarx} onWheel={(e) => e.target.blur()} onChange={(e) => setForm({ ...form, metriNarx: e.target.value })} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+              <input type="text" inputMode="decimal" value={form.metriNarx} onWheel={(e) => e.target.blur()}
+                onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setForm({ ...form, metriNarx: v }); }}
+                placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
             </div>
           </div>
 
@@ -116,7 +118,10 @@ export function MetrliTab({ metrlilar, updateMetrlilar, ranglar = [], showToast 
             <div key={i} className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-slate-500 mb-1">{i + 1}-variant: bo'lak soni</label>
-                <input type="number" min="1" step="1" value={v.son} onWheel={(e) => e.target.blur()} onChange={(e) => setVariant(i, { son: e.target.value })} placeholder="—" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+                {/* Bo'lak soni — faqat butun son */}
+                <input type="text" inputMode="numeric" value={v.son} onWheel={(e) => e.target.blur()}
+                  onChange={(e) => { const nv = sonMatn(e.target.value, { butun: true }); if (nv !== null) setVariant(i, { son: nv }); }}
+                  placeholder="—" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
               </div>
               <div>
                 <label className="block text-slate-500 mb-1">{i + 1}-variant: razmer</label>

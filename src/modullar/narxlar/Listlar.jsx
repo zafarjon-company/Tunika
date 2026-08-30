@@ -8,13 +8,13 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Layers, Copy, Edit3, Percent } from 'lucide-react';
 import { Card, SectionTitle, TovarIcon, RangTanla, RangBadge, SmallModal, SegmentedControl } from '../../components/ui.jsx';
-import { fmt, genId, rangHex, rangMatn, rangTozala, rangGuruhlari } from '../../lib/helpers.js';
+import { fmt, genId, rangHex, rangMatn, rangTozala, rangGuruhlari, sonMatn, sonQiymat } from '../../lib/helpers.js';
 
 const BLANK = { nomi: '', qalinlik: '', optom: '', chakana: '', rang: '' };
 
 // Bitta narxni ommaviy qoidaga ko'ra qayta hisoblash
 function bulkCalc(x, { tur, yon, v }) {
-  const n = Number(x) || 0;
+  const n = sonQiymat(x); // vergulli satr qolib ketgan bo'lsa ham to'g'ri o'qilsin
   const sign = yon === 'oshir' ? 1 : -1;
   const r = tur === 'foiz' ? n * (1 + (sign * v) / 100) : n + sign * v;
   return Math.max(0, Math.round(r));
@@ -26,14 +26,19 @@ function OmmaviyModal({ tunikaBaza, onClose, onApply }) {
   const [yon, setYon] = useState('oshir');     // oshir | kamaytir
   const [qaysi, setQaysi] = useState('ikkala'); // chakana | optom | ikkala
   const [qiymat, setQiymat] = useState('');
-  const v = parseFloat(qiymat) || 0;
+  const v = sonQiymat(qiymat);
   const namuna = tunikaBaza[0];
   return (
     <SmallModal onClose={onClose} title="Narxlarni ommaviy yangilash">
       <div className="space-y-3 text-sm">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Amal turi</label>
-          <SegmentedControl value={tur} onChange={setTur}
+          {/* Summa rejimida butun son kutiladi — foiz rejimidan qolgan kasr qiymatni
+              butunlashtiramiz, aks holda maydon "qotib" qoladi (har bosishda sonMatn null qaytaradi) */}
+          <SegmentedControl value={tur} onChange={(yangiTur) => {
+            setTur(yangiTur);
+            if (yangiTur !== 'foiz') setQiymat((q) => { const n = Math.round(sonQiymat(q)); return n > 0 ? String(n) : ''; });
+          }}
             options={[{ value: 'foiz', label: 'Foiz (%)' }, { value: 'summa', label: "Summa (so'm)" }]} />
         </div>
         <div>
@@ -48,8 +53,9 @@ function OmmaviyModal({ tunikaBaza, onClose, onApply }) {
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">{tur === 'foiz' ? 'Necha foiz?' : "Necha so'm?"}</label>
-          <input type="number" inputMode={tur === 'foiz' ? 'decimal' : 'numeric'} value={qiymat} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
-            onChange={(e) => setQiymat(e.target.value.replace(',', '.'))} placeholder={tur === 'foiz' ? '5' : '2000'}
+          {/* Vergulli klaviatura uchun: type="text" + sonMatn (foizda kasr, summada butun) */}
+          <input type="text" inputMode={tur === 'foiz' ? 'decimal' : 'numeric'} value={qiymat} onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+            onChange={(e) => { const val = sonMatn(e.target.value, { butun: tur !== 'foiz' }); if (val !== null) setQiymat(val); }} placeholder={tur === 'foiz' ? '5' : '2000'}
             className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white tabular-nums focus:border-slate-900 outline-none" />
         </div>
         {namuna && v > 0 && (
@@ -109,8 +115,8 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToa
       id: genId(),
       nomi: form.nomi.trim(),
       qalinlik: form.qalinlik.trim(),
-      optom: parseFloat(form.optom) || 0,
-      chakana: parseFloat(form.chakana) || 0,
+      optom: sonQiymat(form.optom),
+      chakana: sonQiymat(form.chakana),
       rang: form.rang || '',
     };
     updateTunikaBaza([...tunikaBaza, yangi]);
@@ -153,11 +159,11 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToa
             </div>
             <div>
               <label className="block text-slate-500 mb-1">Optom narx</label>
-              <input type="number" value={form.optom} onWheel={(e) => e.target.blur()} onChange={(e) => setForm({ ...form, optom: e.target.value })} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+              <input type="text" inputMode="decimal" value={form.optom} onWheel={(e) => e.target.blur()} onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setForm({ ...form, optom: v }); }} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
             </div>
             <div>
               <label className="block text-slate-500 mb-1">Chakana narx</label>
-              <input type="number" value={form.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => setForm({ ...form, chakana: e.target.value })} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
+              <input type="text" inputMode="decimal" value={form.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setForm({ ...form, chakana: v }); }} placeholder="0" className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums" />
             </div>
           </div>
           <RangTanla value={form.rang} onPick={(r) => setForm({ ...form, rang: r })} groups={rangGuruh} />
@@ -193,8 +199,8 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToa
                 <div className="grid grid-cols-2 gap-2">
                   <input value={editForm.nomi} onChange={(e) => setEditForm({ ...editForm, nomi: e.target.value })} className="px-2 py-1 border bg-white rounded" />
                   <input value={editForm.qalinlik} onChange={(e) => setEditForm({ ...editForm, qalinlik: e.target.value })} className="px-2 py-1 border bg-white rounded" />
-                  <input type="number" value={editForm.optom} onWheel={(e) => e.target.blur()} onChange={(e) => setEditForm({ ...editForm, optom: e.target.value })} className="px-2 py-1 border bg-white rounded" />
-                  <input type="number" value={editForm.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => setEditForm({ ...editForm, chakana: e.target.value })} className="px-2 py-1 border bg-white rounded" />
+                  <input type="text" inputMode="decimal" value={editForm.optom} onWheel={(e) => e.target.blur()} onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setEditForm({ ...editForm, optom: v }); }} className="px-2 py-1 border bg-white rounded" />
+                  <input type="text" inputMode="decimal" value={editForm.chakana} onWheel={(e) => e.target.blur()} onChange={(e) => { const v = sonMatn(e.target.value); if (v !== null) setEditForm({ ...editForm, chakana: v }); }} className="px-2 py-1 border bg-white rounded" />
                 </div>
                 <RangTanla value={editForm.rang} onPick={(r) => setEditForm({ ...editForm, rang: r })} groups={rangGuruh} />
                 <div className="flex gap-2">
@@ -203,8 +209,8 @@ export function ListlarTab({ tunikaBaza, updateTunikaBaza, ranglar = [], showToa
                     patch(t.id, {
                       nomi: editForm.nomi,
                       qalinlik: editForm.qalinlik,
-                      optom: parseFloat(editForm.optom) || 0,
-                      chakana: parseFloat(editForm.chakana) || 0,
+                      optom: sonQiymat(editForm.optom),
+                      chakana: sonQiymat(editForm.chakana),
                       rang: editForm.rang,
                     });
                     setEditingId(null); setEditForm(null);
