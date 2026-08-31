@@ -307,6 +307,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   // Joriy Firebase sessiya anonimmi (o'tish davri — eski login usuli ishlaydi)
   const [anonAuth, setAnonAuth]       = useState(false);
+  // Jonli Firebase sessiya identifikatori ('' = hali kirilmagan). Obunalar FAQAT
+  // sessiya bor bo'lganda ochiladi — aks holda qoidalar auth talab qilgani uchun
+  // permission-denied bo'lib, onSnapshot BUTUNLAY o'lib qoladi (qayta ulanmaydi).
+  const [authUid, setAuthUid]         = useState('');
   const [loading, setLoading]         = useState(true);
   const [online, setOnline]           = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [searchOpen, setSearchOpen]   = useState(false);
@@ -387,10 +391,12 @@ export default function App() {
         // ekranidagi do'kon nomi) uchun O'TISH DAVRIda anonim kiramiz.
         setCurrentUser(null);
         setAnonAuth(false);
+        setAuthUid('');
         setAuthReady(true);
         signInAnonymously(auth).catch((e) => console.error('Anon auth xatosi:', e));
         return;
       }
+      setAuthUid(u.uid);
       if (u.isAnonymous) {
         // O'TISH DAVRI: eski usul — localStorage'dagi user users kelganda
         // tiklanadi (quyidagi alohida effekt). Custom token userni bu tarmoq
@@ -429,7 +435,7 @@ export default function App() {
   // bo'lgach effekt qayta ishlab, obunalar yangi (rolli) sessiya bilan qayta
   // ochiladi — aks holda ilova abadiy skeletonda qolib ketardi.
   useEffect(() => {
-    if (!authReady) return undefined;
+    if (!authReady || !authUid) return undefined;
     const subs = [
       ['tunika-baza', setTunikaBaza],
       ['latok-data', setLatokData],
@@ -472,7 +478,7 @@ export default function App() {
       if (kelgan.size === subs.length) setLoading(false);
     }));
     return () => { unsubs.forEach((u) => u()); };
-  }, [authReady, currentUser?.id]);
+  }, [authReady, authUid, currentUser?.id]);
 
   // ----- 'users' obunasi (parollar bilan ishlash endi SERVERDA) -----
   // Founder (ro'yxatni ko'rsatish) va O'TISH DAVRIdagi anonim sessiya (eski login
@@ -480,7 +486,7 @@ export default function App() {
   // yozilmaydi. Qoidalar yopilgach anonim o'qish xato beradi — storage.subscribe
   // uni faqat log qiladi, ilova qotib qolmaydi.
   useEffect(() => {
-    if (!authReady) return undefined;
+    if (!authReady || !authUid) return undefined;
     if (!(anonAuth || currentUser?.role === 'founder')) return undefined;
     const unsub = storage.subscribe('users', (value) => {
       if (!Array.isArray(value)) return;
@@ -493,7 +499,7 @@ export default function App() {
         : value.filter(Boolean).map((u) => ({ id: u.id, login: u.login, role: u.role })));
     });
     return () => unsub();
-  }, [authReady, anonAuth, currentUser?.role]);
+  }, [authReady, authUid, anonAuth, currentUser?.role]);
 
   // Yozilayotgan zakasni avtomatik saqlash (sahifa yangilansa yo'qolmasin)
   useEffect(() => {
