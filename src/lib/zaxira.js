@@ -21,12 +21,29 @@ export const ZAXIRA_KEYS = [
 
 // Barcha zaxira kalitlarini Firestore'dan o'qib bitta obyektga yig'adi.
 // (Qo'lda yuklab olish ham, avtomatik Telegram zaxirasi ham shundan foydalanadi.)
+// Har kalit ALOHIDA try/catch bilan o'qiladi: Firestore qoidalari yopilgach ba'zi
+// kalitlar (masalan 'users' — faqat asoschi o'qiydi) ruxsat bermasligi mumkin —
+// bitta kalit yiqilgani uchun BUTUN zaxira yiqilib qolmasin.
 export async function zaxiraMalumot() {
   const data = {};
   await Promise.all(ZAXIRA_KEYS.map(async (k) => {
-    const snap = await getDoc(doc(db, 'shop', k));
-    if (snap.exists()) data[k] = snap.data().value;
+    try {
+      const snap = await getDoc(doc(db, 'shop', k));
+      if (snap.exists()) data[k] = snap.data().value;
+    } catch (e) {
+      console.warn('Zaxira: kalit o\'qilmadi (ruxsat yo\'q bo\'lishi mumkin):', k);
+    }
   }));
+  // Xavfsizlik: foydalanuvchilar ro'yxatidan OCHIQ MATNDAGI parol maydonini
+  // olib tashlaymiz — zaxira fayli (ayniqsa Telegramga ketadigani) parol sizdirmasin.
+  // parolHash qoladi: tiklashda loginlar ishlashda davom etadi.
+  if (Array.isArray(data.users)) {
+    data.users = data.users.map((u) => {
+      if (!u || typeof u !== 'object') return u;
+      const { parol, ...qolgani } = u;
+      return qolgani;
+    });
+  }
   return data;
 }
 

@@ -1,0 +1,119 @@
+rules_version = '2';
+
+// ============================================================
+//  FIRESTORE XAVFSIZLIK QOIDALARI — "Tunika sex"
+//
+//  Kirish turlari:
+//    1) Custom token (api/login.js beradi) — claims: rol, login.
+//       rol: 'founder' | 'admin' | 'ishchi'
+//    2) Anonim auth — FAQAT kompyuterdagi YOLO kamera xizmati
+//       uchun qoladi; u faqat yolo_* kalitlariga tegadi.
+//    3) Server (api/) — firebase-admin (service account) bilan
+//       ulanadi va bu qoidalarni CHETLAB O'TADI, ya'ni login,
+//       webhook va boshqa api funksiyalar ishlayveradi.
+//
+//  Ma'lumot modeli: har kalit 'shop/<key>' hujjati = { value: ... }
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Yordamchi funksiyalar ----------
+
+    // Foydalanuvchining roli (custom token claim); bo'lmasa bo'sh satr
+    function rol() {
+      return request.auth != null ? request.auth.token.get('rol', '') : '';
+    }
+
+    // Biror rol bilan kirganmi (custom token orqali)
+    function rolBor() {
+      return rol() in ['founder', 'admin', 'ishchi'];
+    }
+
+    // Boshqaruvchi rolmi (asoschi yoki admin)
+    function boshliqMi() {
+      return rol() in ['founder', 'admin'];
+    }
+
+    // Asoschimi
+    function asoschiMi() {
+      return rol() == 'founder';
+    }
+
+    // Anonim ulanish (YOLO kamera xizmati shu usulda kiradi)
+    function anonMi() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    // ---------- Kalit ro'yxatlari ----------
+
+    // YOLO kamera xizmatiga (anonim) ochiq kalitlar
+    function yoloKalitlari() {
+      return ['yolo_control', 'yolo_cameras', 'yolo_settings', 'yolo_kelish'];
+    }
+
+    // Umumiy qoidadan CHIQARILGAN maxfiy kalitlar:
+    //  - 'users'            → faqat asoschi (pastda alohida qoida)
+    //  - 'login-urinishlar' → faqat server (admin SDK); klientga UMUMAN ochilmaydi
+    function maxfiyKalitlar() {
+      return ['users', 'login-urinishlar'];
+    }
+
+    // Ishchi YOZA OLMAYDIGAN kalitlar (narx, katalog, xodimlar, sozlamalar).
+    // Ishchi bularni O'QIY oladi, lekin o'zgartira olmaydi;
+    // founder/admin esa yozadi ham.
+    // DIQQAT: 'ombor', 'ombor-harakat' va 'avanslar' bu ro'yxatga ATAYIN
+    // kiritilmagan — ilova zakas saqlanganda ombordan avtomatik chiqim
+    // yozadi (ishchi sessiyasida ham!) va Yo'qlama → Avans bo'limi ishchiga
+    // ochiq. Yopilsa shu oqimlar "Saqlashda xatolik" bilan buzilardi.
+    // Ular server orqali o'tkazilgach bu yerga qaytarish mumkin.
+    function ishchidanYopiqKalitlar() {
+      return [
+        // Narx va katalog
+        'tunika-baza', 'latok-data', 'dynamic-products', 'metrlilar',
+        'aksessuarlar', 'kaziroklar', 'kazirok-turlari', 'ranglar',
+        // Kurs va do'kon ma'lumotlari
+        'usd-rate', 'usd-olish', 'shop-name', 'shop-phone',
+        // Xodimlar va kadr sozlamalari
+        'ishchilar', 'lavozimlar', 'qobiliyatlar', 'kamchiliklar',
+        // Avtomatika va Telegram sozlamalari
+        'avto-ish',
+        'telegram-bot-token', 'telegram-chat-id', 'telegram-dxf-chats',
+        'telegram-settings', 'telegram-links', 'telegram_config', 'telegram_links',
+        // Kamera bog'lamalari
+        'camera-links', 'camera-unlinked'
+      ];
+    }
+
+    // ---------- Asosiy qoidalar: shop/<key> ----------
+
+    match /shop/{key} {
+
+      // 1) YOLO kamera xizmati (anonim) — faqat o'z kalitlari
+      allow read, write: if anonMi() && key in yoloKalitlari();
+
+      // 2) 'users' — faqat asoschi (parol hashlari shu yerda;
+      //    api/login.js admin SDK bilan o'qiydi, qoidaga bog'liq emas)
+      allow read, write: if key == 'users' && asoschiMi();
+
+      // 3) 'login-urinishlar' — hech qanday allow YO'Q: faqat server
+      //    (admin SDK) ishlatadi, klientga umuman kerak emas.
+
+      // 4) Qolgan barcha kalitlar:
+      //    O'qish — rol bilan kirgan har kim (maxfiy kalitlardan tashqari)
+      allow read: if rolBor() && !(key in maxfiyKalitlar());
+
+      //    Yozish — founder/admin hammasiga; ishchi faqat ish kalitlariga
+      //    (orders, klentlar, ustalar, yoqlama, jurnal, yolo_* va h.k.)
+      allow write: if rolBor()
+        && !(key in maxfiyKalitlar())
+        && (boshliqMi() || !(key in ishchidanYopiqKalitlar()));
+    }
+
+    // ---------- Boshqa hamma narsa yopiq ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -8,6 +8,7 @@
 //    (notified) — shu sabab bir ishchiga kuniga 1 DM + 1 guruh xabari.
 // ============================================================
 import { doc, runTransaction } from 'firebase/firestore';
+import { adminBormi } from './_firebase.js';
 
 export function bugunTashkent() {
   // en-CA → YYYY-MM-DD
@@ -23,14 +24,17 @@ export function vaqtTashkent() {
 }
 
 // Tranzaksiya: yo'qlama (keldi) + arrival-log (dedup). { firstTime, changed } qaytaradi.
+// MUHIM: getDb() FIREBASE_SERVICE_ACCOUNT bo'lsa ADMIN Firestore qaytaradi — unda
+// klient SDK'ning doc()/runTransaction() funksiyalari ishlamaydi (throw). Shuning
+// uchun ikkala rejim uchun ham alohida yo'l bor; tranzaksiya tanasi bitta (o'qishlar
+// yozuvlardan OLDIN — admin tranzaksiyada bu qat'iy talab).
 export async function markArrival(db, { date, ishchiId, personId, score }) {
-  const yoqRef = doc(db, 'shop', 'yoqlama');
-  const logRef = doc(db, 'shop', 'arrival-log');
-  return runTransaction(db, async (tx) => {
+  // exists — klientda funksiya (snap.exists()), adminda xususiyat (snap.exists)
+  const tana = async (tx, yoqRef, logRef, bormi) => {
     const logSnap = await tx.get(logRef);
     const yoqSnap = await tx.get(yoqRef);
-    const log = (logSnap.exists() ? (logSnap.data() || {}).value : null) || {};
-    const yoq = (yoqSnap.exists() ? (yoqSnap.data() || {}).value : null) || {};
+    const log = (bormi(logSnap) ? (logSnap.data() || {}).value : null) || {};
+    const yoq = (bormi(yoqSnap) ? (yoqSnap.data() || {}).value : null) || {};
 
     const existing = (log[date] && log[date][ishchiId]) || null;
     const firstTime = !existing || !existing.notified;
@@ -54,5 +58,14 @@ export async function markArrival(db, { date, ishchiId, personId, score }) {
     tx.set(logRef, { value: { [date]: { [ishchiId]: entry } } }, { merge: true });
 
     return { firstTime, changed, firstSeen: entry.firstSeen };
-  });
+  };
+
+  if (adminBormi()) {
+    const yoqRef = db.collection('shop').doc('yoqlama');
+    const logRef = db.collection('shop').doc('arrival-log');
+    return db.runTransaction((tx) => tana(tx, yoqRef, logRef, (s) => s.exists));
+  }
+  const yoqRef = doc(db, 'shop', 'yoqlama');
+  const logRef = doc(db, 'shop', 'arrival-log');
+  return runTransaction(db, (tx) => tana(tx, yoqRef, logRef, (s) => s.exists()));
 }

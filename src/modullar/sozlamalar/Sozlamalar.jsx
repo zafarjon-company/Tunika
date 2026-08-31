@@ -14,6 +14,7 @@ import {
   Pyramid, Flower, Bird, Trees, Droplet, CloudSnow, Croissant, Brush, Shirt,
   Cookie, Sailboat, Atom, TreeDeciduous, Rabbit, IceCream, Telescope,
   FlaskConical, Castle, PartyPopper, Ship, Feather, Carrot,
+  KeyRound, ShieldCheck,
 } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, rangChipStyle } from '../../components/ui.jsx';
 import { DEFAULT_USD_RATE, RANG_PALETTE, RANG_GROUPS } from '../../lib/constants.js';
@@ -167,7 +168,7 @@ function KeybindRow({ action, combo, onSet }) {
   );
 }
 
-export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], updateUsers, tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, tgChats = [], updateTgChats = () => {}, avtoIsh = null, updateAvtoIsh = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
+export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], apiUsers = async () => ({ ok: false, error: 'kirish' }), tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, tgChats = [], updateTgChats = () => {}, avtoIsh = null, updateAvtoIsh = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
   const [shopDraft, setShopDraft] = useState(shopName);
   const [phoneDraft, setPhoneDraft] = useState(shopPhone);
   const [tgTokenDraft, setTgTokenDraft] = useState(tgToken);
@@ -177,6 +178,9 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
   const [nLogin, setNLogin] = useState('');
   const [nParol, setNParol] = useState('');
   const [nRole, setNRole] = useState('admin'); // yangi foydalanuvchi roli: admin | ishchi
+  const [parolEditId, setParolEditId] = useState(null); // qaysi user paroli almashtirilmoqda
+  const [parolYangi, setParolYangi] = useState('');
+  const [userYuk, setUserYuk] = useState(false); // foydalanuvchi amali serverga ketmoqda
   const [nRang, setNRang] = useState('');
   const [kursAuto, setKursAuto] = useState(() => { try { return localStorage.getItem('usd-auto') === '1'; } catch (e) { return false; } });
   const [kursYuk, setKursYuk] = useState(false);
@@ -271,20 +275,53 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
 
   const founder = currentUser?.role === 'founder';
 
-  function addAdmin() {
+  // Server javobidagi xatoni o'zbekcha xabarga aylantirish (foydalanuvchi amallari)
+  function apiXabar(j) {
+    if (j?.error === 'sozlanmagan') return 'Server auth hali sozlanmagan (FIREBASE_SERVICE_ACCOUNT) — yo\'riqnomaga qarang';
+    if (j?.error === 'kirish' || j?.error === 'token') return 'Server bilan ishlash uchun chiqib, qaytadan kiring';
+    if (j?.error === 'ruxsat') return 'Bu amalga faqat asoschining haqqi bor';
+    if (j?.error === 'band') return 'Bunday login allaqachon bor';
+    if (j?.error === 'parol-qisqa') return 'Parol kamida 6 belgi bo\'lsin';
+    if (j?.error === 'kuting') return 'Juda ko\'p urinish — birozdan so\'ng qayta urining';
+    if (j?.error === 'tarmoq') return 'Tarmoq xatosi — internetni tekshiring';
+    return `Amal bajarilmadi${j?.error ? ` (${j.error})` : ''}`;
+  }
+
+  // Foydalanuvchi amallari endi SERVER orqali (apiUsers) — parollar klientda saqlanmaydi
+  async function addAdmin() {
     const l = nLogin.trim();
     if (!l || !nParol) { showToast('Login va parol kiriting'); return; }
-    if (users.some((u) => u.login.toLowerCase() === l.toLowerCase())) { showToast('Bunday login bor'); return; }
+    if (nParol.length < 6) { showToast('Parol kamida 6 belgi bo\'lsin'); return; }
+    if (users.some((u) => (u.login || '').toLowerCase() === l.toLowerCase())) { showToast('Bunday login bor'); return; }
     const role = nRole === 'ishchi' ? 'ishchi' : 'admin';
-    updateUsers([...users, { id: genId(), login: l, parol: nParol, role }]);
+    setUserYuk(true);
+    const j = await apiUsers({ amal: 'yarat', login: l, parol: nParol, rol: role });
+    setUserYuk(false);
+    if (!j?.ok) { showToast(apiXabar(j)); return; }
     logAction('user_qoshdi', `${l} (${rolNomi(role)})`);
     setNLogin(''); setNParol(''); setNRole('admin');
     showToast('Foydalanuvchi qo\'shildi');
   }
-  function setParol(id, parol) { updateUsers(users.map((u) => (u.id === id ? { ...u, parol } : u))); }
-  function removeUser(id) {
+  async function saqlaParol(id) {
+    const p = parolYangi;
+    if (p.length < 6) { showToast('Parol kamida 6 belgi bo\'lsin'); return; }
+    setUserYuk(true);
+    const j = await apiUsers({ amal: 'parol', id, yangiParol: p });
+    setUserYuk(false);
+    if (!j?.ok) { showToast(apiXabar(j)); return; }
     const u = users.find((x) => x.id === id);
-    updateUsers(users.filter((x) => x.id !== id));
+    if (u) logAction('user_parol', u.login);
+    setParolEditId(null); setParolYangi('');
+    showToast('Parol almashtirildi');
+  }
+  async function removeUser(id) {
+    const u = users.find((x) => x.id === id);
+    // Bitta bosishda o'chib ketmasin — tasdiq so'raladi (qaytarib bo'lmaydi)
+    if (!window.confirm(`"${u?.login || id}" foydalanuvchisi o'chirilsinmi?`)) return;
+    setUserYuk(true);
+    const j = await apiUsers({ amal: 'ochir', id });
+    setUserYuk(false);
+    if (!j?.ok) { showToast(apiXabar(j)); return; }
     if (u) logAction('user_ochirdi', `${u.login} (${rolNomi(u.role)})`);
     showToast('O\'chirildi');
   }
@@ -572,7 +609,10 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
       {founder && (
         <Card>
           <SectionTitle icon={Users}>Foydalanuvchilar</SectionTitle>
-          <p className="text-xs text-slate-500 mb-3">Faqat siz (asoschi) ko'rasiz. Yangi foydalanuvchi qo'shing — ular shu login/parol bilan kiradi. <b>Administrator</b> deyarli hamma narsani ko'radi; <b>Ishchi</b> faqat Savdo, Zakaslar, Mijoz va Yo'qlamani ko'radi (o'chirish/narx/jurnal yo'q).</p>
+          <p className="text-xs text-slate-500 mb-2">Faqat siz (asoschi) ko'rasiz. Yangi foydalanuvchi qo'shing — ular shu login/parol bilan kiradi. <b>Administrator</b> deyarli hamma narsani ko'radi; <b>Ishchi</b> faqat Savdo, Zakaslar, Mijoz va Yo'qlamani ko'radi (o'chirish/narx/jurnal yo'q).</p>
+          <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2 mb-3 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" /> Parollar endi server tomonda shifrlangan (hash) saqlanadi.
+          </p>
 
           <div className="p-3 bg-slate-50 border-2 border-slate-300 rounded-lg space-y-2 mb-3">
             <div className="grid grid-cols-2 gap-2">
@@ -584,8 +624,9 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
               <SegmentedControl value={nRole} onChange={setNRole}
                 options={[{ value: 'admin', label: 'Administrator' }, { value: 'ishchi', label: 'Ishchi' }]} />
             </div>
-            <button onClick={addAdmin} className="w-full py-2 bg-slate-900 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-1">
-              <Plus className="w-4 h-4" /> Foydalanuvchi qo'shish
+            <button onClick={addAdmin} disabled={userYuk}
+              className="w-full py-2 bg-slate-900 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-1 disabled:opacity-60">
+              <Plus className="w-4 h-4" /> {userYuk ? 'Yuborilmoqda…' : 'Foydalanuvchi qo\'shish'}
             </button>
           </div>
 
@@ -609,9 +650,27 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
                 </div>
                 {u.role !== 'founder' && (
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <input value={u.parol} onChange={(e) => setParol(u.id, e.target.value)} title="Parol"
-                      className="w-24 px-2 py-1 border border-slate-300 rounded text-xs bg-white" />
-                    <button onClick={() => removeUser(u.id)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    {parolEditId === u.id ? (
+                      <>
+                        <input type="password" value={parolYangi} onChange={(e) => setParolYangi(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saqlaParol(u.id); }}
+                          placeholder="Yangi parol (6+)" autoFocus autoComplete="new-password"
+                          className="w-28 px-2 py-1 border border-slate-300 rounded text-xs bg-white" />
+                        <button onClick={() => saqlaParol(u.id)} disabled={userYuk}
+                          className="px-2 py-1 rounded bg-slate-900 text-white text-xs font-semibold disabled:opacity-60">OK</button>
+                        <button onClick={() => { setParolEditId(null); setParolYangi(''); }}
+                          className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-600 hover:bg-slate-50">Bekor</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => { setParolEditId(u.id); setParolYangi(''); }}
+                          className="px-2 py-1 rounded-lg border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 inline-flex items-center gap-1">
+                          <KeyRound className="w-3 h-3" /> Parol almashtirish
+                        </button>
+                        <button onClick={() => removeUser(u.id)} disabled={userYuk}
+                          className="text-slate-400 hover:text-red-600 disabled:opacity-60"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

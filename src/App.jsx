@@ -43,7 +43,7 @@ const TEMA_ORN = {
   dracula: 'bat',
 };
 
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { signInAnonymously, signInWithCustomToken, signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase.js';
 import { storage, O_CHIR } from './lib/storage.js';
 import { fetchKurslar } from './lib/kurs.js';
@@ -85,8 +85,6 @@ import { JurnalTab } from './modullar/jurnal/index.jsx';
 import { tabKoradi, ruxsat } from './lib/ruxsat.js';
 import { applyTil, getTil, TILLAR } from './lib/til.js';
 import { getKeys, saveKeys, matchCombo } from './lib/keybind.js';
-
-const FOUNDER = { id: 'founder', login: 'Brutal', parol: '4252600ZZ', role: 'founder' };
 
 // Har mavzu — o'ziga xos effekt {t: harakat turi, c: rang, s: ikon-belgi (lucide)}
 const TEMA_FX = {
@@ -303,9 +301,12 @@ function TilSwitcher({ til, setTil }) {
 
 export default function App() {
   const [authReady, setAuthReady]     = useState(false);
-  const [usersReady, setUsersReady]   = useState(false);
   const [users, setUsers]             = useState([]);
-  const [currentUserId, setCurrentUserId] = useState(() => localStorage.getItem('current-user'));
+  // Kirgan foydalanuvchi {id, login, role} — server custom token'idan (claims) yoki
+  // O'TISH DAVRIda (server sozlanmagan) users ro'yxatidan tiklanadi.
+  const [currentUser, setCurrentUser] = useState(null);
+  // Joriy Firebase sessiya anonimmi (o'tish davri — eski login usuli ishlaydi)
+  const [anonAuth, setAnonAuth]       = useState(false);
   const [loading, setLoading]         = useState(true);
   const [online, setOnline]           = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [searchOpen, setSearchOpen]   = useState(false);
@@ -371,7 +372,6 @@ export default function App() {
   const [clientPicker, setClientPicker]   = useState(false);
   const [masterPicker, setMasterPicker]   = useState(false);
 
-  const currentUser = users.find((u) => u.id === currentUserId) || null;
   const role = currentUser?.role || 'ishchi';
 
   // Ruxsat etilmagan bo'limga tushib qolsa — Savdoga qaytariladi
@@ -379,16 +379,55 @@ export default function App() {
     if (currentUser && !tabKoradi(role, tab)) setTab('new');
   }, [currentUser, role, tab]);
 
-  // ----- Anonim kirish (Firestore qoidalari uchun) -----
+  // ----- Auth oqimi: custom token (server tekshirgan) yoki anonim (o'tish davri) -----
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) setAuthReady(true);
-      else signInAnonymously(auth).catch((e) => console.error('Anon auth xatosi:', e));
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        // Sessiya yo'q — LoginScreen ko'rinadi. Firestore o'qish (masalan login
+        // ekranidagi do'kon nomi) uchun O'TISH DAVRIda anonim kiramiz.
+        setCurrentUser(null);
+        setAnonAuth(false);
+        setAuthReady(true);
+        signInAnonymously(auth).catch((e) => console.error('Anon auth xatosi:', e));
+        return;
+      }
+      if (u.isAnonymous) {
+        // O'TISH DAVRI: eski usul — localStorage'dagi user users kelganda
+        // tiklanadi (quyidagi alohida effekt). Custom token userni bu tarmoq
+        // hech qachon ag'darmaydi (faqat u === null bo'lganda anonim kiriladi).
+        setAnonAuth(true);
+        setAuthReady(true);
+        return;
+      }
+      // Custom token — rol va login token claim'laridan olinadi
+      setAnonAuth(false);
+      try {
+        const t = await u.getIdTokenResult();
+        if (t.claims?.rol) {
+          setCurrentUser({ id: u.uid, login: t.claims.login || '', role: t.claims.rol });
+        }
+      } catch (e) { console.error('Token claims xatosi:', e); }
+      setAuthReady(true);
     });
     return () => unsub();
   }, []);
 
+  // O'TISH DAVRI: anonim sessiyada oldin kirgan user (localStorage 'current-user')
+  // users ro'yxati kelganda tiklanadi — eski xatti-harakat saqlanadi.
+  useEffect(() => {
+    if (!anonAuth || currentUser) return;
+    const id = localStorage.getItem('current-user');
+    if (!id) return;
+    const u = users.find((x) => x.id === id);
+    if (u) setCurrentUser({ id: u.id, login: u.login, role: u.role });
+  }, [anonAuth, users, currentUser]);
+
   // ----- Real-vaqt obuna (Firestore onSnapshot) — anon kirilgach -----
+  // MUHIM: currentUser?.id ham bog'liqlikda. Qoidalar yopilgach login ekranida
+  // (sessiyasiz/anonim) ochilgan obunalar permission-denied bilan BUTUNLAY
+  // o'ladi (onSnapshot xatodan keyin qayta tiklanmaydi). Kirish muvaffaqiyatli
+  // bo'lgach effekt qayta ishlab, obunalar yangi (rolli) sessiya bilan qayta
+  // ochiladi — aks holda ilova abadiy skeletonda qolib ketardi.
   useEffect(() => {
     if (!authReady) return undefined;
     const subs = [
@@ -432,16 +471,29 @@ export default function App() {
       kelgan.add(key);
       if (kelgan.size === subs.length) setLoading(false);
     }));
-    // Foydalanuvchilar (login/adminlar) — alohida; bo'sh bo'lsa asoschi seed qilinadi.
-    // MUHIM: faqat SERVER tasdiqlagan bo'sh hujjatda seed qilinadi — offline keshdan
-    // kelgan bo'sh snapshot butun ro'yxatni [FOUNDER] bilan yozib yubormasin.
-    const unsubUsers = storage.subscribe('users', (value, meta) => {
-      if (value && value.length) setUsers(value);
-      else if (!meta?.fromCache) { setUsers([FOUNDER]); storage.save('users', [FOUNDER]); }
-      setUsersReady(true);
+    return () => { unsubs.forEach((u) => u()); };
+  }, [authReady, currentUser?.id]);
+
+  // ----- 'users' obunasi (parollar bilan ishlash endi SERVERDA) -----
+  // Founder (ro'yxatni ko'rsatish) va O'TISH DAVRIdagi anonim sessiya (eski login
+  // usuli users bilan solishtiradi) uchun. Seed YO'Q — bo'sh kelsa hech narsa
+  // yozilmaydi. Qoidalar yopilgach anonim o'qish xato beradi — storage.subscribe
+  // uni faqat log qiladi, ilova qotib qolmaydi.
+  useEffect(() => {
+    if (!authReady) return undefined;
+    if (!(anonAuth || currentUser?.role === 'founder')) return undefined;
+    const unsub = storage.subscribe('users', (value) => {
+      if (!Array.isArray(value)) return;
+      // O'TISH DAVRIdagi anonim sessiyada eski login usuli parolni solishtirishi
+      // uchun yozuv TO'LIQ kerak. Custom-token (founder) sessiyasida esa
+      // parol/parolHash maydonlari xotirada saqlanmaydi — faqat ko'rsatiladigan
+      // qismi olinadi (himoya qatlamlaridan biri).
+      setUsers(anonAuth
+        ? value
+        : value.filter(Boolean).map((u) => ({ id: u.id, login: u.login, role: u.role })));
     });
-    return () => { unsubs.forEach((u) => u()); unsubUsers(); };
-  }, [authReady]);
+    return () => unsub();
+  }, [authReady, anonAuth, currentUser?.role]);
 
   // Yozilayotgan zakasni avtomatik saqlash (sahifa yangilansa yo'qolmasin)
   useEffect(() => {
@@ -498,9 +550,12 @@ export default function App() {
   // Til (uz lotin / kiril / rus) — butun ilova matnini global o'giradi
   useEffect(() => { applyTil(til); }, [til]);
 
-  // Dollar kursini avtomatik yangilash (olish + sotish) — ochilganda va kun davomida (har 3 soatda)
+  // Dollar kursini avtomatik yangilash (olish + sotish) — ochilganda va kun davomida (har 3 soatda).
+  // Faqat kurs yozish ruxsati bor rollarda (founder/admin) — ishchi qurilmasida
+  // Firestore qoidalari yozishni baribir rad etadi, behuda urinmaymiz.
   useEffect(() => {
     if (!authReady) return undefined;
+    if (!ruxsat(role, 'kurs')) return undefined;
     if (localStorage.getItem('usd-auto') !== '1') return undefined;
     const yangila = () => fetchKurslar()
       .then(({ olish, sotish }) => { updateUsdRate(sotish); updateUsdOlish(olish); })
@@ -508,19 +563,22 @@ export default function App() {
     yangila();
     const id = setInterval(yangila, 3 * 60 * 60 * 1000); // har 3 soatda
     return () => clearInterval(id);
-  }, [authReady]);
+  }, [authReady, role]);
 
   // ----- AVTOMATIK ISHLAR: kunlik zaxira + kunlik yakun-hisobot (Telegramga) -----
   // Kuniga BIR MARTA bajariladi. "Oxirgi bajarilgan kun" Firestore'da saqlanadi —
   // shu sabab bir nechta qurilma ochiq bo'lsa ham takror yuborilmaydi.
   const avtoRef = useRef({});
-  avtoRef.current = { avtoIsh, orders, yoqlama, ishchilar, ombor, shopName, tgToken, tgChatId, tgChats };
+  avtoRef.current = { avtoIsh, orders, yoqlama, ishchilar, ombor, shopName, tgToken, tgChatId, tgChats, rol: role };
   useEffect(() => {
     if (!authReady || loading) return undefined;
     let ishlayapti = false;
     async function tekshir() {
       if (ishlayapti) return;
       const s = avtoRef.current;
+      // Faqat zaxira ruxsati bor rollarda (founder/admin) — ishchi qurilmasida
+      // 'avto-ish' va zaxira kalitlariga qoidalar baribir ruxsat bermaydi.
+      if (!ruxsat(s.rol, 'zaxira')) return;
       const tg = { token: s.tgToken, chatId: s.tgChatId, chats: s.tgChats };
       if (!telegramSozlangan(tg)) return;           // bot sozlanmagan — hech narsa qilinmaydi
       const sana = toDateInput();
@@ -683,21 +741,98 @@ export default function App() {
   function logAction(amal, detail = '') { pushLog(currentUser, amal, detail); }
   function updateJurnal(v) { jurnalRef.current = v; setJurnal(v); persist('jurnal', v); }
 
-  function doLogin(login, parol) {
-    const l = (login || '').trim().toLowerCase();
-    const u = users.find((x) => x.login.toLowerCase() === l && x.parol === parol);
-    if (!u) return false;
-    localStorage.setItem('current-user', u.id);
-    setCurrentUserId(u.id);
-    pushLog(u, 'kirdi');
-    return true;
+  // "Kirdi" yozuvi — jurnal hali yuklanmagan bo'lsa (login ekranida obunalar
+  // kelmagan/qoidalar yopiq) darhol yozish butun jurnalni BITTA yozuv bilan
+  // almashtirib yuborardi. Shu sabab yozuv jurnal kelguncha kutib turadi.
+  const kutayotganKirdi = useRef(null);
+  useEffect(() => {
+    if (loading || !kutayotganKirdi.current) return;
+    pushLog(kutayotganKirdi.current, 'kirdi');
+    kutayotganKirdi.current = null;
+  }, [loading]); // eslint-disable-line
+  function kirdiLog(user) {
+    if (loading) kutayotganKirdi.current = user;
+    else pushLog(user, 'kirdi');
   }
-  function doLogout() {
+
+  // ----- KIRISH: login/parol SERVERDA tekshiriladi (scrypt hash) -----
+  // Server custom token qaytaradi; 'sozlanmagan' bo'lsa (FIREBASE_SERVICE_ACCOUNT
+  // env qo'yilmagan) — O'TISH DAVRI: eski usul (anon + users solishtirish).
+  async function doLogin(login, parol) {
+    let j = null;
+    try {
+      const r = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, parol }),
+      });
+      j = await r.json();
+    } catch (e) {
+      j = { ok: false, error: 'server' };
+    }
+    if (j?.ok) {
+      try {
+        await signInWithCustomToken(auth, j.token);
+      } catch (e) {
+        console.error('Custom token bilan kirish xatosi:', e);
+        return { ok: false, xabar: 'Kirishda xatolik — qayta urinib ko\'ring.' };
+      }
+      try { localStorage.setItem('current-user', j.user.id); } catch (e) { /* noop */ }
+      setCurrentUser(j.user);
+      kirdiLog(j.user);
+      return { ok: true };
+    }
+    if (j?.error === 'sozlanmagan' || j?.error === 'server') {
+      // O'TISH DAVRI: eski usul — anonim sessiyada users ro'yxatidan solishtirish.
+      // 'server' ham shu yo'lga tushadi (lokal dev'da /api yo'q; prod'da API
+      // vaqtincha yiqilsa ham biznes to'xtamasin). Qoidalar yopilgach bu yo'l
+      // o'z-o'zidan o'ladi: anonim sessiya users'ni o'qiy olmaydi.
+      if (!users.length) return { ok: false, xabar: 'Tizim sozlanmoqda — birozdan so\'ng qayta urining.' };
+      const l = (login || '').trim().toLowerCase();
+      const u = users.find((x) => (x.login || '').toLowerCase() === l && x.parol === parol);
+      if (!u) return { ok: false, xabar: 'Login yoki parol noto\'g\'ri.' };
+      try { localStorage.setItem('current-user', u.id); } catch (e) { /* noop */ }
+      setCurrentUser({ id: u.id, login: u.login, role: u.role });
+      kirdiLog({ id: u.id, login: u.login, role: u.role });
+      return { ok: true };
+    }
+    if (j?.error === 'kuting') return { ok: false, xabar: 'Juda ko\'p urinish — 10 daqiqadan so\'ng qayta urining.' };
+    return { ok: false, xabar: 'Login yoki parol noto\'g\'ri.' };
+  }
+  async function doLogout() {
     if (currentUser) pushLog(currentUser, 'chiqdi');
-    localStorage.removeItem('current-user');
-    setCurrentUserId(null);
+    try { localStorage.removeItem('current-user'); } catch (e) { /* noop */ }
+    setCurrentUser(null);
+    // signOut'dan keyin onAuthStateChanged null oladi va O'TISH DAVRI uchun QAYTA
+    // anonim kiradi — aks holda Firestore o'qish butunlay to'xtab, login
+    // ekranidagi do'kon nomi ham kelmay qolardi.
+    try { await signOut(auth); } catch (e) { console.error('Chiqish xatosi:', e); }
   }
+  // O'tish davri uchun qoladi (Sozlamalar endi bundan foydalanmaydi — apiUsers ishlatadi)
   function updateUsers(v) { setUsers(v); persist('users', v); }
+  // Foydalanuvchilarni SERVER orqali boshqarish (yarat / parol / o'chir).
+  // Natijadagi users ro'yxati PAROLSIZ — faqat ko'rsatish uchun setUsers qilinadi;
+  // klientdan storage.save('users', ...) endi chaqirilmaydi.
+  async function apiUsers(body) {
+    try {
+      const u = auth.currentUser;
+      const headers = { 'Content-Type': 'application/json' };
+      // Custom-token sessiyada idToken qo'shiladi. O'TISH DAVRIdagi anonim
+      // sessiyada token yuborilmaydi — server o'zi holatiga qarab aniq javob
+      // qaytaradi: env yo'q bo'lsa 'sozlanmagan' (yo'riqnoma xabari), env bor
+      // bo'lsa 'token' (qaytadan kirish kerak). Klient taxmin qilmaydi.
+      if (u && !u.isAnonymous) headers.Authorization = 'Bearer ' + (await u.getIdToken());
+      const j = await fetch('/api/users', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      }).then((r) => r.json());
+      if (j?.ok && Array.isArray(j.users)) setUsers(j.users);
+      return j;
+    } catch (e) {
+      return { ok: false, error: 'tarmoq' };
+    }
+  }
 
   function updateTunikaBaza(v) { setTunikaBaza(v); persist('tunika-baza', v); }
   function updateLatokData(v)  { setLatokData(v);  persist('latok-data', v); }
@@ -1265,7 +1400,7 @@ export default function App() {
     setMasterPicker(false);
   }
 
-  if (!authReady || !usersReady) {
+  if (!authReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-app">
         <div className="flex items-center gap-3 text-slate-700">
@@ -1492,7 +1627,7 @@ export default function App() {
             usdOlish={usdOlish}     updateUsdOlish={updateUsdOlish}
             tunikaBaza={tunikaBaza} ranglar={ranglar} updateRanglar={updateRanglar}
             ishchilar={ishchilar}
-            currentUser={currentUser} users={users} updateUsers={updateUsers}
+            currentUser={currentUser} users={users} updateUsers={updateUsers} apiUsers={apiUsers}
             tema={tema} setTema={(t) => { setTema(t); setTemaMode('fixed'); }}
             shrift={shrift} setShrift={setShrift}
             til={til} setTil={setTil}

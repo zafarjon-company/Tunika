@@ -8,6 +8,7 @@
 //  - callback_query   → tuzatish tugmalari (Keldi/Yarim/Kelmadi/Bu u emas)
 //  Doim 200 qaytaradi.
 // ============================================================
+import crypto from 'crypto';
 import { getDb, readShop, mergeShop, FieldValue } from './_firebase.js';
 import { sendMessage, answerCallbackQuery, editMessageCaption, editMessageText } from './_tg.js';
 import { findIshchiByPhone, normPhone } from './_match.js';
@@ -16,10 +17,20 @@ import { bugunTashkent, vaqtTashkent } from './_attendance.js';
 
 const MANAGER_ROLES = ['founder', 'admin', 'boshliq', 'boshqaruvchi', 'buxgalter'];
 
+// Timing-safe solishtirish (arrival.js dagi bilan bir xil uslub)
+function safeEqual(a, b) {
+  if (!a || !b) return false;
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  try { return crypto.timingSafeEqual(ba, bb); } catch { return false; }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
-  if (process.env.TG_WEBHOOK_SECRET
-      && req.headers['x-telegram-bot-api-secret-token'] !== process.env.TG_WEBHOOK_SECRET) {
+  // XAVFSIZLIK: secret MAJBURIY — env o'rnatilmagan bo'lsa ham 401 (fail-closed).
+  // Aks holda istalgan kishi webhook'ka soxta update yuborishi mumkin edi.
+  if (!safeEqual(req.headers['x-telegram-bot-api-secret-token'], process.env.TG_WEBHOOK_SECRET)) {
     return res.status(401).json({ ok: false });
   }
   const update = req.body || {};
