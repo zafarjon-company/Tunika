@@ -1089,6 +1089,7 @@ export default function App() {
         tanNarx: Math.round((it.tanNarxBirlik || 0) * (it.jamiMeyor || 0)), // foyda hisobi uchun tan narx
         rang: it.rang || '',
         teskariQuloq: !!it.teskariQuloq,
+        izoh: (it.izoh || '').trim(),          // shu tovar uchun alohida izoh (chekda chiqadi)
       })),
       payments: draft.payments.filter((p) => sonQiymat(p.amount) > 0).map((p) => ({
         ...p, amount: sonQiymat(p.amount)
@@ -1185,6 +1186,7 @@ export default function App() {
         zapas: sonQiymat(it.zapas), jamiMeyor: it.jamiMeyor || 0,
         birBirlikNarxi: it.birBirlikNarxi, jamiSumma: it.jamiSumma,
         rang: it.rang || '', teskariQuloq: !!it.teskariQuloq,
+        izoh: (it.izoh || '').trim(),
       })),
       kazRows: draftCalc.kazRows || [],
       kazData: { groups: [] },        // smetada DXF yo'q

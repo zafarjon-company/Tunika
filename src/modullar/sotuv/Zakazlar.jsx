@@ -351,6 +351,8 @@ function OrderCard({ order, usdRate, usdOlish, onPay, onDelete, onReceipt, onHol
                       <td className="py-1.5 pr-2">
                         <div className="text-slate-800 font-medium flex items-center flex-wrap gap-1">{d.nomi}<KanyokImg item={it} size="w-14 h-8" /><TeskariBadge item={it} /></div>
                         <div className="text-slate-500">{d.tafsilot}</div>
+                        {/* Tovar izohi — qator uchun yozilgan qo'shimcha eslatma */}
+                        {it.izoh && <div className="text-slate-500 italic text-xs">{it.izoh}</div>}
                       </td>
                       <td className="py-1.5 pr-2"><RangChip rang={it.rang} /></td>
                       <td className="py-1.5 text-right tabular-nums">{d.olchov}</td>

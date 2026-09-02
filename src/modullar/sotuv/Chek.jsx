@@ -136,7 +136,8 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
             <tr className="text-left bg-slate-100">
               <th className="py-1 px-1.5 font-semibold rounded-l-md">Nomi</th>
               <th className="py-1 px-1 font-semibold">Rang</th>
-              <th className="py-1 px-1 font-semibold text-right">O'lchov</th>
+              {/* Narxsizda oxirgi ustun O'lchov bo'ladi — o'ng burchak yumaloqligi unga o'tadi */}
+              <th className={`py-1 px-1 font-semibold text-right${narxsiz ? ' rounded-r-md' : ''}`}>O'lchov</th>
               {!narxsiz && <th className="py-1 px-1 font-semibold text-right">Narxi</th>}
               {!narxsiz && <th className="py-1 px-1.5 font-semibold text-right rounded-r-md">Jami</th>}
             </tr>
@@ -149,6 +150,8 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
                   <td className="py-1 px-1.5">
                     <div className="font-medium flex items-center flex-wrap gap-1">{d.nomi}<KanyokImg item={it} size="w-14 h-8" /><TeskariBadge item={it} /></div>
                     <div className="text-slate-500">{d.tafsilot}</div>
+                    {/* Tovar izohi — qator uchun yozilgan qo'shimcha eslatma */}
+                    {it.izoh && <div className="text-slate-500 italic text-xs">{it.izoh}</div>}
                   </td>
                   <td className="py-1 px-1"><RangChip rang={it.rang} /></td>
                   <td className="py-1 px-1 text-right tabular-nums">{d.olchov}</td>
@@ -191,16 +194,20 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
           </div>
         )}
 
-        {!narxsiz && !smeta && statBadge && (
+        {/* Holat nishoni — narx emas, shuning uchun narxsiz rejimda ham ko'rinadi */}
+        {!smeta && statBadge && (
           <div className="flex justify-center mb-2">
             <span className={`px-4 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${statBadge.c}`}><statBadge.Icon className="w-3.5 h-3.5" />{statBadge.t}</span>
           </div>
         )}
 
-        {!narxsiz && (
+        {/* Jami bloki: to'liq rejimda breakdown bilan; NARXSIZ rejimda ham ko'rinadi,
+            lekin IXCHAM — faqat Umumiy summa / To'landi / Qoldiq qarz (breakdown'siz).
+            Smeta + narxsiz birga bo'lmaydi (smetada narxsiz tugmasi yo'q). */}
+        {(!narxsiz || !smeta) && (
         <div className="rounded-xl border-2 border-slate-900 overflow-hidden">
-          {/* Summa TARKIBI — har bir bo'lak alohida qator (faqat bir nechta bo'lak bo'lsa) */}
-          {showBreakdown && (
+          {/* Summa TARKIBI — har bir bo'lak alohida qator (faqat bir nechta bo'lak bo'lsa; narxsizda yashirin) */}
+          {!narxsiz && showBreakdown && (
             <div className="px-2.5 py-1.5 space-y-0.5 bg-slate-50 border-b border-slate-200 text-[13px]">
               {bMahsulot > 0 && (
                 <div className="flex justify-between"><span className="text-slate-500">Tovarlar</span><span className="tabular-nums text-slate-700">{fmt(bMahsulot)} so'm</span></div>
@@ -241,7 +248,8 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         </div>
         )}
 
-        {!narxsiz && !smeta && order.payments && order.payments.length > 0 && (
+        {/* To'lovlar tarixi (oldi-berdi) — narxsiz rejimda ham ko'rinadi */}
+        {!smeta && order.payments && order.payments.length > 0 && (
           <div className="mt-2 text-xs text-slate-600">
             <div className="font-semibold mb-0.5">To'lovlar:</div>
             {order.payments.map((p, i) => (

@@ -283,9 +283,10 @@ export function isEskiNov(it) {
 // Qo'lda narx (narxOverride) qo'llanadi: eski narxni "qotirish" uchun.
 // Belgilangan bo'lsa — birBirlikNarxi shu qiymat, jamiSumma o'lchovga ko'ra qayta hisoblanadi.
 function applyOverride(r, item) {
-  const ov = parseFloat(item.narxOverride);
-  if (item.narxOverride == null || item.narxOverride === '' || Number.isNaN(ov) || ov <= 0) return r;
-  return { ...r, birBirlikNarxi: ov, jamiSumma: ov * (r.jamiMeyor || 0), narxOverride: ov };
+  // sonQiymat — qo'lda kiritilgan narx ("18 500" yoki "18500,5") ham to'g'ri o'qilsin
+  const ov = sonQiymat(item.narxOverride);
+  if (item.narxOverride == null || item.narxOverride === '' || !(ov > 0)) return r;
+  return { ...r, birBirlikNarxi: ov, jamiSumma: ov * (r.jamiMeyor || 0) };
 }
 
 // Zakas qatori hisob-kitobi. ctx = { tunikaBaza, metrlilar, aksessuarlar, kaziroklar, products }

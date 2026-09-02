@@ -11,7 +11,7 @@ import {
   CalendarClock, FileText,
 } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, KanyokImg, TeskariBadge, CountUp, rangChipStyle } from '../../components/ui.jsx';
-import { fmt, genId, metrliVariantlar, barchaRanglar, aksRangKerak, isKanyokAny, reducedMotion, toDateInput, sonMatn, sonQiymat } from '../../lib/helpers.js';
+import { fmt, genId, metrliVariantlar, barchaRanglar, aksRangKerak, isKanyokAny, reducedMotion, toDateInput, sonMatn, sonQiymat, sonAjrat, kursorOrni } from '../../lib/helpers.js';
 import { STANOK_OPTIONS } from '../../lib/constants.js';
 import { matchCombo } from '../../lib/keybind.js';
 
@@ -24,6 +24,10 @@ function focusNextNav(e) {
   if (i >= 0 && i < navs.length - 1) navs[i + 1].focus();
   else e.currentTarget.blur();
 }
+
+// Kursorni belgilangan o'ringa qo'yish (maydon fokusda bo'lmasa — e'tiborsiz).
+// Tolovlar.jsx dagi bilan bir xil usul — 3 talab ajratishda kursor sakramasligi uchun.
+const kursorQoy = (el, p) => { try { el.setSelectionRange(p, p); } catch (err) { /* noop */ } };
 
 // Raqamli maydon — inline tekshiruv (qizil chegara + silkinish + izoh)
 function NumField({ label, value, onChange, placeholder = '0', hint = "0 dan katta son kiriting", optional = false }) {
@@ -330,7 +334,12 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
             ) : (
               <div className="space-y-2.5">
                 {draftCalc.items.map((item, idx) => (
-                  <ItemRow key={item.id} idx={idx} item={item} removing={removingIds.has(item.id)}
+                  // narxOverride: narx inputiga har doim XOM satr kerak (aks holda yozayotganda
+                  // ajratgich/kasr o'chib ketadi). draftCalc hozircha xom qiymatni saqlab qolsa ham
+                  // (calcItem narxOverride ni qaytarmaydi), kafolat uchun draft'dagi asl satrni
+                  // uzatamiz (soni/uzunlik/zapas kabi).
+                  <ItemRow key={item.id} idx={idx} item={{ ...item, narxOverride: draft.items[idx]?.narxOverride }}
+                    removing={removingIds.has(item.id)}
                     tunikaBaza={tunikaBaza} metrlilar={metrlilar} colorOptions={colorOptions}
                     onUpdate={(patch) => updateItem(idx, patch)}
                     onDuplicate={() => duplicateItem(idx)}
@@ -411,6 +420,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                         <td className="py-1.5 pr-2">
                           <div className="font-medium text-slate-800 flex items-center gap-1">{it.nomi}<TeskariBadge item={it} /></div>
                           <div className="text-[11px] text-slate-500">{it.tafsilot}</div>
+                          {it.izoh && <div className="text-[11px] italic text-slate-400">{it.izoh}</div>}
                         </td>
                         <td className="py-1.5 px-1 text-center"><KanyokImg item={it} size="w-14 h-9" /></td>
                         <td className="py-1.5 px-1">
@@ -631,6 +641,63 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
   const metVar = metVariants[item.variantIndex || 0] || metVariants[0];
   const bolakLabel = metVar ? `${metVar.son} bo'lak` : '—';
 
+  // ----- Narx (1 birlik) tahrirlash -----
+  // Inputda: override bo'lsa — o'sha XOM satr; bo'lmasa — katalog narxi
+  // (override bo'sh paytdagi birBirlikNarxi aynan katalog narxi bo'ladi).
+  // Katalog narxi kasrli chiqishi mumkin (metrli: bo'lish natijasi) — 2 xonagacha yaxlitlab ko'rsatamiz.
+  // narxBosh — foydalanuvchi maydonni TOZALAGAN holat: fokus davomida bo'sh turishi kerak,
+  // aks holda oxirgi raqam o'chirilgan zahoti katalog narxi qaytib to'lib, yangi narx yozib bo'lmaydi.
+  const [narxBosh, setNarxBosh] = useState(false);
+  const narxOzgargan = sonQiymat(item.narxOverride) > 0; // qo'lda narx belgilangan
+  const narxXom = item.narxOverride != null && item.narxOverride !== ''
+    ? String(item.narxOverride)
+    : (narxBosh ? '' : String(Math.round((Number(item.birBirlikNarxi) || 0) * 100) / 100 || ''));
+
+  // 3 talab ajratib yozish + kursorni saqlash — Tolovlar.jsx dagi ajratibYoz uslubi.
+  function narxYoz(e) {
+    const el = e.target;
+    const eskiKorinish = sonAjrat(narxXom);
+    let xom = el.value;
+    let kursor = el.selectionStart == null ? xom.length : el.selectionStart;
+    const amal = e.nativeEvent && e.nativeEvent.inputType;
+
+    // Ajratuvchi bo'shliq o'chirilgan holat: raqamlar o'zgarmagani uchun bo'shliq
+    // qaytib qo'yiladi va "o'chmayotgandek" tuyuladi — o'rniga yonidagi raqamni o'chiramiz.
+    if (xom.length === eskiKorinish.length - 1 && sonMatn(xom) !== null && sonMatn(xom) === sonMatn(narxXom)) {
+      if (amal === 'deleteContentBackward' && kursor > 0) {
+        xom = xom.slice(0, kursor - 1) + xom.slice(kursor);
+        kursor -= 1;
+      } else if (amal === 'deleteContentForward' && kursor < xom.length) {
+        xom = xom.slice(0, kursor) + xom.slice(kursor + 1);
+      }
+    }
+
+    const v0 = sonMatn(xom);
+    if (v0 === null) {
+      // Yaroqsiz belgi — eski ko'rinishga qaytaramiz, kursor joyida qoladi
+      const qaytar = Math.max(0, Math.min(eskiKorinish.length, kursor - (xom.length - eskiKorinish.length)));
+      el.value = eskiKorinish;
+      kursorQoy(el, qaytar);
+      return;
+    }
+    // applyOverride parseFloat ishlatadi — vergul kasr saqlanmasin uchun nuqtaga almashtiramiz ("3,5" -> "3.5")
+    const v = v0.replace(/,/g, '.');
+
+    // Kursordan oldingi raqamlar soni bo'yicha yangi ko'rinishdagi o'rin
+    const oldingi = xom.slice(0, kursor);
+    const raqamOldin = oldingi.replace(/\D/g, '').length;
+    const yangi = sonAjrat(v);
+    let orin = kursorOrni(yangi, raqamOldin) + (/[.,]\s*$/.test(oldingi) ? 1 : 0);
+    orin = Math.max(0, Math.min(orin, yangi.length));
+
+    // DOM ni darhol yangilaymiz — React qayta chizganda qiymat mos tushadi, kursor joyida qoladi
+    el.value = yangi;
+    kursorQoy(el, orin);
+    setNarxBosh(v === ''); // tozalangan bo'lsa — katalog narxi darhol qaytib to'lmasin
+    onUpdate({ narxOverride: v }); // bo'sh ('') bo'lsa — katalog narxiga qaytadi
+    requestAnimationFrame(() => kursorQoy(el, orin)); // qayta chizilgandan keyin ham
+  }
+
   return (
     <div className={`border rounded-xl bg-slate-50/50 overflow-hidden transition-colors ${removing ? 'anim-item-out' : 'anim-item-in'} ${open ? 'border-slate-900' : 'border-slate-200'}`}>
       {/* ----- SARLAVHA (bosilganda ochiladi/yopiladi) ----- */}
@@ -646,6 +713,8 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
             </span>
             <span className="block text-[11px] text-slate-500 truncate">
               {olchovDisp(item)}{item.rang ? ` · ${item.rang}` : ''}
+              {/* Yopiq turganda izohning o'zi qisqartirib ko'rsatiladi (ochilganda input bor) */}
+              {!open && item.izoh ? <span className="italic text-slate-400"> · {item.izoh}</span> : null}
             </span>
           </span>
         </button>
@@ -789,21 +858,51 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
             </div>
           )}
 
-          {item.jamiSumma > 0 && (
-            <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs">
-              <span className="text-slate-500 flex items-center gap-1.5 flex-wrap">
-                Narxi: {fmt(item.birBirlikNarxi)} so'm / {item.birlik}
-                {item.narxOverride > 0 && (
-                  <button type="button" onClick={() => onUpdate({ narxOverride: '' })}
-                    title="Joriy katalog narxiga qaytarish"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold border border-amber-200 hover:bg-amber-200">
-                    Eski narx <X className="w-3 h-3" />
-                  </button>
+          {/* Narx (1 birlik) — tahrirlanadigan input + o'ngda Jami. Faqat ochilganda ko'rinadi. */}
+          <div className="flex items-end gap-2">
+            <div className="flex-1 min-w-0">
+              <span className="flex items-center gap-1.5 flex-wrap mb-1">
+                <label className="block text-xs text-slate-500">Narxi (1 birlik)</label>
+                {narxOzgargan && (
+                  <>
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold border border-amber-200">o'zgartirilgan</span>
+                    <button type="button" onClick={() => onUpdate({ narxOverride: '' })}
+                      title="Joriy katalog narxiga qaytarish"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold border border-amber-200 hover:bg-amber-200">
+                      Eski narx <X className="w-3 h-3" />
+                    </button>
+                  </>
                 )}
               </span>
-              <span className="font-bold text-slate-900 tabular-nums">{fmt(item.jamiSumma)} so'm</span>
+              <div className="flex items-center gap-1.5">
+                <input type="text" inputMode="decimal" value={sonAjrat(narxXom)}
+                  onWheel={(e) => e.target.blur()} onFocus={(e) => e.target.select()}
+                  onBlur={() => {
+                    setNarxBosh(false); // fokusdan chiqilganda bo'sh maydon yana katalog narxini ko'rsatadi
+                    // "0" yoki "." kabi kuchsiz qiymat qolib ketsa — override tozalanadi
+                    // (hisob baribir katalog narxida — input ham shu bilan mos tursin).
+                    if (item.narxOverride != null && item.narxOverride !== '' && !(sonQiymat(item.narxOverride) > 0)) onUpdate({ narxOverride: '' });
+                  }}
+                  onChange={narxYoz} placeholder="0"
+                  className={`w-full min-w-0 px-3 py-2 border-2 rounded-lg tabular-nums text-sm outline-none transition ${
+                    narxOzgargan ? 'border-amber-300 bg-amber-50/60 focus:border-amber-500' : 'border-slate-200 bg-white focus:border-slate-900'
+                  }`} />
+                <span className="text-[11px] text-slate-500 flex-shrink-0 whitespace-nowrap">so'm / {item.birlik}</span>
+              </div>
             </div>
-          )}
+            <div className="flex-shrink-0 text-right">
+              <label className="block text-xs text-slate-500 mb-1">Jami</label>
+              <div className="px-3 py-2 rounded-lg bg-white border-2 border-slate-200 text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                {fmt(item.jamiSumma)} so'm
+              </div>
+            </div>
+          </div>
+
+          {/* Izoh — shu tovarning o'ziga tegishli eslatma (chekda va hisob jadvalida ko'rinadi) */}
+          <input type="text" value={item.izoh || ''}
+            onChange={(e) => onUpdate({ izoh: e.target.value })}
+            placeholder="Izoh (shu tovar uchun, ixtiyoriy)"
+            className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white text-sm focus:border-slate-900 outline-none" />
         </div>
       )}
     </div>
