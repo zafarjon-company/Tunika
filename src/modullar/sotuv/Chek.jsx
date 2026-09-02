@@ -92,27 +92,27 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
   const showBreakdown = bParts.length >= 2;   // bitta bo'lak bo'lsa — jami = o'zi, takrorlamaymiz
   return (
     <>
-      {/* Accent sarlavha tasmasi (mavzu rangida) */}
-      <div className="bg-slate-900 text-white px-6 pt-6 pb-5 text-center">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/15 mb-2">
-          <Receipt className="w-6 h-6" />
+      {/* Accent sarlavha tasmasi (mavzu rangida) — IXCHAM: bo'sh joy kam, yozuv kattaroq */}
+      <div className="bg-slate-900 text-white px-3 pt-3.5 pb-3 text-center">
+        <div className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/15 mb-1.5">
+          <Receipt className="w-5 h-5" />
         </div>
         <h1 className="text-2xl font-bold tracking-tight leading-none">{shopName}</h1>
-        <p className="text-[11px] opacity-80 mt-1.5 uppercase tracking-[0.25em]">{smeta ? 'Narx taklifi (Smeta)' : 'Zakas · Chek'}</p>
-        <div className="flex justify-center flex-wrap gap-1.5 mt-3">
+        <p className="text-xs opacity-80 mt-1 uppercase tracking-[0.2em]">{smeta ? 'Narx taklifi (Smeta)' : 'Zakas · Chek'}</p>
+        <div className="flex justify-center flex-wrap gap-1.5 mt-2">
           {/* Smetada zakas hali saqlanmagan — № yo'q, faqat sana chipi qoladi */}
           {!smeta && order.number != null && order.number !== '' && (
-            <span className="px-3 py-1 rounded-full bg-white/15 text-[11px] font-semibold">№ {order.number}</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-xs font-semibold">№ {order.number}</span>
           )}
-          <span className="px-3 py-1 rounded-full bg-white/15 text-[11px]">{formatDate(order.createdAt)}</span>
+          <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-xs">{formatDate(order.createdAt)}</span>
           {order.masterName && order.masterName !== 'Boshqa' && (
-            <span className="px-3 py-1 rounded-full bg-white/15 text-[11px]">Usta: {order.masterName}{ustaTel && ustaTel.length ? ` · ${ustaTel.join(', ')}` : ''}</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-white/15 text-xs">Usta: {order.masterName}{ustaTel && ustaTel.length ? ` · ${ustaTel.join(', ')}` : ''}</span>
           )}
         </div>
       </div>
 
-      <div className="p-6 pt-5">
-        <div className="border border-slate-300 rounded-lg p-2.5 mb-3 text-xs bg-slate-50">
+      <div className="p-3 pt-2.5">
+        <div className="border border-slate-300 rounded-lg p-2 mb-2 text-[13px] bg-slate-50">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Mijoz</div>
           <div className="font-bold text-sm">{order.customer?.name}</div>
           {order.customer?.phones?.filter(Boolean).length > 0 && (
@@ -124,21 +124,21 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
 
         {/* Topshirish muddati — narx emas, shuning uchun narxsiz rejimda ham ko'rinadi */}
         {order.muddat && (
-          <div className="flex items-center gap-1.5 text-xs mb-3 px-2 py-1.5 border border-slate-300 rounded-lg bg-slate-50">
+          <div className="flex items-center gap-1.5 text-[13px] mb-2 px-2 py-1 border border-slate-300 rounded-lg bg-slate-50">
             <CalendarClock className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
             <span className="text-slate-600">Topshirish muddati:</span>
             <b className="text-slate-800 tabular-nums">{formatDay(String(order.muddat).slice(0, 10))}</b>
           </div>
         )}
 
-        <table className="w-full text-xs mb-3">
+        <table className="w-full text-[13px] mb-2">
           <thead>
             <tr className="text-left bg-slate-100">
-              <th className="py-1.5 px-2 font-semibold rounded-l-md">Nomi</th>
-              <th className="py-1.5 px-1 font-semibold">Rang</th>
-              <th className="py-1.5 px-1 font-semibold text-right">O'lchov</th>
-              {!narxsiz && <th className="py-1.5 px-1 font-semibold text-right">Narxi</th>}
-              {!narxsiz && <th className="py-1.5 px-2 font-semibold text-right rounded-r-md">Jami</th>}
+              <th className="py-1 px-1.5 font-semibold rounded-l-md">Nomi</th>
+              <th className="py-1 px-1 font-semibold">Rang</th>
+              <th className="py-1 px-1 font-semibold text-right">O'lchov</th>
+              {!narxsiz && <th className="py-1 px-1 font-semibold text-right">Narxi</th>}
+              {!narxsiz && <th className="py-1 px-1.5 font-semibold text-right rounded-r-md">Jami</th>}
             </tr>
           </thead>
           <tbody>
@@ -146,37 +146,37 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
               const d = itemDisp(it);
               return (
                 <tr key={it.id || 'it' + i} className="border-b border-slate-200 align-top">
-                  <td className="py-1.5 px-2">
+                  <td className="py-1 px-1.5">
                     <div className="font-medium flex items-center flex-wrap gap-1">{d.nomi}<KanyokImg item={it} size="w-14 h-8" /><TeskariBadge item={it} /></div>
                     <div className="text-slate-500">{d.tafsilot}</div>
                   </td>
-                  <td className="py-1.5 px-1"><RangChip rang={it.rang} /></td>
-                  <td className="py-1.5 px-1 text-right tabular-nums">{d.olchov}</td>
-                  {!narxsiz && <td className="py-1.5 px-1 text-right tabular-nums">{fmt(it.birBirlikNarxi)} so'm</td>}
-                  {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(d.jami)}</td>}
+                  <td className="py-1 px-1"><RangChip rang={it.rang} /></td>
+                  <td className="py-1 px-1 text-right tabular-nums">{d.olchov}</td>
+                  {!narxsiz && <td className="py-1 px-1 text-right tabular-nums">{fmt(it.birBirlikNarxi)} so'm</td>}
+                  {!narxsiz && <td className="py-1 px-1.5 text-right tabular-nums font-semibold">{fmt(d.jami)}</td>}
                 </tr>
               );
             })}
             {(order.aksessuarlar || []).map((a, i) => (
               <tr key={a.id || 'aks' + i} className="border-b border-slate-200 align-top">
-                <td className="py-1.5 px-2"><div className="font-medium">{a.nomi}</div><div className="text-slate-500">Aksessuar</div></td>
-                <td className="py-1.5 px-1"><RangChip rang={a.rang} /></td>
-                <td className="py-1.5 px-1 text-right tabular-nums">{a.soni} {a.birlik || 'dona'}</td>
-                {!narxsiz && <td className="py-1.5 px-1 text-right tabular-nums">{fmt(a.narx)} so'm</td>}
-                {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(a.jami)}</td>}
+                <td className="py-1 px-1.5"><div className="font-medium">{a.nomi}</div><div className="text-slate-500">Aksessuar</div></td>
+                <td className="py-1 px-1"><RangChip rang={a.rang} /></td>
+                <td className="py-1 px-1 text-right tabular-nums">{a.soni} {a.birlik || 'dona'}</td>
+                {!narxsiz && <td className="py-1 px-1 text-right tabular-nums">{fmt(a.narx)} so'm</td>}
+                {!narxsiz && <td className="py-1 px-1.5 text-right tabular-nums font-semibold">{fmt(a.jami)}</td>}
               </tr>
             ))}
             {/* KAZIROK — chizmadan avtomatik (material + 25% xizmat) */}
             {(kRows || []).map((r, i) => (
               <tr key={'kaz' + i} className="border-b border-slate-200 align-top">
-                <td className="py-1.5 px-2">
+                <td className="py-1 px-1.5">
                   <div className="font-medium">{kazRowNom(r)}</div>
                   <div className="text-slate-500">{r.listNom}{r.sizeLabel ? ` · ${r.sizeLabel}` : ''}</div>
                 </td>
-                <td className="py-1.5 px-1"><RangChip rang={r.rang} /></td>
-                <td className="py-1.5 px-1 text-right tabular-nums">{metrMatn(r.metr)} m</td>
-                {!narxsiz && <td className="py-1.5 px-1 text-right tabular-nums">{fmt(r.price)}+25%</td>}
-                {!narxsiz && <td className="py-1.5 px-2 text-right tabular-nums font-semibold">{fmt(r.jami)}</td>}
+                <td className="py-1 px-1"><RangChip rang={r.rang} /></td>
+                <td className="py-1 px-1 text-right tabular-nums">{metrMatn(r.metr)} m</td>
+                {!narxsiz && <td className="py-1 px-1 text-right tabular-nums">{fmt(r.price)}+25%</td>}
+                {!narxsiz && <td className="py-1 px-1.5 text-right tabular-nums font-semibold">{fmt(r.jami)}</td>}
               </tr>
             ))}
           </tbody>
@@ -185,14 +185,14 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         {/* Dastafka "ichida" bo'lsa — narxsiz rejimda ham ko'rinadi (mijoz dastafka bor-yo'qligini
             bilsin); summasi bo'lsa, u quyidagi summa tarkibida (breakdown) chiqadi. */}
         {order.dastafka?.ichida && (
-          <div className="flex justify-between items-center text-xs mb-3 px-1 border border-slate-200 rounded-lg p-2 bg-slate-50">
+          <div className="flex justify-between items-center text-[13px] mb-2 border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50">
             <span className="text-slate-600 flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> Dastafka xizmati</span>
             <span className="font-semibold text-slate-800">{narxsiz ? 'Ichida' : 'Ichida (narxga kiritilgan)'}</span>
           </div>
         )}
 
         {!narxsiz && !smeta && statBadge && (
-          <div className="flex justify-center mb-3">
+          <div className="flex justify-center mb-2">
             <span className={`px-4 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${statBadge.c}`}><statBadge.Icon className="w-3.5 h-3.5" />{statBadge.t}</span>
           </div>
         )}
@@ -201,7 +201,7 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         <div className="rounded-xl border-2 border-slate-900 overflow-hidden">
           {/* Summa TARKIBI — har bir bo'lak alohida qator (faqat bir nechta bo'lak bo'lsa) */}
           {showBreakdown && (
-            <div className="px-3 py-2.5 space-y-1 bg-slate-50 border-b border-slate-200 text-xs">
+            <div className="px-2.5 py-1.5 space-y-0.5 bg-slate-50 border-b border-slate-200 text-[13px]">
               {bMahsulot > 0 && (
                 <div className="flex justify-between"><span className="text-slate-500">Tovarlar</span><span className="tabular-nums text-slate-700">{fmt(bMahsulot)} so'm</span></div>
               )}
@@ -216,9 +216,9 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
               )}
             </div>
           )}
-          <div className="flex justify-between items-center bg-slate-900 text-white px-3 py-2.5">
-            <span className="text-sm font-semibold">Umumiy summa</span>
-            <b className="text-lg tabular-nums">{fmt(order.totalSum)} so'm</b>
+          <div className="flex justify-between items-center bg-slate-900 text-white px-2.5 py-2">
+            <span className="text-[15px] font-semibold">Umumiy summa</span>
+            <b className="text-xl tabular-nums">{fmt(order.totalSum)} so'm</b>
           </div>
           {/* Smetada to'lov/qarz yo'q — faqat taklif muddati haqida izoh */}
           {smeta ? (
@@ -226,9 +226,9 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
               Taklif 3 kun davomida amal qiladi. Narxlar o'zgarishi mumkin.
             </div>
           ) : (
-          <div className="p-3 space-y-1.5">
-            <div className="flex justify-between text-sm text-emerald-800"><span>To'landi</span><b className="tabular-nums">{fmt(order.totalPaid)} so'm</b></div>
-            <div className="flex justify-between items-center text-base pt-2 border-t-2 border-slate-200">
+          <div className="px-2.5 py-2 space-y-1">
+            <div className="flex justify-between text-[15px] text-emerald-800"><span>To'landi</span><b className="tabular-nums">{fmt(order.totalPaid)} so'm</b></div>
+            <div className="flex justify-between items-center text-base pt-1.5 border-t-2 border-slate-200">
               <span className="font-bold">Qoldiq qarz</span>
               <div className="text-right">
                 <b className="tabular-nums text-amber-800 block">{fmt(order.debt)} so'm</b>
@@ -242,7 +242,7 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         )}
 
         {!narxsiz && !smeta && order.payments && order.payments.length > 0 && (
-          <div className="mt-3 text-[11px] text-slate-600">
+          <div className="mt-2 text-xs text-slate-600">
             <div className="font-semibold mb-0.5">To'lovlar:</div>
             {order.payments.map((p, i) => (
               <div key={p.id || 'pay' + i} className="flex justify-between border-b border-slate-100 py-0.5 last:border-0">
@@ -254,7 +254,7 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         )}
 
         {order.notes && (
-          <div className="mt-3 text-xs border border-slate-300 rounded-lg p-2 bg-slate-50">
+          <div className="mt-2 text-[13px] border border-slate-300 rounded-lg p-2 bg-slate-50">
             <b>Izoh:</b> {order.notes}
           </div>
         )}
@@ -262,7 +262,7 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         {/* QR — zakas holatini kuzatish havolasi. To'q (dark) nusxada ham o'qilishi
             uchun QR OQ fonli ramka ichida beriladi. */}
         {qrSrc && (
-          <div className="mt-4 text-center">
+          <div className="mt-2.5 text-center">
             <div className="bg-white p-1.5 rounded-lg inline-block">
               <img src={qrSrc} alt="QR" width={110} height={110} style={{ display: 'block', width: '110px', height: '110px' }} />
             </div>
@@ -271,11 +271,10 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
           </div>
         )}
 
-        <div className="mt-4 pt-3 border-t border-dashed border-slate-300 text-center">
-          <div className="text-slate-300 tracking-[0.5em] text-xs mb-1">• • • • •</div>
+        <div className="mt-2.5 pt-2 border-t border-dashed border-slate-300 text-center">
           <p className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">{smeta ? 'Taklifimiz bilan tanishganingiz uchun rahmat!' : 'Xaridingiz uchun rahmat!'} <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /></p>
-          <div className="text-[11px] text-slate-400 mt-1">{shopName}</div>
-          {shopPhone && <div className="text-sm font-bold text-slate-700 mt-0.5 flex items-center justify-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {shopPhone}</div>}
+          <div className="text-xs text-slate-400 mt-0.5">{shopName}</div>
+          {shopPhone && <div className="text-[15px] font-bold text-slate-700 mt-0.5 flex items-center justify-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {shopPhone}</div>}
         </div>
       </div>
     </>

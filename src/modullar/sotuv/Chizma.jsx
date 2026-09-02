@@ -13,7 +13,9 @@ import { Card, SectionTitle } from '../../components/ui.jsx';
 import { mountChizma } from './chizmaEngine.js';
 
 export function ChizmaCard({ tunikaBaza = [] }) {
-  const [open, setOpen] = useState(() => localStorage.getItem('chizma-open') === '1');
+  // HAR DOIM yopiq ochiladi (foydalanuvchi xohishi) — chizmaning O'ZI baribir
+  // localStorage'da saqlanadi, ochilganda joyida turadi.
+  const [open, setOpen] = useState(false);
   const [full, setFull] = useState(false);
   const rootRef = useRef(null);
   const apiRef = useRef(null);
@@ -33,11 +35,6 @@ export function ChizmaCard({ tunikaBaza = [] }) {
   useEffect(() => {
     apiRef.current?.setTunikaBaza?.(tunikaBaza);
   }, [tunikaBaza]);
-
-  // Ochiq/yopiq holatni eslab qolamiz.
-  useEffect(() => {
-    try { localStorage.setItem('chizma-open', open ? '1' : '0'); } catch (e) { /* noop */ }
-  }, [open]);
 
   // To'liq ekranda orqa sahifa aylanmasin + Esc bilan chiqish.
   useEffect(() => {

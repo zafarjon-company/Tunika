@@ -278,19 +278,6 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
             </button>
           </Card>
 
-          {/* USTA */}
-          <Card>
-            <SectionTitle icon={Hammer}>Usta</SectionTitle>
-            <button onClick={onOpenMasterPicker}
-              className="w-full text-left px-3 py-3 rounded-xl border-2 border-slate-200 hover:border-slate-900 transition flex items-center gap-3">
-              <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center flex-shrink-0"><Hammer className="w-5 h-5" /></span>
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-slate-900 truncate">{draft.masterName}</div>
-              </div>
-              <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
-            </button>
-          </Card>
-
           {/* CHIZMA — xona konturi (zakas olishda hisob-kitob yordamchisi) */}
           <ChizmaCard tunikaBaza={tunikaBaza} />
 
@@ -354,6 +341,19 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
             <button onClick={onOpenProductPicker}
               className="mt-3 w-full py-2.5 rounded-lg border-2 border-dashed border-slate-300 text-slate-600 font-medium hover:bg-slate-50 hover:border-slate-400 flex items-center justify-center gap-2">
               <Plus className="w-4 h-4" /> Tovar qo'shish
+            </button>
+          </Card>
+
+          {/* USTA — kam ishlatilgani uchun eng pastda (foydalanuvchi xohishi) */}
+          <Card>
+            <SectionTitle icon={Hammer}>Usta</SectionTitle>
+            <button onClick={onOpenMasterPicker}
+              className="w-full text-left px-3 py-3 rounded-xl border-2 border-slate-200 hover:border-slate-900 transition flex items-center gap-3">
+              <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center flex-shrink-0"><Hammer className="w-5 h-5" /></span>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-slate-900 truncate">{draft.masterName}</div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
             </button>
           </Card>
         </div>
