@@ -33,7 +33,7 @@ export function avansSumma(entries) {
   }, 0);
 }
 
-export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, yoqlama = {}, usdRate, showToast }) {
+export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, yoqlama = {}, maoshlar = {}, usdRate, showToast }) {
   const [oy, setOy] = useState(toMonthInput());
   const [modal, setModal] = useState(null); // { ishchiId, payments: [...] }
   // Har bir ishchining yozuvlar ro'yxati alohida ochiladi. Sukut — yopiq.
@@ -110,7 +110,8 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
           const summa = avansSumma(oyAvanslar[i.id]);
           // Butun davr bo'yicha hisob (Hisobot > Ishchilar bilan bir xil) — avans
           // berishdan oldin ishchining haqiqiy qoldig'i ko'rinib tursin.
-          const h = ishchiHisobi(i, yoqlama, avanslar);
+          // "Hozirgi haqqi" to'langan maoshlarni ham ayiradi.
+          const h = ishchiHisobi(i, yoqlama, avanslar, maoshlar);
           return (
             <Card key={i.id}>
               <div className="flex items-center justify-between gap-2 mb-2">

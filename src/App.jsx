@@ -347,6 +347,8 @@ export default function App() {
   const [kamchiliklar, setKamchiliklar] = useState([]);
   const [yoqlama, setYoqlama]       = useState({});
   const [avanslar, setAvanslar]     = useState({});
+  // Maoshlar — { 'YYYY-MM': { ishchiId: [to'lov yozuvlari] } } (oy = QAYSI OY UCHUN)
+  const [maoshlar, setMaoshlar]     = useState({});
   const [jurnal, setJurnal]         = useState([]); // amallar jurnali (audit log)
   const [draft, setDraft]           = useState(() => {
     try {
@@ -453,6 +455,7 @@ export default function App() {
       ['ishchilar', setIshchilar],
       ['yoqlama', setYoqlama],
       ['avanslar', setAvanslar],
+      ['maoshlar', (v) => setMaoshlar(v && typeof v === 'object' ? v : {})],
       ['aksessuarlar', (v) => setAksessuarlar((v || []).map((a) => ({
         ...a, birlik: a.birlik || (/semichka|tom samarez/i.test(a.nomi) ? 'kg' : 'dona'),
       })))],
@@ -963,6 +966,12 @@ export default function App() {
   function setAvansYozuv(oy, ishchiId, list) {
     setAvanslar((prev) => ({ ...prev, [oy]: { ...(prev[oy] || {}), [ishchiId]: list } }));
     persistField('avanslar', { [oy]: { [ishchiId]: list } });
+  }
+  // Maosh — avans kabi faqat BITTA ishchi/oy katagini yozadi (merge).
+  // oy = maosh QAYSI OY UCHUN (to'lov sanasi emas — u yozuv createdAt'ida).
+  function setMaoshYozuv(oy, ishchiId, list) {
+    setMaoshlar((prev) => ({ ...prev, [oy]: { ...(prev[oy] || {}), [ishchiId]: list } }));
+    persistField('maoshlar', { [oy]: { [ishchiId]: list } });
   }
 
   // ----- Kazirok (chizmadan, avtomatik) — savdo hisobiga ulanadi -----
@@ -1582,13 +1591,15 @@ export default function App() {
             ishchilar={ishchilar} yoqlama={yoqlama}
             setYoqlamaKun={setYoqlamaKun} setYoqlamaBulk={setYoqlamaBulk}
             avanslar={avanslar} updateAvanslar={updateAvanslar} setAvansYozuv={setAvansYozuv}
+            maoshlar={maoshlar} setMaoshYozuv={setMaoshYozuv}
+            canMaosh={ruxsat(role, 'zaxira')}
             usdRate={usdRate} showToast={showToast}
           />
         )}
         {tab === 'hisobot' && (
           <HisobotModule
             ishchilar={ishchilar} orders={orders}
-            yoqlama={yoqlama} avanslar={avanslar} shopName={shopName}
+            yoqlama={yoqlama} avanslar={avanslar} maoshlar={maoshlar} shopName={shopName}
           />
         )}
         {tab === 'ishchilar' && (

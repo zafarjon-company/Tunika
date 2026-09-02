@@ -17,6 +17,8 @@ export const ZAXIRA_KEYS = [
   'telegram_config', 'telegram_links', 'yolo_cameras', 'yolo_control', 'yolo_kelish', 'yolo_settings', 'arrival-log',
   // Ombor (material qoldig'i) va avtomatik ishlar sozlamasi
   'ombor', 'ombor-harakat', 'avto-ish',
+  // Maoshlar — { 'YYYY-MM': { ishchiId: [to'lov yozuvlari] } }
+  'maoshlar',
 ];
 
 // Barcha zaxira kalitlarini Firestore'dan o'qib bitta obyektga yig'adi.

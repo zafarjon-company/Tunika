@@ -9,7 +9,7 @@ import React from 'react';
 import { Printer } from 'lucide-react';
 import { fmt, formatDay, formatDate } from '../../lib/helpers.js';
 
-export function IshchiChek({ ishchi, amallar, jamiIshlangan, jamiAvans, haqqi, shopName, onClose }) {
+export function IshchiChek({ ishchi, amallar, jamiIshlangan, jamiAvans, jamiMaosh = 0, haqqi, shopName, onClose }) {
   return (
     <div
       className="fixed inset-0 z-50 bg-slate-900/50 flex items-start justify-center p-4 overflow-y-auto"
@@ -58,6 +58,10 @@ export function IshchiChek({ ishchi, amallar, jamiIshlangan, jamiAvans, haqqi, s
           <div className="border-t-2 border-slate-900 pt-2 space-y-1 text-sm">
             <div className="flex justify-between"><span>Jami ishlangan:</span><b className="tabular-nums text-emerald-800">{fmt(jamiIshlangan)} so'm</b></div>
             <div className="flex justify-between"><span>Jami avans:</span><b className="tabular-nums text-red-700">− {fmt(jamiAvans)} so'm</b></div>
+            {/* Maosh berilgan bo'lsa — chek arifmetikasi haqqi bilan mos tursin */}
+            {jamiMaosh > 0 && (
+              <div className="flex justify-between"><span>Jami maosh (berilgan):</span><b className="tabular-nums text-indigo-700">− {fmt(jamiMaosh)} so'm</b></div>
+            )}
           </div>
 
           <div className="border-2 border-slate-900 rounded-lg bg-slate-50 px-4 py-3 mt-2">

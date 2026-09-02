@@ -595,28 +595,99 @@ export function avansYozuvlari(v, oy = '') {
   return [];
 }
 
+// ============================================================
+//  MAOSH HISOBI YADROSI
+// ------------------------------------------------------------
+//  BIZNES QOIDASI: maosh har oyning 5-sanasida O'TGAN OY uchun
+//  beriladi. 'maoshlar' modeli 'avanslar' bilan bir xil:
+//  { 'YYYY-MM': { ishchiId: [ {id,method,amount,rate,createdAt,notes} ] } }
+//  bu yerda oy = QAYSI OY UCHUN maosh (to'lov sanasi emas!).
+//  Barcha oy bo'yicha hisoblar quyidagi bitta mantiqdan o'tadi —
+//  ishchiHisobi ham, oylikBalans ham aynan shu funksiyalarni ishlatadi,
+//  shuning uchun ikkalasi hech qachon farqli natija bermaydi.
+// ============================================================
+
+// To'lov yozuvlari massivining SO'MDAGI yig'indisi.
+// (Dollorda -> amount * rate). Eski sonli format ham qabul qilinadi —
+// avansYozuvlari orqali o'zi normallashtiradi.
+export function tolovlarSummasi(entries) {
+  return avansYozuvlari(entries).reduce((s, p) => {
+    const amt = sonQiymat(p.amount);
+    return s + (p.method === 'Dollorda' ? amt * (sonQiymat(p.rate) || 0) : amt);
+  }, 0);
+}
+
+// FAQAT berilgan 'YYYY-MM' oyi bo'yicha ishlangan haq:
+// kunlik = oylikHaqq / oydagi kunlar; 'keldi' = to'liq kunlik, 'yarim' = yarmi.
+export function oyIshlangan(ishchi, yoqlama = {}, oy) {
+  if (!ishchi || !oy) return 0;
+  const oylik = Number(ishchi.oylikHaqq) || 0;
+  const kun = daysInMonth(oy);
+  const kunlikHaq = kun ? oylik / kun : 0;
+  let jami = 0;
+  for (const sana in yoqlama) {
+    if (!sana.startsWith(oy)) continue;
+    const holat = yoqlama[sana]?.[ishchi.id];
+    if (holat === 'keldi') jami += kunlikHaq;
+    else if (holat === 'yarim') jami += kunlikHaq / 2;
+  }
+  return jami;
+}
+
+// Yo'qlama, avans va maosh ma'lumotlarida uchraydigan BARCHA oylar to'plami.
+function barchaOylar(yoqlama = {}, avanslar = {}, maoshlar = {}) {
+  const oylar = new Set();
+  for (const sana in yoqlama) oylar.add(sana.slice(0, 7));
+  for (const oy in avanslar) oylar.add(oy);
+  for (const oy in maoshlar) oylar.add(oy);
+  return oylar;
+}
+
+// Bitta ishchining bitta oy bo'yicha xom sonlari (ichki yordamchi).
+function oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, oy) {
+  return {
+    ishlangan: oyIshlangan(ishchi, yoqlama, oy),
+    avans: tolovlarSummasi(avanslar[oy]?.[ishchi.id]),
+    maosh: tolovlarSummasi(maoshlar[oy]?.[ishchi.id]),
+  };
+}
+
 // Ishchining BUTUN DAVR bo'yicha hisobi — Hisobot > Ishchilar bilan bir xil qoida:
 //   ishlangan = yo'qlamadan yig'ilgan haq (keldi = oylik/oydagi kunlar, yarim = yarmi)
 //   avans     = olingan avanslar (dollar bo'lsa kursda so'mga)
-//   haqqi     = ishlangan − avans (hozirgi qo'lga tegadigan qoldiq)
-export function ishchiHisobi(ishchi, yoqlama = {}, avanslar = {}) {
-  if (!ishchi) return { ishlangan: 0, avans: 0, haqqi: 0 };
-  const oylik = Number(ishchi.oylikHaqq) || 0;
-  let ishlangan = 0;
-  for (const sana in yoqlama) {
-    const holat = yoqlama[sana]?.[ishchi.id];
-    if (!holat) continue;
-    const kun = daysInMonth(sana.slice(0, 7));
-    const kunlikHaq = kun ? oylik / kun : 0;
-    if (holat === 'keldi') ishlangan += kunlikHaq;
-    else if (holat === 'yarim') ishlangan += kunlikHaq / 2;
+//   maosh     = to'langan maoshlar (dollar bo'lsa kursda so'mga)
+//   haqqi     = ishlangan − avans − maosh (hozirgi qo'lga tegadigan qoldiq)
+// maoshlar bermasangiz ({} qoladi) — eski chaqiruvlar avvalgidek ishlayveradi.
+export function ishchiHisobi(ishchi, yoqlama = {}, avanslar = {}, maoshlar = {}) {
+  if (!ishchi) return { ishlangan: 0, avans: 0, maosh: 0, haqqi: 0 };
+  let ishlangan = 0; let avans = 0; let maosh = 0;
+  for (const oy of barchaOylar(yoqlama, avanslar, maoshlar)) {
+    const x = oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, oy);
+    ishlangan += x.ishlangan; avans += x.avans; maosh += x.maosh;
   }
-  let avans = 0;
-  for (const oy in avanslar) {
-    avansYozuvlari(avanslar[oy]?.[ishchi.id], oy).forEach((p) => {
-      const amt = sonQiymat(p.amount);
-      avans += p.method === 'Dollorda' ? amt * (Number(p.rate) || 0) : amt;
-    });
+  return { ishlangan, avans, maosh, haqqi: ishlangan - avans - maosh };
+}
+
+// Tanlangan 'YYYY-MM' oyi bo'yicha TO'LIQ hisob:
+//   boshida   = oldingi oylardan ko'chib kelgan qoldiq
+//               (Σ oy' < oy: ishlangan − avans − maosh)
+//   ishlangan = shu oyda ishlangan haq
+//   avans     = shu oyda olingan avanslar
+//   maosh     = SHU OY UCHUN allaqachon to'langan maoshlar
+//   yakun     = boshida + ishlangan − avans  (oy bo'yicha jami haq)
+//   qoldiq    = yakun − maosh                (hali to'lanishi kerak)
+// Teleskopik tenglik: qoldiq = Σ (oy' ≤ oy: ishlangan − avans − maosh), shuning
+// uchun ma'lumotdagi ENG SO'NGGI oy uchun qoldiq ishchiHisobi(...).haqqi bilan
+// aynan teng chiqadi — ikkalasi bitta yadrodan (oyXomHisob) o'tadi.
+export function oylikBalans(ishchi, yoqlama = {}, avanslar = {}, maoshlar = {}, oy) {
+  if (!ishchi || !oy) return { boshida: 0, ishlangan: 0, avans: 0, maosh: 0, yakun: 0, qoldiq: 0 };
+  let boshida = 0;
+  for (const o of barchaOylar(yoqlama, avanslar, maoshlar)) {
+    if (o >= oy) continue; // 'YYYY-MM' formatida satr taqqoslash yetarli
+    const x = oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, o);
+    boshida += x.ishlangan - x.avans - x.maosh;
   }
-  return { ishlangan, avans, haqqi: ishlangan - avans };
+  const { ishlangan, avans, maosh } = oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, oy);
+  const yakun = boshida + ishlangan - avans;
+  return { boshida, ishlangan, avans, maosh, yakun, qoldiq: yakun - maosh };
 }

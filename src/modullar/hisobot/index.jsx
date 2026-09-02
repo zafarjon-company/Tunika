@@ -8,7 +8,7 @@ import { HisobotZakaslar } from './Zakaslar.jsx';
 import { HisobotDashboard } from './Dashboard.jsx';
 import { HisobotKassa } from './Kassa.jsx';
 
-export function HisobotModule({ ishchilar, orders, yoqlama, avanslar, shopName }) {
+export function HisobotModule({ ishchilar, orders, yoqlama, avanslar, maoshlar, shopName }) {
   const [sub, setSub] = useState('dashboard');
 
   return (
@@ -32,7 +32,7 @@ export function HisobotModule({ ishchilar, orders, yoqlama, avanslar, shopName }
 
       {sub === 'dashboard' && <HisobotDashboard orders={orders} />}
       {sub === 'kassa' && <HisobotKassa orders={orders} />}
-      {sub === 'ishchilar' && <HisobotIshchilar ishchilar={ishchilar} yoqlama={yoqlama} avanslar={avanslar} shopName={shopName} />}
+      {sub === 'ishchilar' && <HisobotIshchilar ishchilar={ishchilar} yoqlama={yoqlama} avanslar={avanslar} maoshlar={maoshlar} shopName={shopName} />}
       {sub === 'zakaslar' && <HisobotZakaslar orders={orders} />}
     </div>
   );

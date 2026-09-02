@@ -2,7 +2,7 @@
 //  HISOBOT → ISHCHILAR
 // ------------------------------------------------------------
 //  Ishchilar ro'yxati. Ishchi ustiga bosilsa — uning barcha
-//  amallari (yo'qlama + avans) ko'rinadi.
+//  amallari (yo'qlama + avans + maosh) ko'rinadi.
 //  Ustunlar: Nom · Sana · Qiymat. Saralash: Sana / Qiymat / Nom.
 //  Yuqori-o'ngda hozirgi haqqi, past-o'ngda Chek tugmasi —
 //  faqat ishchiga kirilganda.
@@ -11,6 +11,7 @@
 //           yarim kun    = +kunlik haq / 2
 //           kelmadi      = 0
 //           avans        = −olingan summa (so'mda)
+//           maosh        = −berilgan maosh (so'mda)
 // ============================================================
 import React, { useState, useMemo } from 'react';
 import { ChevronRight, Printer, HardHat } from 'lucide-react';
@@ -26,7 +27,7 @@ function normEntries(v, oy) {
 }
 
 // Bitta ishchining barcha amallarini yig'ish
-function buildAmallar(ishchi, yoqlama, avanslar) {
+function buildAmallar(ishchi, yoqlama, avanslar, maoshlar) {
   const ops = [];
   const oylik = Number(ishchi.oylikHaqq) || 0;
 
@@ -49,14 +50,27 @@ function buildAmallar(ishchi, yoqlama, avanslar) {
       const amt = sonQiymat(p.amount);
       const som = p.method === 'Dollorda' ? amt * (p.rate || 0) : amt;
       const sana = p.createdAt ? p.createdAt.slice(0, 10) : `${oy}-01`;
-      ops.push({ id: `a-${p.id}`, turi: 'avans', nom: `Avans${p.notes ? ` · ${p.notes}` : ''}`, sana, qiymat: -som });
+      // id ga oy ham qo'shiladi: eski (sonli) formatda p.id har oyda 'eski'
+      // bo'lgani uchun ikki oyda takror kalit chiqib qolmasin (React key).
+      ops.push({ id: `a-${oy}-${p.id}`, turi: 'avans', nom: `Avans${p.notes ? ` · ${p.notes}` : ''}`, sana, qiymat: -som });
+    });
+  }
+
+  // Maosh amallari — oy kaliti "qaysi oy uchun", sana esa haqiqiy to'lov vaqti
+  // (createdAt); u bo'lmasa an'anaviy to'lov kuni — oyning 5-sanasi olinadi.
+  for (const oy in maoshlar || {}) {
+    normEntries(maoshlar[oy]?.[ishchi.id], oy).forEach((p) => {
+      const amt = sonQiymat(p.amount);
+      const som = p.method === 'Dollorda' ? amt * (p.rate || 0) : amt;
+      const sana = p.createdAt ? p.createdAt.slice(0, 10) : `${oy}-05`;
+      ops.push({ id: `m-${oy}-${p.id}`, turi: 'maosh', nom: `Maosh berildi${p.notes ? ` · ${p.notes}` : ''}`, sana, qiymat: -som });
     });
   }
 
   return ops;
 }
 
-export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, shopName }) {
+export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar = {}, shopName }) {
   const [selectedId, setSelectedId] = useState(null);
   const [sort, setSort] = useState('sana');
   const [chekOchiq, setChekOchiq] = useState(false);
@@ -65,16 +79,17 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
 
   const amallar = useMemo(() => {
     if (!ishchi) return [];
-    const ops = buildAmallar(ishchi, yoqlama, avanslar);
+    const ops = buildAmallar(ishchi, yoqlama, avanslar, maoshlar);
     if (sort === 'sana') ops.sort((a, b) => (a.sana < b.sana ? 1 : a.sana > b.sana ? -1 : 0)); // yangilari tepada
     else if (sort === 'qiymat') ops.sort((a, b) => b.qiymat - a.qiymat);
     else if (sort === 'nom') ops.sort((a, b) => a.nom.localeCompare(b.nom));
     return ops;
-  }, [ishchi, yoqlama, avanslar, sort]);
+  }, [ishchi, yoqlama, avanslar, maoshlar, sort]);
 
   const jamiIshlangan = amallar.filter((o) => o.qiymat > 0).reduce((s, o) => s + o.qiymat, 0);
   const jamiAvans = amallar.filter((o) => o.turi === 'avans').reduce((s, o) => s + Math.abs(o.qiymat), 0);
-  const haqqi = jamiIshlangan - jamiAvans;
+  const jamiMaosh = amallar.filter((o) => o.turi === 'maosh').reduce((s, o) => s + Math.abs(o.qiymat), 0);
+  const haqqi = jamiIshlangan - jamiAvans - jamiMaosh;
 
   // ----- 2 USTUN: chap (sticky ro'yxat) + o'ng (tanlangan ishchi tafsiloti) -----
   return (
@@ -125,9 +140,17 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
                   {ishchi.lavozim && <div className="text-xs text-slate-400">{ishchi.lavozim}</div>}
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
                 <StatBox label="Ishlangan" value={jamiIshlangan} suffix="so'm" color="emerald" />
                 <StatBox label="Avans" value={jamiAvans} suffix="so'm" color="amber" />
+                {/* Maosh — avansdan farqlansin (indigo); StatBox uslubi saqlanadi */}
+                <div className="bg-white rounded-xl border border-slate-200 p-3 text-center">
+                  <div className="text-[11px] text-slate-500 mb-0.5">Maosh</div>
+                  <div className="font-bold tabular-nums leading-tight text-indigo-700">
+                    {fmt(jamiMaosh)}
+                    <span className="text-[10px] font-normal text-slate-400 ml-0.5">so'm</span>
+                  </div>
+                </div>
                 <StatBox label="Hozirgi haqqi" value={haqqi} suffix="so'm" color={haqqi >= 0 ? 'emerald' : 'slate'} />
               </div>
             </Card>
@@ -153,10 +176,13 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
                   </thead>
                   <tbody>
                     {amallar.map((o) => (
-                      <tr key={o.id} className="border-b border-slate-100">
-                        <td className="py-2 px-3 text-slate-800">{o.nom}</td>
+                      // Maosh qatori avansdan vizual farqlansin — indigo fon va rang
+                      <tr key={o.id} className={`border-b border-slate-100 ${o.turi === 'maosh' ? 'bg-indigo-50/60' : ''}`}>
+                        <td className={`py-2 px-3 ${o.turi === 'maosh' ? 'text-indigo-800 font-medium' : 'text-slate-800'}`}>{o.nom}</td>
                         <td className="py-2 px-2 text-center tabular-nums text-slate-600">{formatDay(o.sana)}</td>
-                        <td className={`py-2 px-3 text-right tabular-nums font-semibold ${o.qiymat > 0 ? 'text-emerald-700' : o.qiymat < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                        <td className={`py-2 px-3 text-right tabular-nums font-semibold ${
+                          o.turi === 'maosh' ? 'text-indigo-700' : o.qiymat > 0 ? 'text-emerald-700' : o.qiymat < 0 ? 'text-red-600' : 'text-slate-400'
+                        }`}>
                           {o.qiymat > 0 ? '+' : ''}{fmt(o.qiymat)} so'm
                         </td>
                       </tr>
@@ -164,7 +190,7 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
                   </tbody>
                 </table>
                 {amallar.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-6">Hali amallar yo'q (yo'qlama yoki avans)</p>
+                  <p className="text-sm text-slate-400 text-center py-6">Hali amallar yo'q (yo'qlama, avans yoki maosh)</p>
                 )}
               </div>
             </Card>
@@ -183,7 +209,7 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
       {chekOchiq && ishchi && (
         <IshchiChek
           ishchi={ishchi} amallar={amallar}
-          jamiIshlangan={jamiIshlangan} jamiAvans={jamiAvans} haqqi={haqqi}
+          jamiIshlangan={jamiIshlangan} jamiAvans={jamiAvans} jamiMaosh={jamiMaosh} haqqi={haqqi}
           shopName={shopName} onClose={() => setChekOchiq(false)}
         />
       )}

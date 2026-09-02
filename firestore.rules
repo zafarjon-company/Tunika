@@ -63,6 +63,8 @@ service cloud.firestore {
     // Ishchi YOZA OLMAYDIGAN kalitlar (narx, katalog, xodimlar, sozlamalar).
     // Ishchi bularni O'QIY oladi, lekin o'zgartira olmaydi;
     // founder/admin esa yozadi ham.
+    // 'maoshlar' ham shu ro'yxatda — maosh berish faqat founder/admin ishi;
+    // ishchi o'qiy oladi (hisob-kitob ko'rinishi uchun), yozolmaydi.
     // DIQQAT: 'ombor', 'ombor-harakat' va 'avanslar' bu ro'yxatga ATAYIN
     // kiritilmagan — ilova zakas saqlanganda ombordan avtomatik chiqim
     // yozadi (ishchi sessiyasida ham!) va Yo'qlama → Avans bo'limi ishchiga
@@ -77,6 +79,8 @@ service cloud.firestore {
         'usd-rate', 'usd-olish', 'shop-name', 'shop-phone',
         // Xodimlar va kadr sozlamalari
         'ishchilar', 'lavozimlar', 'qobiliyatlar', 'kamchiliklar',
+        // Maoshlar (faqat boshliq yozadi)
+        'maoshlar',
         // Avtomatika va Telegram sozlamalari
         'avto-ish',
         'telegram-bot-token', 'telegram-chat-id', 'telegram-dxf-chats',
