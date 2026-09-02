@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Check, Wallet, ChevronDown } from 'lucide-react';
 import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
-import { fmt, toMonthInput, formatDate, makeBlankPayment, ishchiHisobi, sonQiymat } from '../../lib/helpers.js';
+import { fmt, toMonthInput, formatDate, makeBlankPayment, ishchiHisobi, sonQiymat, oyFaolmi } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 function oyLabel(oy) {
@@ -41,7 +41,10 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
   const toggle = (id) => setOchiq((o) => ({ ...o, [id]: !o[id] }));
 
   const oyAvanslar = avanslar[oy] || {};
-  const jami = ishchilar.reduce((s, i) => s + avansSumma(oyAvanslar[i.id]), 0);
+  // Tanlangan oyda faol bo'lganlar (kirmagan/ketganlar ko'rinmaydi;
+  // maydonlari yo'q eski ishchilar doim faol)
+  const faollar = ishchilar.filter((i) => oyFaolmi(i, oy));
+  const jami = faollar.reduce((s, i) => s + avansSumma(oyAvanslar[i.id]), 0);
 
   function openAdd(ishchiId) {
     setModal({ ishchiId, payments: [makeBlankPayment(usdRate)] });
@@ -104,8 +107,10 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
 
       {ishchilar.length === 0 ? (
         <Card><p className="text-sm text-slate-400 text-center py-6">Avval "Ishchilar → Ro'yxat" bo'limidan ishchi qo'shing</p></Card>
+      ) : faollar.length === 0 ? (
+        <Card><p className="text-sm text-slate-400 text-center py-6">Bu oyda faol ishchi yo'q</p></Card>
       ) : (
-        ishchilar.map((i) => {
+        faollar.map((i) => {
           const entries = normEntries(oyAvanslar[i.id]);
           const summa = avansSumma(oyAvanslar[i.id]);
           // Butun davr bo'yicha hisob (Hisobot > Ishchilar bilan bir xil) — avans

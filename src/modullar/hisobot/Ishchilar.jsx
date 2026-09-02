@@ -77,6 +77,13 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
 
   const ishchi = ishchilar.find((i) => i.id === selectedId) || null;
 
+  // Chap ro'yxatda HAMMASI ko'rinadi (tarix yo'qolmasin), lekin ishdan
+  // ketganlar oxiriga suriladi (barqaror sort — o'z ichki tartibi saqlanadi).
+  const royxat = useMemo(
+    () => [...ishchilar].sort((a, b) => (a.ishdanKetgan ? 1 : 0) - (b.ishdanKetgan ? 1 : 0)),
+    [ishchilar],
+  );
+
   const amallar = useMemo(() => {
     if (!ishchi) return [];
     const ops = buildAmallar(ishchi, yoqlama, avanslar, maoshlar);
@@ -102,14 +109,20 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
             <div className="text-center py-8 text-slate-400"><HardHat className="w-10 h-10 mx-auto mb-2 opacity-40" /><p className="text-sm">Ishchilar mavjud emas</p></div>
           ) : (
             <div className="space-y-1.5">
-              {ishchilar.map((i) => {
+              {royxat.map((i) => {
                 const sel = i.id === selectedId;
+                const ketgan = !!i.ishdanKetgan;
                 return (
                   <button key={i.id} onClick={() => { setSelectedId(i.id); setChekOchiq(false); setSort('sana'); }}
-                    className={`w-full text-left p-3 rounded-xl border flex items-center gap-3 text-sm transition ${sel ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}>
-                    <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-base flex-shrink-0">{(i.name || '?').charAt(0).toUpperCase()}</span>
+                    className={`w-full text-left p-3 rounded-xl border flex items-center gap-3 text-sm transition ${sel ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:bg-slate-50 hover:border-slate-300'} ${ketgan && !sel ? 'opacity-60' : ''}`}>
+                    <span className={`w-10 h-10 rounded-full text-white flex items-center justify-center font-bold text-base flex-shrink-0 ${ketgan ? 'bg-slate-400' : 'bg-slate-900'}`}>{(i.name || '?').charAt(0).toUpperCase()}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-slate-900 truncate">{i.name}</div>
+                      <div className="font-semibold text-slate-900 truncate flex items-center gap-1.5">
+                        <span className="truncate">{i.name}</span>
+                        {ketgan && (
+                          <span className="flex-shrink-0 text-[10px] font-semibold text-red-700 bg-red-50 border border-red-200 rounded-full px-1.5 py-px">ketgan</span>
+                        )}
+                      </div>
                       {i.lavozim && <div className="text-xs text-slate-400 truncate">{i.lavozim}</div>}
                     </div>
                     <ChevronRight className={`w-4 h-4 flex-shrink-0 ${sel ? 'text-slate-900' : 'text-slate-400'}`} />
@@ -138,6 +151,11 @@ export function HisobotIshchilar({ ishchilar = [], yoqlama = {}, avanslar = {}, 
                 <div className="min-w-0">
                   <div className="font-bold text-slate-900 text-lg leading-tight truncate">{ishchi.name}</div>
                   {ishchi.lavozim && <div className="text-xs text-slate-400">{ishchi.lavozim}</div>}
+                  {ishchi.ishdanKetgan && (
+                    <span className="inline-flex items-center text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 mt-0.5">
+                      Ishdan ketgan · {formatDay(ishchi.ishdanKetgan)}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">

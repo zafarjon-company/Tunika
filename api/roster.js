@@ -7,6 +7,13 @@
 // ============================================================
 import crypto from 'crypto';
 import { getDb, readShop } from './_firebase.js';
+import { bugunTashkent } from './_attendance.js';
+
+// Ishchi berilgan sanada faolmi? (src/lib/helpers.js dagi ishchiFaolmi bilan
+// bir xil qoida — api/ Node muhitida bo'lgani uchun lokal nusxa;
+// maydonlari yo'q eski ishchilar doim faol)
+const faol = (i, sana) => !(i.ishdanKetgan && i.ishdanKetgan < sana)
+  && !(i.ishgaKirgan && i.ishgaKirgan > sana);
 
 function safeEqual(a, b) {
   if (!a || !b) return false;
@@ -23,8 +30,10 @@ export default async function handler(req, res) {
   try {
     const db = await getDb();
     const ishchilar = (await readShop(db, 'ishchilar')) || [];
+    const bugun = bugunTashkent();
+    // Ishdan ketganlar (yoki hali ishga kirmaganlar) kameraga yuborilmaydi
     const roster = ishchilar
-      .filter((i) => i && i.id && i.name)
+      .filter((i) => i && i.id && i.name && faol(i, bugun))
       .map((i) => ({ id: i.id, name: i.name, phones: i.phones || [] }));
     return res.status(200).json({ ok: true, roster });
   } catch (e) {

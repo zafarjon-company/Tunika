@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { Card, SectionTitle } from '../../components/ui.jsx';
-import { toMonthInput, toDateInput, daysInMonth, oylikYoqlama } from '../../lib/helpers.js';
+import { toMonthInput, toDateInput, daysInMonth, oylikYoqlama, oyFaolmi } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 // Bosilganda holatlar shu tartibda almashinadi (oxiridan keyin — bo'sh)
@@ -34,6 +34,9 @@ export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, setYoqlamaKun })
   const kunSoni = daysInMonth(oy);
   const kunlar = Array.from({ length: kunSoni }, (_, i) => i + 1);
   const sanaOf = (kun) => `${oy}-${pad(kun)}`;
+  // Tanlangan oyda faol bo'lganlar (kirmagan/ketganlar ko'rinmaydi;
+  // maydonlari yo'q eski ishchilar doim faol)
+  const faollar = ishchilar.filter((i) => oyFaolmi(i, oy));
   // 0 = Yakshanba (dam olish kuni — yengil ajratiladi)
   const isYakshanba = (kun) => new Date(`${oy}-${pad(kun)}T00:00:00`).getDay() === 0;
 
@@ -66,6 +69,8 @@ export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, setYoqlamaKun })
 
       {ishchilar.length === 0 ? (
         <Card><p className="text-sm text-slate-400 text-center py-6">Avval "Ishchilar → Ro'yxat" bo'limidan ishchi qo'shing</p></Card>
+      ) : faollar.length === 0 ? (
+        <Card><p className="text-sm text-slate-400 text-center py-6">Bu oyda faol ishchi yo'q</p></Card>
       ) : (
         <Card padding="p-0">
           <div className="overflow-x-auto">
@@ -80,7 +85,7 @@ export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, setYoqlamaKun })
                 </tr>
               </thead>
               <tbody>
-                {ishchilar.map((i) => {
+                {faollar.map((i) => {
                   const sum = oylikYoqlama(yoqlama, oy, i.id);
                   return (
                     <tr key={i.id} className="border-t border-slate-100">

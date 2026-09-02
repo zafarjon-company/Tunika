@@ -2,15 +2,16 @@
 //  ISHCHILAR RO'YXATI (CRUD)
 // ============================================================
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Search, Edit3, Star, X, ArrowUp, ArrowDown, Send, Check, Copy } from 'lucide-react';
-import { Card, PhoneInput } from '../../components/ui.jsx';
-import { fmt, genId, formatDate, sonMatn, sonQiymat } from '../../lib/helpers.js';
+import { Plus, Trash2, Search, Edit3, Star, X, ArrowUp, ArrowDown, Send, Check, Copy, UserMinus, UserPlus } from 'lucide-react';
+import { Card, PhoneInput, SegmentedControl } from '../../components/ui.jsx';
+import { fmt, genId, formatDate, sonMatn, sonQiymat, toDateInput, formatDay, ishchiFaolmi } from '../../lib/helpers.js';
 import { storage } from '../../lib/storage.js';
 import { DarajaNishon, StarRating } from './Lavozimlar.jsx';
 import { NegativeRating } from './Kamchiliklar.jsx';
 import { TelegramSozlama } from './TelegramSozlama.jsx';
 
-const BLANK = { name: '', avatar: '', phones: [''], lavozimlar: [], oylikHaqq: '', qobiliyatlar: [], kamchiliklar: [], oylikTarix: [] };
+// ishgaKirgan/ishdanKetgan — 'YYYY-MM-DD'; bo'sh = azaldan ishlaydi / hozir ham ishlaydi
+const BLANK = { name: '', avatar: '', phones: [''], lavozimlar: [], oylikHaqq: '', qobiliyatlar: [], kamchiliklar: [], oylikTarix: [], ishgaKirgan: '', ishdanKetgan: '' };
 const lavOf = (i) => (i.lavozimlar?.length ? i.lavozimlar : (i.lavozim ? [i.lavozim] : []));
 
 // Rasmni kichraytirib (256px, kvadrat) JPEG dataURL ga aylantiradi.
@@ -44,6 +45,9 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
   const [adding, setAdding]   = useState(false);
   const [form, setForm]       = useState(BLANK);
   const [oylikDelta, setOylikDelta] = useState('');
+  const [holatFiltri, setHolatFiltri] = useState('faol'); // 'faol' | 'ketgan' | 'hammasi'
+  const [boshatishOchiq, setBoshatishOchiq] = useState(false); // "Ishdan bo'shatish" sana bloki
+  const [boshatishSana, setBoshatishSana] = useState(toDateInput());
   const [tgLinks, setTgLinks] = useState({});     // { ishchiId: {chat_id, username, ...} }
   const [tgCfg, setTgCfg]     = useState(null);    // { bot_username, arrival_template, enabled }
   useEffect(() => storage.subscribe('telegram_links', (v) => setTgLinks(v || {})), []);
@@ -54,18 +58,29 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
     (i.qobiliyatlar || []).reduce((s, q) => s + (q.ball || 0), 0)
     - (i.kamchiliklar || []).reduce((s, k) => s + (k.ball || 0), 0);
 
-  const filtered = ishchilar
-    .filter((i) =>
-      !query.trim() || i.name.toLowerCase().includes(query.toLowerCase()) ||
-      lavOf(i).some((n) => n.toLowerCase().includes(query.toLowerCase())) ||
-      (i.phones || []).some((p) => p.includes(query))
-    )
-    .sort((a, b) => ballOf(b) - ballOf(a)); // ball ko'p bo'lgani tepada
+  const bugun = toDateInput();
+  const qidirilgan = ishchilar.filter((i) =>
+    !query.trim() || i.name.toLowerCase().includes(query.toLowerCase()) ||
+    lavOf(i).some((n) => n.toLowerCase().includes(query.toLowerCase())) ||
+    (i.phones || []).some((p) => p.includes(query))
+  );
+  const faolSoni = qidirilgan.filter((i) => ishchiFaolmi(i, bugun)).length;
+  const ketganSoni = qidirilgan.length - faolSoni;
+  const filtered = qidirilgan
+    .filter((i) => (holatFiltri === 'hammasi' ? true : holatFiltri === 'faol' ? ishchiFaolmi(i, bugun) : !ishchiFaolmi(i, bugun)))
+    .sort((a, b) => {
+      // Ketganlar har doim ro'yxat oxirida ("hammasi" rejimida ham)
+      const af = ishchiFaolmi(a, bugun) ? 0 : 1;
+      const bf = ishchiFaolmi(b, bugun) ? 0 : 1;
+      if (af !== bf) return af - bf;
+      return ballOf(b) - ballOf(a); // ball ko'p bo'lgani tepada
+    });
 
-  function startAdd() { setForm(BLANK); setAdding(true); setEditing(null); }
+  // Yangi ishchi — ishga kirgan sana standart bugun
+  function startAdd() { setForm({ ...BLANK, ishgaKirgan: toDateInput() }); setAdding(true); setEditing(null); setBoshatishOchiq(false); }
   function startEdit(i) {
-    setForm({ name: i.name, avatar: i.avatar || '', phones: i.phones || [''], lavozimlar: lavOf(i), oylikHaqq: i.oylikHaqq || '', qobiliyatlar: i.qobiliyatlar || [], kamchiliklar: i.kamchiliklar || [], oylikTarix: i.oylikTarix || [] });
-    setEditing(i.id); setAdding(false);
+    setForm({ name: i.name, avatar: i.avatar || '', phones: i.phones || [''], lavozimlar: lavOf(i), oylikHaqq: i.oylikHaqq || '', qobiliyatlar: i.qobiliyatlar || [], kamchiliklar: i.kamchiliklar || [], oylikTarix: i.oylikTarix || [], ishgaKirgan: i.ishgaKirgan || '', ishdanKetgan: i.ishdanKetgan || '' });
+    setEditing(i.id); setAdding(false); setBoshatishOchiq(false); setBoshatishSana(toDateInput());
   }
 
   async function handleAvatar(e) {
@@ -157,10 +172,32 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
     // Tasdiqsiz o'chirish xavfli: yo'qlama/avans tarixi "yetim" qolib,
     // hisobotlardan g'oyib bo'ladi. Avval so'raymiz.
     const kim = ishchilar.find((i) => i.id === id);
-    if (!window.confirm(`"${kim?.name || 'Ishchi'}" o'chirilsinmi? Yo'qlama va avans tarixi hisobotlarda ko'rinmay qoladi.`)) return;
+    if (!window.confirm(`"${kim?.name || 'Ishchi'}" BUTUNLAY o'chirilsinmi? Yo'qlama va avans tarixi hisobotlarda ko'rinmay qoladi. Odatda "Ishdan bo'shatish" yetarli — tarix saqlanadi.`)) return;
     updateIshchilar(ishchilar.filter((i) => i.id !== id));
     setEditing(null); setAdding(false);
     showToast('Ishchi o\'chirildi');
+  }
+
+  // Ishdan bo'shatish: ishchi O'CHMAYDI — faqat ishdanKetgan sanasi yoziladi,
+  // yo'qlama/avans/maosh tarixi va qoldiq hisobi to'liq saqlanadi.
+  function ishdanBoshat() {
+    const kim = ishchilar.find((i) => i.id === editing);
+    if (!kim) return;
+    const sana = boshatishSana || toDateInput();
+    if (!window.confirm(`"${kim.name}" ${formatDay(sana)} dan ishdan bo'shatilsinmi? Tarixi va qoldiq hisobi saqlanadi.`)) return;
+    updateIshchilar(ishchilar.map((i) => (i.id === editing ? { ...i, ishdanKetgan: sana } : i)));
+    setEditing(null); setAdding(false); setBoshatishOchiq(false);
+    showToast(`${kim.name} ishdan bo'shatildi`);
+  }
+
+  // Qayta ishga olish: ketgan sana o'chadi, ishga kirgan sana BUGUN bo'ladi
+  function qaytaIshgaOl() {
+    const kim = ishchilar.find((i) => i.id === editing);
+    if (!kim) return;
+    if (!window.confirm(`"${kim.name}" bugundan qayta ishga olinsinmi?`)) return;
+    updateIshchilar(ishchilar.map((i) => (i.id === editing ? { ...i, ishdanKetgan: '', ishgaKirgan: toDateInput() } : i)));
+    setEditing(null); setAdding(false);
+    showToast(`${kim.name} qayta ishga olindi`);
   }
 
   return (
@@ -170,6 +207,19 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
       <div className="relative mb-3">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ishchi qidirish..." className="w-full pl-10 pr-3 py-2.5 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none text-sm" />
+      </div>
+
+      {/* Faol / Ketgan / Hammasi filtri (ketganlar o'chirilmaydi — tarixi saqlanadi) */}
+      <div className="mb-3">
+        <SegmentedControl
+          value={holatFiltri}
+          onChange={setHolatFiltri}
+          options={[
+            { value: 'faol', label: `Faol (${faolSoni})` },
+            { value: 'ketgan', label: `Ketgan (${ketganSoni})` },
+            { value: 'hammasi', label: `Hammasi (${qidirilgan.length})` },
+          ]}
+        />
       </div>
 
       <button onClick={startAdd} className="w-full mb-2 py-2.5 rounded-lg bg-slate-900 text-white font-medium text-sm flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> Yangi ishchi</button>
@@ -235,6 +285,12 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
                 </div>
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="block text-xs text-slate-600 mb-1 font-medium">Ishga kirgan sana</label>
+            <input type="date" value={form.ishgaKirgan || ''} onChange={(e) => setForm({ ...form, ishgaKirgan: e.target.value })} className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white text-sm" />
+            <p className="text-[11px] text-slate-400 mt-1">Bo'sh qolsa — azaldan ishlaydi deb hisoblanadi.</p>
           </div>
 
           <div>
@@ -343,6 +399,33 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
             )}
           </div>
 
+          {/* Ishdan bo'shatish / Qayta ishga olish — o'chirishning xavfsiz o'rnini bosuvchi yo'l */}
+          {editing && (
+            <div className="pt-2 border-t border-slate-200">
+              {form.ishdanKetgan ? (
+                <button type="button" onClick={qaytaIshgaOl}
+                  className="w-full py-2 rounded-lg border-2 border-emerald-300 bg-emerald-50 text-emerald-700 text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-emerald-100">
+                  <UserPlus className="w-4 h-4" /> Qayta ishga olish
+                </button>
+              ) : !boshatishOchiq ? (
+                <button type="button" onClick={() => { setBoshatishSana(toDateInput()); setBoshatishOchiq(true); }}
+                  className="w-full py-2 rounded-lg border-2 border-amber-300 bg-amber-50 text-amber-700 text-sm font-medium inline-flex items-center justify-center gap-2 hover:bg-amber-100">
+                  <UserMinus className="w-4 h-4" /> Ishdan bo'shatish
+                </button>
+              ) : (
+                <div className="p-2 bg-amber-50 border-2 border-amber-200 rounded-lg space-y-2">
+                  <label className="block text-xs text-amber-700 font-medium">Qaysi sanadan ishdan bo'shatilsin?</label>
+                  <input type="date" value={boshatishSana} onChange={(e) => setBoshatishSana(e.target.value)} className="w-full px-3 py-2 border-2 border-amber-200 rounded-lg bg-white text-sm" />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setBoshatishOchiq(false)} className="flex-1 py-2 rounded-lg border-2 border-slate-200 bg-white text-slate-600 text-sm">Bekor</button>
+                    <button type="button" onClick={ishdanBoshat} className="flex-1 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700">Tasdiqlash</button>
+                  </div>
+                  <p className="text-[11px] text-amber-600">Ishchi o'chmaydi — yo'qlama, avans va qoldiq hisobi saqlanib qoladi.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2 pt-1">
             <button onClick={() => { setAdding(false); setEditing(null); }} className="flex-1 py-2 border-2 border-slate-200 text-slate-700 rounded-lg bg-white">Bekor</button>
             {editing && <button onClick={() => removeIshchi(editing)} className="py-2 px-3 border-2 border-red-200 text-red-700 rounded-lg bg-white"><Trash2 className="w-4 h-4" /></button>}
@@ -356,8 +439,10 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
           const lavList = lavOf(i);
           const daraja = Math.max(0, ...lavList.map((n) => lavozimlar.find((l) => l.nomi === n)?.daraja || 0));
           const ball = ballOf(i);
+          // Ketgan ishchi: ishdanKetgan sanasi o'tib bo'lgan (ketgan kunning o'zida hali faol)
+          const ketgan = !!i.ishdanKetgan && !ishchiFaolmi(i, bugun);
           return (
-            <button key={i.id} onClick={() => startEdit(i)} className="w-full text-left p-3 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-between gap-3 text-sm">
+            <button key={i.id} onClick={() => startEdit(i)} className={`w-full text-left p-3 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-between gap-3 text-sm${ketgan ? ' opacity-60' : ''}`}>
               <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center flex-shrink-0">
                 {i.avatar
                   ? <img src={i.avatar} alt="" className="w-full h-full object-cover" />
@@ -365,6 +450,12 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
               </div>
               <div className="flex-1 min-w-0 space-y-0.5">
                 <div className="font-medium text-slate-900 truncate">{i.name}</div>
+                {ketgan && (
+                  <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                    <UserMinus className="w-3 h-3" /> Ishdan ketgan · {formatDay(i.ishdanKetgan)}
+                  </div>
+                )}
+                {i.ishgaKirgan && <div className="text-[11px] text-slate-400">Ishga kirgan: {formatDay(i.ishgaKirgan)}</div>}
                 {lavList.length > 0 && <div className="text-xs text-slate-600 truncate">{lavList.join(' · ')}</div>}
                 {i.qobiliyatlar?.length > 0 && (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-emerald-700">

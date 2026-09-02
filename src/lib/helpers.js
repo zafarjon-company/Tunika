@@ -564,6 +564,40 @@ export function formatDay(sana) {
   return `${d}.${m}.${y}`;
 }
 
+// ============================================================
+//  ISHGA OLISH / ISHDAN BO'SHATISH (ishchi hech qachon o'chirilmaydi)
+// ------------------------------------------------------------
+//  Ishchi obyektidagi ixtiyoriy maydonlar:
+//    ishgaKirgan  = 'YYYY-MM-DD' (yo'q/bo'sh = azaldan ishlaydi)
+//    ishdanKetgan = 'YYYY-MM-DD' (yo'q/bo'sh = hozir ham ishlaydi;
+//                    ketgan kunning O'ZIda hali faol hisoblanadi)
+//  Sanalar 'YYYY-MM-DD' formatida bo'lgani uchun oddiy satr
+//  taqqoslash xronologik tartib bilan bir xil ishlaydi.
+// ============================================================
+
+// Ishchi berilgan sanada (sana='YYYY-MM-DD') faolmi?
+export function ishchiFaolmi(ishchi, sana) {
+  if (!ishchi) return false;
+  if (ishchi.ishdanKetgan && ishchi.ishdanKetgan < sana) return false; // ketib bo'lgan
+  if (ishchi.ishgaKirgan && ishchi.ishgaKirgan > sana) return false;   // hali ishga kirmagan
+  return true;
+}
+
+// Berilgan sanada faol bo'lgan ishchilar (standart — bugun).
+export function faolIshchilar(ishchilar = [], sana = toDateInput()) {
+  return ishchilar.filter((i) => ishchiFaolmi(i, sana));
+}
+
+// Ishchi berilgan oyda (oy='YYYY-MM') hech bo'lmasa bir kun faol bo'lganmi?
+// '-31' bilan taqqoslash satr bo'yicha — oydagi har qanday haqiqiy sana
+// oy+'-31' dan katta bo'lolmaydi, shuning uchun chegara sifatida yetarli.
+export function oyFaolmi(ishchi, oy) {
+  if (!ishchi || !oy) return false;
+  if (ishchi.ishdanKetgan && ishchi.ishdanKetgan < `${oy}-01`) return false; // oy boshlanmasidan ketgan
+  if (ishchi.ishgaKirgan && ishchi.ishgaKirgan > `${oy}-31`) return false;   // oy tugagach kirgan
+  return true;
+}
+
 // Berilgan oydagi kunlar soni. oy = 'YYYY-MM'.
 // (may → 31, aprel → 30, fevral → 28 yoki kabisada 29)
 export function daysInMonth(oy) {

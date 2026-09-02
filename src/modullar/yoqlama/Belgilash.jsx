@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { CalendarCheck, Clock } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, StatBox } from '../../components/ui.jsx';
-import { toDateInput, formatDay } from '../../lib/helpers.js';
+import { toDateInput, formatDay, ishchiFaolmi } from '../../lib/helpers.js';
 import { YOQLAMA_HOLATLAR } from '../../lib/constants.js';
 import { storage } from '../../lib/storage.js';
 
@@ -22,21 +22,25 @@ export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlama
   const kunlik = yoqlama[sana] || {};
   const kelishKun = kelish[sana] || {};
 
+  // Tanlangan sanada faol bo'lganlar (ishga kirmagan/ketgan ishchilar ko'rinmaydi;
+  // maydonlari yo'q eski ishchilar doim faol hisoblanadi)
+  const faollar = ishchilar.filter((i) => ishchiFaolmi(i, sana));
+
   function belgila(ishchiId, holat) {
     setYoqlamaKun(sana, ishchiId, holat || null);
   }
 
   function hammasiKeldi() {
     const map = {};
-    ishchilar.forEach((i) => { map[i.id] = 'keldi'; });
+    faollar.forEach((i) => { map[i.id] = 'keldi'; });
     setYoqlamaBulk(sana, map);
     showToast('Hammasi "Keldi" deb belgilandi');
   }
 
-  const belgilangan = ishchilar.filter((i) => kunlik[i.id]).length;
-  const keldiN = ishchilar.filter((i) => kunlik[i.id] === 'keldi').length;
-  const yarimN = ishchilar.filter((i) => kunlik[i.id] === 'yarim').length;
-  const kelmadiN = ishchilar.filter((i) => kunlik[i.id] === 'kelmadi').length;
+  const belgilangan = faollar.filter((i) => kunlik[i.id]).length;
+  const keldiN = faollar.filter((i) => kunlik[i.id] === 'keldi').length;
+  const yarimN = faollar.filter((i) => kunlik[i.id] === 'yarim').length;
+  const kelmadiN = faollar.filter((i) => kunlik[i.id] === 'kelmadi').length;
 
   const tint = (st) => (
     st === 'keldi' ? 'bg-emerald-50 border-emerald-200'
@@ -55,16 +59,16 @@ export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlama
             <input type="date" value={sana} onChange={(e) => setSana(e.target.value || toDateInput())}
               className="px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none text-sm" />
           </div>
-          {ishchilar.length > 0 && (
+          {faollar.length > 0 && (
             <button onClick={hammasiKeldi} className="px-3 py-2 rounded-lg border-2 border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50">
               Hammasi keldi
             </button>
           )}
           <div className="ml-auto text-xs text-slate-500 self-center">
-            {belgilangan}/{ishchilar.length} belgilandi
+            {belgilangan}/{faollar.length} belgilandi
           </div>
         </div>
-        {ishchilar.length > 0 && (
+        {faollar.length > 0 && (
           <div className="grid grid-cols-3 gap-2 mt-3">
             <StatBox label="Keldi" value={keldiN} color="emerald" />
             <StatBox label="Yarim kun" value={yarimN} color="amber" />
@@ -75,10 +79,12 @@ export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlama
 
       {ishchilar.length === 0 ? (
         <Card><p className="text-sm text-slate-400 text-center py-6">Avval "Ishchilar → Ro'yxat" bo'limidan ishchi qo'shing</p></Card>
+      ) : faollar.length === 0 ? (
+        <Card><p className="text-sm text-slate-400 text-center py-6">Bu sanada faol ishchi yo'q</p></Card>
       ) : (
         <Card>
           <div className="space-y-2">
-            {ishchilar.map((i) => (
+            {faollar.map((i) => (
               <div key={i.id} className={`flex flex-col sm:flex-row sm:items-center gap-2.5 p-3 rounded-xl border ${tint(kunlik[i.id])}`}>
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
                   <span className="w-9 h-9 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">{(i.name || '?').charAt(0).toUpperCase()}</span>

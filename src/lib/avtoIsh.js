@@ -8,7 +8,7 @@
 //  Bu faylda FAQAT sof funksiyalar: Firestore'ga yozilmaydi va Telegram'ga
 //  o'zi yuborilmaydi. Yuborish va 'oxirgi' ni saqlashni App.jsx bajaradi.
 // ============================================================
-import { fmt, formatDay, toDateInput } from './helpers.js';
+import { fmt, formatDay, toDateInput, ishchiFaolmi } from './helpers.js';
 import { kamQoldiqlar } from './ombor.js';
 
 export const AVTO_ISH_BLANK = {
@@ -98,8 +98,11 @@ export function kunlikHisobotMatni({
     return !!m && m <= kun;
   }).length;
 
-  // --- Yo'qlama ---
-  const ishList = Array.isArray(ishchilar) ? ishchilar.filter(Boolean) : [];
+  // --- Yo'qlama (faqat O'SHA KUNI faol bo'lgan ishchilar hisoblanadi;
+  //     maydonlari yo'q eski ishchilar doim faol) ---
+  const ishList = Array.isArray(ishchilar)
+    ? ishchilar.filter((w) => w && ishchiFaolmi(w, kun))
+    : [];
   const kunYoq = (yoqlama && typeof yoqlama === 'object' && yoqlama[kun]) || {};
   let keldi = 0, yarim = 0, kelmadi = 0;
   ishList.forEach((w) => {

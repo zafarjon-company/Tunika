@@ -24,6 +24,12 @@ function safeEqual(a, b) {
   try { return crypto.timingSafeEqual(ba, bb); } catch { return false; }
 }
 
+// Ishchi berilgan sanada faolmi? (src/lib/helpers.js dagi ishchiFaolmi bilan
+// bir xil qoida — api/ Node muhitida bo'lgani uchun lokal nusxa;
+// maydonlari yo'q eski ishchilar doim faol)
+const faol = (i, sana) => !(i.ishdanKetgan && i.ishdanKetgan < sana)
+  && !(i.ishgaKirgan && i.ishgaKirgan > sana);
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false });
   if (!safeEqual(req.headers['x-arrival-secret'], process.env.ARRIVAL_SECRET)) {
@@ -82,6 +88,17 @@ export default async function handler(req, res) {
         await sendPhotoOrText(managersChatId, photo_base64, cap);
       }
       return res.status(200).json({ ok: true, matched: false });
+    }
+
+    // --- ISHDAN BO'SHATILGAN (yoki hali ishga kirmagan) — yo'qlama YOZILMAYDI ---
+    if (!faol(ishchi, date)) {
+      if (managersChatId) {
+        const cap = `⚠️ <b>${ishchi.name}</b> ishdan bo'shatilgan, lekin kamerada ko'rindi\n`
+          + `🕐 ${vaqtTashkent()} · 📷 ${cam || '—'}\n`
+          + `<i>Yo'qlamaga yozilmadi.</i>`;
+        await sendPhotoOrText(managersChatId, photo_base64, cap);
+      }
+      return res.status(200).json({ ok: true, inactive: true });
     }
 
     // --- YO'QLAMA + DEDUP ---

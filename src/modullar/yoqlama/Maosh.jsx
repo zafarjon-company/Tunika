@@ -14,8 +14,8 @@ import { Banknote, Check, ChevronDown, Trash2 } from 'lucide-react';
 import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
 import {
-  fmt, sonQiymat, toMonthInput, formatDate, makeBlankPayment,
-  avansYozuvlari, oylikBalans,
+  fmt, sonQiymat, toMonthInput, formatDate, formatDay, makeBlankPayment,
+  avansYozuvlari, oylikBalans, oyFaolmi,
 } from '../../lib/helpers.js';
 import { OY_NOMLARI, DEFAULT_USD_RATE } from '../../lib/constants.js';
 
@@ -40,12 +40,16 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
 
   const oyMaoshlar = maoshlar[oy] || {};
 
-  // Tepadagi jami — barcha ishchilar bo'yicha hali to'lanishi kerak bo'lgan summa
+  // KO'RINADIGANLAR: tanlangan oyda faol bo'lganlar + KETGAN bo'lsa ham qoldig'i
+  // noldan farqli qolganlar (hisob-kitobi hali yopilmagan bo'lishi mumkin!).
+  // Har biriga oy balansi (b) birga hisoblab qo'yiladi — pastda qayta hisoblanmaydi.
+  const korinadigan = ishchilar
+    .map((i) => ({ i, b: oylikBalans(i, yoqlama, avanslar, maoshlar, oy) }))
+    .filter(({ i, b }) => oyFaolmi(i, oy) || Math.round(b.qoldiq) !== 0);
+
+  // Tepadagi jami — ko'rinayotgan ishchilar bo'yicha hali to'lanishi kerak bo'lgan summa
   // (manfiy qoldiq boshqa ishchinikini yashirmasin — faqat musbatlari qo'shiladi)
-  const jamiQoldiq = ishchilar.reduce((s, i) => {
-    const b = oylikBalans(i, yoqlama, avanslar, maoshlar, oy);
-    return s + (b.qoldiq > 0 ? b.qoldiq : 0);
-  }, 0);
+  const jamiQoldiq = korinadigan.reduce((s, { b }) => s + (b.qoldiq > 0 ? b.qoldiq : 0), 0);
 
   function openModal(ishchiId, qoldiq) {
     // Birinchi to'lov summasi oldindan qoldiq bilan to'ldiriladi
@@ -123,9 +127,10 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
 
       {ishchilar.length === 0 ? (
         <Card><p className="text-sm text-slate-400 text-center py-6">Avval "Ishchilar → Ro'yxat" bo'limidan ishchi qo'shing</p></Card>
+      ) : korinadigan.length === 0 ? (
+        <Card><p className="text-sm text-slate-400 text-center py-6">Bu oyda faol yoki qoldig'i bor ishchi yo'q</p></Card>
       ) : (
-        ishchilar.map((i) => {
-          const b = oylikBalans(i, yoqlama, avanslar, maoshlar, oy);
+        korinadigan.map(({ i, b }) => {
           const entries = avansYozuvlari(oyMaoshlar[i.id], oy);
           const tolangan = b.qoldiq <= 0;
           return (
@@ -136,6 +141,11 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
                   <div className="min-w-0">
                     <div className="font-bold text-slate-900 truncate">{i.name}</div>
                     {i.lavozim && <div className="text-xs text-slate-400">{i.lavozim}</div>}
+                    {i.ishdanKetgan && (
+                      <span className="inline-flex items-center text-[11px] font-semibold text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 mt-0.5">
+                        Ishdan ketgan · {formatDay(i.ishdanKetgan)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {tolangan && (
