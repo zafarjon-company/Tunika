@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Check, Wallet, ChevronDown } from 'lucide-react';
 import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
-import { fmt, toMonthInput, formatDate, makeBlankPayment, ishchiHisobi, sonQiymat, oyFaolmi } from '../../lib/helpers.js';
+import { fmt, toMonthInput, formatDate, formatDay, daysInMonth, makeBlankPayment, ishchiHisobi, sonQiymat, oyFaolmi } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 function oyLabel(oy) {
@@ -102,6 +102,14 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
             <div className="text-xs text-slate-500">Jami avans</div>
             <div className="font-bold tabular-nums text-amber-700">{fmt(jami)} so'm</div>
           </div>
+        </div>
+        {/* Oy tafsiloti — qaysi oy, necha kun, qaysi oraliq */}
+        <div className="mt-2 inline-flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">{oyLabel(oy)}</span>
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold tabular-nums">{daysInMonth(oy)} kun</span>
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 tabular-nums">
+            {formatDay(`${oy}-01`)} — {formatDay(`${oy}-${String(daysInMonth(oy)).padStart(2, '0')}`)}
+          </span>
         </div>
       </Card>
 

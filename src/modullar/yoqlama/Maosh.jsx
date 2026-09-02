@@ -15,7 +15,7 @@ import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
 import {
   fmt, sonQiymat, toMonthInput, formatDate, formatDay, makeBlankPayment,
-  avansYozuvlari, oylikBalans, oyFaolmi,
+  avansYozuvlari, oylikBalans, oyFaolmi, daysInMonth, oylikYoqlama,
 } from '../../lib/helpers.js';
 import { OY_NOMLARI, DEFAULT_USD_RATE } from '../../lib/constants.js';
 
@@ -39,6 +39,19 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
   const toggle = (id) => setOchiq((o) => ({ ...o, [id]: !o[id] }));
 
   const oyMaoshlar = maoshlar[oy] || {};
+  // Oy tafsiloti — foydalanuvchi qaysi oy va necha kun haqida gap ketayotganini
+  // bir qarashda ko'rsin (kunlik haq ham aynan shu kun soniga bo'linadi)
+  const kunSoni = daysInMonth(oy);
+  const oyOxiri = `${oy}-${String(kunSoni).padStart(2, '0')}`;
+
+  // Shu oyda ishchi necha kun "kelmadi" deb belgilangan (yo'qlama xulosasi uchun)
+  function kelmadiSoni(ishchiId) {
+    let n = 0;
+    for (const sana in yoqlama) {
+      if (sana.startsWith(oy) && yoqlama[sana]?.[ishchiId] === 'kelmadi') n += 1;
+    }
+    return n;
+  }
 
   // KO'RINADIGANLAR: tanlangan oyda faol bo'lganlar + KETGAN bo'lsa ham qoldig'i
   // noldan farqli qolganlar (hisob-kitobi hali yopilmagan bo'lishi mumkin!).
@@ -120,8 +133,15 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
             <div className="font-bold tabular-nums text-emerald-700">{fmt(jamiQoldiq)} so'm</div>
           </div>
         </div>
+        {/* Oy tafsiloti — qaysi oy, necha kun, qaysi oraliq */}
+        <div className="mt-2 inline-flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">{oyLabel(oy)}</span>
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold tabular-nums">{kunSoni} kun</span>
+          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 tabular-nums">{formatDay(`${oy}-01`)} — {formatDay(oyOxiri)}</span>
+        </div>
         <p className="mt-2 text-xs text-slate-400">
           Maosh 5-sanada O'TGAN OY uchun beriladi — yangi oy kunlari bu hisobga kirmaydi.
+          Kunlik haq = oylik ÷ {kunSoni} kun.
         </p>
       </Card>
 
@@ -133,6 +153,11 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
         korinadigan.map(({ i, b }) => {
           const entries = avansYozuvlari(oyMaoshlar[i.id], oy);
           const tolangan = b.qoldiq <= 0;
+          // Yo'qlama xulosasi va kunlik haq — "ishlangan" raqami qayerdan
+          // kelganini ko'rsatish uchun (oylik ÷ oydagi kunlar × ishlangan kunlar)
+          const y = oylikYoqlama(yoqlama, oy, i.id);
+          const kelmadi = kelmadiSoni(i.id);
+          const kunlik = kunSoni ? (Number(i.oylikHaqq) || 0) / kunSoni : 0;
           return (
             <Card key={i.id}>
               <div className="flex items-center justify-between gap-2 mb-2">
@@ -155,11 +180,21 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
                 )}
               </div>
 
+              {/* OY XULOSASI — oylik/kunlik haq va yo'qlama (ishlangan qayerdan kelgani) */}
+              <div className="flex flex-wrap gap-1.5 mb-2 text-[11px]">
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 tabular-nums">
+                  Oylik {fmt(i.oylikHaqq)} · kunlik {fmt(kunlik)} so'm
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 tabular-nums">
+                  Keldi {y.toliq} · yarim {y.yarim} · kelmadi {kelmadi}
+                </span>
+              </div>
+
               {/* HISOB JADVALI — oy bo'yicha to'liq hisob */}
               <div className="rounded-lg border border-slate-200 bg-slate-50 text-xs divide-y divide-slate-100 mb-2">
                 <Qator label="Oy boshida qoldiq" value={b.boshida}
                   klass={b.boshida >= 0 ? 'text-emerald-700' : 'text-red-600'} />
-                <Qator label="Shu oyda ishlangan" value={b.ishlangan} sign="+" />
+                <Qator label={`Shu oyda ishlangan (${y.jamiKun} kun)`} value={b.ishlangan} sign="+" />
                 <Qator label="Shu oyda avans" value={b.avans} sign="−" klass="text-amber-700" />
                 <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-100">
                   <span className="font-bold text-slate-700">= Oy yakuni (jami haq)</span>
