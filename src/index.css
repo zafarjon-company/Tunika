@@ -78,6 +78,10 @@
 /* Kanyok/Latok profil rasmlari — qora kontur to'q fonda ko'rinmaydi → oqartiramiz.
    Rangli offset (material rangi) <span> da bo'lgani uchun o'zgarmaydi. */
 .receipt-dark img { filter: invert(1); }
+/* QR (zakas holati) — to'q nusxada ham OQ fonda QORA qoladi: oq ramka saqlanadi,
+   invert qo'llanmaydi (aks holda oq-qora almashib, ba'zi skanerlar o'qimaydi). */
+.receipt-dark .receipt-qr { background-color: #fff !important; }
+.receipt-dark .receipt-qr img { filter: none; }
 
 /* ===== Raqamli inputlardagi strelkalarni yashirish ===== */
 input[type='number']::-webkit-inner-spin-button,
