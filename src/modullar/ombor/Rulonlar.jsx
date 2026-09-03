@@ -209,7 +209,7 @@ function TahrirKatak({
 //  narx=true bo'lsa qiymat yo'qligi "YO'Q" (qizil) bo'lib ko'rinadi.
 function HisobKatak({ qiymat, narx = false, matn = null }) {
   return (
-    <td className="px-2 py-1.5 text-right tabular-nums bg-slate-50 cursor-default text-slate-700 border-b border-slate-100">
+    <td className="px-2 py-1.5 text-right tabular-nums bg-slate-50 cursor-default text-slate-700">
       {qiymat == null
         ? <span className={narx ? 'text-red-600 font-semibold' : 'text-slate-300'}>{narx ? "YO'Q" : '—'}</span>
         : (matn != null ? matn : fmt(qiymat))}
@@ -238,7 +238,12 @@ function OgohBelgi({ h }) {
   const matn = h.ogohlar.map((o) => o.matn).join(' · ');
   const Ikon = h.daraja === 'sariq' ? AlertCircle : AlertTriangle;
   const rang = h.daraja === 'qizil' ? 'text-red-600' : h.daraja === 'toq' ? 'text-orange-600' : 'text-amber-600';
-  return <Ikon className={`w-3.5 h-3.5 inline-block flex-shrink-0 ${rang}`} title={matn} />;
+  // title SVG ustida ishlamaydi — shuning uchun o'rovchi span da beriladi
+  return (
+    <span title={matn} className="inline-flex flex-shrink-0">
+      <Ikon className={`w-3.5 h-3.5 ${rang}`} />
+    </span>
+  );
 }
 
 // ----- Rang namunasi -----
@@ -562,7 +567,7 @@ export function Rulonlar({
   ]), [nom1, nom2]);
 
   function eksport() {
-    if (!korinadigan.length) { toast('Eksport uchun qator yo\'q'); return; }
+    if (!korinadigan.length) { toast("Eksport uchun qator yo'q"); return; }
     const ustunlar = XLS_USTUN.map((u) => ({ nom: u.nom, kenglik: u.kenglik, tur: u.tur }));
     const qatorlarXls = korinadigan.map((q) => ({
       katak: XLS_USTUN.map((u) => {
@@ -630,9 +635,11 @@ export function Rulonlar({
       )}
 
       <Card>
-        <div className="flex items-center justify-between gap-2 mb-3">
+        {/* SectionTitle o'zida mb-3 bor — shuning uchun bu qatorga qo'shimcha
+            pastki bo'shliq kerak emas, tugmalar esa tepaga tekislanadi. */}
+        <div className="flex items-start justify-between gap-2">
           <SectionTitle icon={Layers}>Ombordagi rulonlar ({korinadigan.length})</SectionTitle>
-          <div className="flex gap-2 flex-shrink-0 -mt-3">
+          <div className="flex gap-2 flex-shrink-0">
             <button type="button" onClick={eksport} title="Excelga yuklash"
               className="px-3 py-2 rounded-lg border-2 border-slate-200 bg-white text-slate-700 text-xs font-medium flex items-center gap-1.5 hover:bg-slate-50">
               <FileSpreadsheet className="w-4 h-4" /> <span className="hidden sm:inline">Excel</span>
@@ -686,7 +693,7 @@ export function Rulonlar({
                     return (
                       <tr key={q.id} className={`border-b border-slate-100 align-middle ${FON[h.daraja] || ''}`}>
                         {/* № + ogohlantirish belgisi */}
-                        <td className="px-2 py-1.5 whitespace-nowrap border-b border-slate-100">
+                        <td className="px-2 py-1.5 whitespace-nowrap">
                           <span className="inline-flex items-center gap-1 tabular-nums text-slate-500">
                             <OgohBelgi h={h} />
                             {xomKor(q.nomer) || '—'}
@@ -694,7 +701,7 @@ export function Rulonlar({
                         </td>
 
                         {/* Rang (namuna + select) */}
-                        <td className="p-0 border-b border-slate-100">
+                        <td className="p-0">
                           <div className="flex items-center gap-1.5 pl-2">
                             <RangNamuna rang={q.rang} />
                             <div className="flex-1 min-w-0">
@@ -704,28 +711,28 @@ export function Rulonlar({
                           </div>
                         </td>
 
-                        <td className="p-0 border-b border-slate-100">
+                        <td className="p-0">
                           <TahrirKatak value={q.zavod} onSave={matnYoz(q, 'zavod')} canEdit={canEdit}
                             tur="select" variantlar={zavodlar} />
                         </td>
-                        <td className="p-0 border-b border-slate-100">
+                        <td className="p-0">
                           <TahrirKatak value={q.tur} onSave={matnYoz(q, 'tur')} canEdit={canEdit}
                             tur="select" variantlar={turlar} />
                         </td>
-                        <td className="p-0 border-b border-slate-100">
+                        <td className="p-0">
                           <TahrirKatak value={q.qalinlik} onSave={sonYoz(q, 'qalinlik')} canEdit={canEdit}
                             tur="son" hizala="right" />
                         </td>
-                        <td className="p-0 border-b border-slate-100">
+                        <td className="p-0">
                           <TahrirKatak value={q.ogirlik} onSave={sonYoz(q, 'ogirlik')} canEdit={canEdit}
                             tur="son" hizala="right" />
                         </td>
-                        <td className="p-0 border-b border-slate-100">
+                        <td className="p-0">
                           <TahrirKatak value={q.uzunlik} onSave={sonYoz(q, 'uzunlik')} canEdit={canEdit}
                             tur="son" hizala="right" korinish={uzunlikKorinish(h)}
                             title={h.uzunlikHisoblangan ? "og'irlikdan hisoblandi" : ''} />
                         </td>
-                        <td className="p-0 border-b border-slate-100">
+                        <td className="p-0">
                           <TahrirKatak value={q.qoldiq} onSave={sonYoz(q, 'qoldiq')} canEdit={canEdit}
                             tur="son" hizala="right" korinish={qoldiqKorinish(q)} />
                         </td>
@@ -738,11 +745,11 @@ export function Rulonlar({
                         <HisobKatak qiymat={h.sotuv1} narx />
                         <HisobKatak qiymat={h.sotuv2} narx />
 
-                        <td className="p-0 border-b border-slate-100 max-w-[220px]">
+                        <td className="p-0 max-w-[220px]">
                           <TahrirKatak value={q.izoh} onSave={matnYoz(q, 'izoh')} canEdit={canEdit} />
                         </td>
 
-                        <td className="px-2 py-1.5 text-center whitespace-nowrap border-b border-slate-100">
+                        <td className="px-2 py-1.5 text-center whitespace-nowrap">
                           {canEdit ? (
                             <span className="inline-flex gap-1">
                               {q.tasdiqlanmagan && (
