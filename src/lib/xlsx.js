@@ -118,8 +118,12 @@ function xmlSon(n) {
   if (Number.isInteger(n)) {
     try { return BigInt(n).toString(); } catch (e) { return s; }
   }
-  // Kichik kasrlar (1e-7) — 20 xona yetarli, ortiqcha nollar olib tashlanadi
-  return n.toFixed(20).replace(/0+$/, '').replace(/\.$/, '');
+  // Kichik kasrlar (1e-7). Kerakli o'nlik xonasi eksponentdan hisoblanadi —
+  // qat'iy toFixed(20) ishlatilsa 1e-21 kabi sonlar jimgina 0 ga aylanardi.
+  // (Pul/og'irlik qiymatlarida bunday sonlar uchramaydi, lekin yozuvchi
+  //  umumiy maqsadli — ma'lumot jimgina yo'qolmasin.)
+  const xona = Math.min(100, Math.max(0, -Math.floor(Math.log10(Math.abs(n))) + 17));
+  return n.toFixed(xona).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 // ============================================================
@@ -337,7 +341,12 @@ function sheetXml(varaq) {
   const kenglikDefault = (turIdx) => [22, 12, 16, 12][turIdx] || 14;
   const cols = ustunlar.length
     ? `<cols>${turlar.map((t, i) => {
-      const w = Number(ustunlar[i] && ustunlar[i].kenglik) || kenglikDefault(t);
+      // Kenglik ISHONCHSIZ kiritma bo'lishi mumkin (chaqiruvchida bo'lishdan
+      // chiqqan Infinity, manfiy son va h.k.). Manfiy yoki cheksiz qiymat XML ga
+      // tushsa Excel faylni "tiklash" (repair) rejimida ochadi — shuning uchun
+      // faqat chekli musbat sonni qabul qilamiz va Excel chegarasiga (255) qisamiz.
+      const xomW = Number(ustunlar[i] && ustunlar[i].kenglik);
+      const w = (Number.isFinite(xomW) && xomW > 0) ? Math.min(255, xomW) : kenglikDefault(t);
       return `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`;
     }).join('')}</cols>`
     : '';
