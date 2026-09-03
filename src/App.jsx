@@ -57,6 +57,7 @@ import {
   rangTozala, aksRangKerak, orderItemToDraft, toDateInput, sonQiymat,
 } from './lib/helpers.js';
 import { zakasChiqimlari, kazirokChiqimlari, kamQoldiqlar } from './lib/ombor.js';
+import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, seedToplam } from './lib/omborSeed.js';
 import {
   AVTO_ISH_BLANK, normAvtoIsh, kunlikHisobotMatni, zaxiraFayli, bugunKerakmi,
 } from './lib/avtoIsh.js';
@@ -360,6 +361,14 @@ export default function App() {
   // Ombor (material qoldig'i) — obyekt-xarita { id: material }, merge bilan yoziladi
   const [ombor, setOmbor]           = useState({});
   const [omborHarakat, setOmborHarakat] = useState({});
+  // Ombor → Rulonlar moduli. Rulonlar va narxlar obyekt-xarita ({id: yozuv}) —
+  // 'ombor' bilan bir xil model: merge yozuv, ikki qurilma to'qnashmaydi.
+  const [omborRulonlar, setOmborRulonlar] = useState({});
+  const [omborNarxlar, setOmborNarxlar]   = useState({});
+  // Sozlama (kurs/ustama/bo'luvchi/kg-m) — boshlang'ich qiymat FAQAT baza bo'sh
+  // bo'lganda ko'rinadi; Firestore'dan kelgani darhol ustiga yoziladi.
+  const [omborSozlama, setOmborSozlama]   = useState(SOZLAMA_BOSHLANGICH);
+  const [omborRangTur, setOmborRangTur]   = useState(RANG_TUR_BOSHLANGICH);
   const [avtoIsh, setAvtoIsh]       = useState(AVTO_ISH_BLANK); // avto-zaxira / kunlik hisobot sozlamasi
   const [smetaOrder, setSmetaOrder] = useState(null); // saqlanmagan narx taklifi (chek ko'rinishida)
   const [receiptOrder, setReceiptOrder] = useState(null);
@@ -469,6 +478,12 @@ export default function App() {
       ['jurnal', setJurnal],
       ['ombor', (v) => setOmbor(v && typeof v === 'object' ? v : {})],
       ['ombor-harakat', (v) => setOmborHarakat(v && typeof v === 'object' ? v : {})],
+      ['ombor-rulonlar', (v) => setOmborRulonlar(v && typeof v === 'object' ? v : {})],
+      ['ombor-narxlar', (v) => setOmborNarxlar(v && typeof v === 'object' ? v : {})],
+      ['ombor-sozlama', (v) => setOmborSozlama(v && typeof v === 'object'
+        ? { ...SOZLAMA_BOSHLANGICH, ...v } : SOZLAMA_BOSHLANGICH)],
+      ['ombor-rang-tur', (v) => setOmborRangTur(v && typeof v === 'object'
+        ? { ...RANG_TUR_BOSHLANGICH, ...v } : RANG_TUR_BOSHLANGICH)],
       ['avto-ish', (v) => setAvtoIsh(normAvtoIsh(v))],
     ];
     // Yuklanish tugashi — har KALIT kamida bir marta kelganda (takror snapshot
@@ -928,6 +943,74 @@ export default function App() {
     const qiymat = { ...harakat, id };
     setOmborHarakat((prev) => ({ ...prev, [id]: qiymat }));
     persistField('ombor-harakat', { [id]: qiymat });
+  }
+
+  // ----- OMBOR → RULONLAR -----
+  // Firestore `undefined` ni QABUL QILMAYDI (xato beradi) — null ga aylantiramiz.
+  function tozala(obj) {
+    const out = {};
+    for (const k in obj) out[k] = obj[k] === undefined ? null : obj[k];
+    return out;
+  }
+
+  // Optimistik yozuv: ekran DARHOL yangilanadi, xato bo'lsa ESKI holat qaytariladi
+  // (prompt 3.1 → 1-talab). O'chirish — `ochirilgan: true` bayrog'i bilan (merge
+  // modelida haqiqiy o'chirish boshqa qurilmadagi yozuvni tiklab yuborardi).
+  const rulonlarRef = useRef(omborRulonlar);
+  useEffect(() => { rulonlarRef.current = omborRulonlar; }, [omborRulonlar]);
+  const narxlarRef = useRef(omborNarxlar);
+  useEffect(() => { narxlarRef.current = omborNarxlar; }, [omborNarxlar]);
+
+  async function xaritaYoz(kalit, setState, ref, id, yozuv) {
+    const eski = ref.current[id];
+    const qiymat = yozuv == null
+      ? { ...(eski || { id }), ochirilgan: true }
+      : tozala({ ...yozuv, id });
+    setState((prev) => ({ ...prev, [id]: qiymat }));
+    try {
+      await storage.saveField(kalit, { [id]: qiymat });
+    } catch (e) {
+      console.error('Saqlashda xatolik:', kalit, e);
+      // Xatoda eski qiymatni qaytaramiz (yozuv yangi bo'lsa — butunlay olib tashlaymiz)
+      setState((prev) => {
+        const next = { ...prev };
+        if (eski === undefined) delete next[id]; else next[id] = eski;
+        return next;
+      });
+      showToast('Saqlashda xatolik — o\'zgarish qaytarildi');
+    }
+  }
+
+  const setRulon = (id, rulon) => xaritaYoz('ombor-rulonlar', setOmborRulonlar, rulonlarRef, id, rulon);
+  const setNarx  = (id, narx)  => xaritaYoz('ombor-narxlar',  setOmborNarxlar,  narxlarRef,  id, narx);
+
+  function updateOmborSozlama(v) { setOmborSozlama(v); persist('ombor-sozlama', v); }
+  function updateOmborRangTur(v) { setOmborRangTur(v); persist('ombor-rang-tur', v); }
+
+  // Boshlang'ich (seed) ma'lumotni Firestore'ga yozish. Natija: { kalit: nechta yozuv }
+  // — Sozlama panelida ham, konsolda ham ko'rsatiladi (prompt 5-bosqich, 1-bosqich).
+  async function seedOmbor(nima = 'hammasi') {
+    const toplam = seedToplam();
+    const KALIT = {
+      narxlar: 'ombor-narxlar', rulonlar: 'ombor-rulonlar',
+      sozlama: 'ombor-sozlama', rangTur: 'ombor-rang-tur',
+    };
+    const kalitlar = nima === 'hammasi'
+      ? ['ombor-sozlama', 'ombor-rang-tur', 'ombor-narxlar', 'ombor-rulonlar']
+      : [KALIT[nima]].filter(Boolean);
+    const natija = {};
+    for (const kalit of kalitlar) {
+      const qiymat = toplam[kalit];
+      if (!qiymat) continue;
+      // Xarita (rulon/narx) — MERGE bilan (qo'lda kiritilganlar yo'qolmaydi),
+      // sozlama — to'liq yoziladi.
+      const xarita = kalit === 'ombor-narxlar' || kalit === 'ombor-rulonlar';
+      if (xarita) await storage.saveField(kalit, qiymat);
+      else await storage.save(kalit, qiymat);
+      natija[kalit] = xarita ? Object.keys(qiymat).length : 1;
+    }
+    console.log('Ombor seed — yozilgan hujjatlar:', natija);
+    return natija;
   }
   // Zakas saqlangach ombordan materialni avtomatik yechish (faqat bog'langan materiallar).
   // Har bir yechim ombor-harakat jurnaliga ham yoziladi (kim, qaysi zakas uchun).
@@ -1553,7 +1636,7 @@ export default function App() {
         </nav>
       </header>
 
-      <main className={`mx-auto px-4 pt-5 no-print ${tab === 'new' || tab === 'orders' || tab === 'mijozlar' || tab === 'yoqlama' ? 'max-w-7xl' : 'max-w-5xl'}`}>
+      <main className={`mx-auto px-4 pt-5 no-print ${tab === 'new' || tab === 'orders' || tab === 'mijozlar' || tab === 'yoqlama' || tab === 'ombor' ? 'max-w-7xl' : 'max-w-5xl'}`}>
         {tab === 'new' && (
           <NewOrderTab
             draft={draft} setDraft={setDraft} draftCalc={draftCalc}
@@ -1632,6 +1715,11 @@ export default function App() {
             aksessuarlar={aksessuarlar} kaziroklar={kaziroklar}
             ranglar={ranglar} currentUser={currentUser}
             canEdit={ruxsat(role, 'ombor')} showToast={showToast}
+            omborRulonlar={omborRulonlar} omborNarxlar={omborNarxlar}
+            omborSozlama={omborSozlama} omborRangTur={omborRangTur}
+            setRulon={setRulon} setNarx={setNarx}
+            updateOmborSozlama={updateOmborSozlama} updateOmborRangTur={updateOmborRangTur}
+            seedOmbor={seedOmbor}
           />
         )}
         {tab === 'jurnal' && (

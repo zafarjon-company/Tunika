@@ -53,7 +53,11 @@ npm run preview    # build'ni lokal sinash
     │   ├── ruxsat.js       # rollar / ruxsatlar (founder, ...)
     │   ├── til.js          # ko'p tillilik
     │   ├── keybind.js      # klaviatura tugmalari
-    │   ├── eksport.js      # eksport (chek/hisobot)
+    │   ├── eksport.js      # eksport (chek/hisobot) — CSV
+    │   ├── xlsx.js         # .xlsx (Excel) yozuvchi — kutubxonasiz, OOXML+ZIP
+    │   ├── ombor.js        # ombor materiallari (qoldiq, kirim/chiqim)
+    │   ├── omborHisob.js   # rulon tannarxi/sotuv narxi — SOF funksiyalar
+    │   ├── omborSeed.js    # rulonlar moduli uchun boshlang'ich ma'lumot
     │   └── zaxira.js       # zaxira (backup) / tiklash
     ├── components/
     │   ├── ui.jsx          # Card, SectionTitle, Row, SegmentedControl, modallar
@@ -63,6 +67,7 @@ npm run preview    # build'ni lokal sinash
         ├── yoqlama/        # Belgilash, Kalendar, Avans
         ├── ishchilar/      # Royxat, Lavozimlar, Qobiliyatlar, Kamchiliklar
         ├── narxlar/        # Listlar, Metrli, Aksessuarlar
+        ├── ombor/          # Materiallar, Harakat, Rulonlar, NarxRoyxati, OmborSozlama
         ├── hisobot/        # Dashboard, Kassa, Zakaslar, Ishchilar, charts
         ├── jurnal/         # amallar jurnali (log)
         └── sozlamalar/     # Sozlamalar
@@ -79,9 +84,43 @@ npm run preview    # build'ni lokal sinash
   hisob-kitobi.
 - **Hisobot** — dashboard, kassa, zakaslar va ishchilar bo'yicha hisobot,
   grafiklar.
+- **Ombor** — ikki qism:
+  - *Materiallar / Harakat* — material qoldig'i, kirim-chiqim tarixi.
+  - *Rulonlar / Narx ro'yxati* — ombordagi rulonlar va ularning **1 metr
+    uchun tannarxi hamda sotuv narxi**. Barcha kirish qiymatlari
+    (zavod narx ro'yxati, dollar kursi, ustama, bo'luvchilar, kg/m
+    jadvali) interfeysdan tahrirlanadi va Firestore'da saqlanadi —
+    kodda birorta narx qattiq yozilmagan.
 - **Jurnal** — barcha amallar tarixi.
 - **Sozlamalar** — do'kon nomi, kurs, tovarlar, mavzular (ko'plab tema),
   til, tugmalar.
+
+## Ombor → Rulonlar: hisob zanjiri
+
+Har bir rulon uchun (`src/lib/omborHisob.js`, sof funksiya — React'siz):
+
+1. **Zavod narxi** — `ombor-narxlar` dan `zavod + tur + qalinlik` bo'yicha
+   topiladi (faqat `faol: true`; bir nechta mos kelsa eng yangi sanasi).
+   Topilmasa narx ustunida `YO'Q` yozilib, qator belgilanadi.
+2. **Yangi narx $/t** = zavod narxi + `ustama`
+3. **Rulon $** = `og'irlik / 1000 × yangi narx`
+4. **Rulon so'm** = rulon $ × `kurs`
+5. **Uzunlik** — kiritilgan bo'lsa o'sha; bo'lmasa `og'irlik / (kg/m)`
+   (`kgPerM` jadvalidan; jadvalda yo'q qalinlik uchun `qalinlik × koef`)
+6. **1 m tannarx** = rulon so'm ÷ uzunlik
+7. **Sotuv 1 / Sotuv 2** = 1 m tannarx ÷ `bolizvchi1` / `bolizvchi2`
+
+Yaxlitlash **faqat ko'rsatishda** (`Math.round`) — oraliq hisoblarda yo'q.
+Hisob zanjirini tekshirish:
+
+```bash
+npm run test:ombor
+```
+
+Firestore kalitlari: `ombor-sozlama`, `ombor-narxlar`, `ombor-rulonlar`,
+`ombor-rang-tur` (hammasi `shop/<kalit>` modelida). Bo'sh bazada
+Ombor → Rulonlar → Sozlama panelidagi **"Boshlang'ich ma'lumot"** tugmalari
+narx ro'yxati va rulonlarni yozib beradi.
 
 ## Ma'lumotlar qayerda?
 
