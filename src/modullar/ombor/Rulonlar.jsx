@@ -22,14 +22,18 @@ import {
 } from 'lucide-react';
 import { Card, SectionTitle, StatBox, rangChipStyle } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn, sonQiymat } from '../../lib/helpers.js';
-import { hisobla, jamiHisob, turTaxmin, son, OGOH } from '../../lib/omborHisob.js';
+import { hisobla, jamiHisob, turTaxmin, son, norm, OGOH } from '../../lib/omborHisob.js';
 import { ZAVODLAR, TURLAR, RANGLAR } from '../../lib/omborSeed.js';
 import { downloadXLSX } from '../../lib/xlsx.js';
 
 // ----- Kichik yordamchilar -----
 
-// Qidiruv uchun normallashtirish (registr va apostroflar farq qilmasin)
-const past = (s) => String(s == null ? '' : s).toLowerCase().replace(/['`’ʼ]/g, '').trim();
+// Matnlarni solishtirish uchun normallashtirish: omborHisob.js dagi norm()
+// ISHLATILADI. Ilgari bu faylda o'z nusxasi (past) bor edi — u ketma-ket
+// bo'shliqlarni birlashtirmagani uchun "Aziya  Steel" hisob yadrosi uchun
+// "Aziya Steel" bilan bir xil, dropdown/filtr uchun esa BOSHQA qiymat bo'lib
+// qolardi (ro'yxatda ikkita bir xil ko'rinadigan variant, filtrda esa rulon
+// yo'qolib qolishi).
 
 // O'lchov (metr / tonna) — PUL emas, shuning uchun fmt emas: kasr xonasi qoladi.
 // Pul qiymatlari esa har doim fmt() bilan butunga yaxlitlanadi.
@@ -51,7 +55,7 @@ function birlashtir(asos, manbalar, kalit) {
   const qosh = (v) => {
     const s = String(v == null ? '' : v).trim();
     if (!s) return;
-    const k = past(s);
+    const k = norm(s);
     if (korilgan.has(k)) return;
     korilgan.add(k);
     out.push(s);
@@ -105,7 +109,7 @@ const MATN_USTUN = new Set(['rang', 'zavod', 'tur', 'izoh']);
 // Saralash uchun katak qiymati
 function saraQiymat(q, k) {
   if (HISOB_USTUN.has(k)) return q.h[k];
-  if (MATN_USTUN.has(k)) return past(q[k]);
+  if (MATN_USTUN.has(k)) return norm(q[k]);
   return son(q[k]); // nomer, qalinlik, ogirlik
 }
 
@@ -137,6 +141,10 @@ function TahrirKatak({
   const [xom, setXom] = useState('');
   // Escape bosilganda blur ham ishga tushadi — shu bayroq saqlashni to'xtatadi
   const bekorRef = useRef(false);
+  // Tahrir BOSHLANGANIDAGI qiymat: saqlash kerakmi-yo'qmi shu bilan solishtiriladi
+  // (joriy `value` bilan emas — u tahrir paytida boshqa qurilmadan kelgan
+  // yangilanish tufayli o'zgargan bo'lishi mumkin).
+  const boshRef = useRef('');
 
   const matn = xomKor(value);
   const hiz = hizala === 'right' ? 'text-right' : hizala === 'center' ? 'text-center' : 'text-left';
@@ -144,15 +152,19 @@ function TahrirKatak({
   function boshla() {
     if (!canEdit || tahrir) return;
     bekorRef.current = false;
+    boshRef.current = matn;
     setXom(matn);
     setTahrir(true);
   }
 
-  // Tahrirni yakunlash: bekor qilinmagan va qiymat o'zgargan bo'lsa — yozamiz
+  // Tahrirni yakunlash: bekor qilinmagan va foydalanuvchi HAQIQATAN o'zgartirgan
+  // bo'lsa — yozamiz. Tegilmagan katak (xom === boshlang'ich qiymat) hech narsa
+  // yozmaydi: aks holda tahrir paytida boshqa qurilmada qilingan o'zgarish
+  // jimgina eski qiymat bilan bosib yozilardi.
   function yakunla() {
     setTahrir(false);
     if (bekorRef.current) { bekorRef.current = false; return; }
-    if (xom !== matn) onSave(xom);
+    if (xom !== boshRef.current) onSave(xom);
   }
 
   function klav(e) {
@@ -160,16 +172,29 @@ function TahrirKatak({
     else if (e.key === 'Escape') { e.preventDefault(); bekorRef.current = true; e.currentTarget.blur(); }
   }
 
-  if (tahrir && tur === 'select') {
+  // ----- Ro'yxatli (select) katak — DOIM ochiq -----
+  //  Ilgari u ham "bosib tahrirlash" holatida edi: birinchi bosish faqat select
+  //  ni paydo qilardi, ro'yxat esa ochilmasdi — tanlash uchun yana bosish kerak
+  //  bo'lardi. Endi bir bosishda ro'yxat chiqadi. Tahrirlanmayotgan ko'rinishda
+  //  ramkasiz turadi, faqat fokus/hover da ajralib turadi.
+  if (tur === 'select' && canEdit) {
+    // Saqlangan qiymat ro'yxatdagi variantdan faqat registr yoki bo'shliq bilan
+    // farq qilishi mumkin ("smz" ↔ "SMZ"), <select> esa AYNAN mos kelishni
+    // talab qiladi — mos kelmasa katak bo'sh ko'rinardi. Shuning uchun avval
+    // mos variantni topamiz; umuman topilmasa qiymatning o'zini variant qilamiz.
+    const mos = matn ? variantlar.find((v) => norm(v) === norm(matn)) : '';
+    const qiymat = mos || matn;
     return (
       <select
-        autoFocus value={matn}
-        onChange={(e) => { setTahrir(false); if (e.target.value !== matn) onSave(e.target.value); }}
-        onBlur={() => setTahrir(false)}
-        onKeyDown={(e) => { if (e.key === 'Escape') setTahrir(false); }}
-        className={`w-full px-2 py-1.5 border border-slate-300 rounded bg-white ${klass}`}
+        value={qiymat} title={title}
+        onChange={(e) => { if (e.target.value !== qiymat) onSave(e.target.value); }}
+        className={klass
+          ? `w-full px-2 py-1.5 rounded cursor-pointer ${klass}`
+          : 'w-full px-2 py-1.5 rounded appearance-none bg-transparent border border-transparent'
+            + ' cursor-pointer hover:bg-slate-100 focus:bg-white focus:border-slate-300'}
       >
         <option value="">—</option>
+        {!mos && matn ? <option value={matn}>{matn}</option> : null}
         {variantlar.map((v) => <option key={v} value={v}>{v}</option>)}
       </select>
     );
@@ -459,17 +484,17 @@ export function Rulonlar({
 
   // ----- Filtr + saralash -----
   const korinadigan = useMemo(() => {
-    const qq = past(filtr.q);
-    const fz = past(filtr.zavod);
-    const ft = past(filtr.tur);
+    const qq = norm(filtr.q);
+    const fz = norm(filtr.zavod);
+    const ft = norm(filtr.tur);
     const res = qatorlar.filter((q) => {
-      if (fz && past(q.zavod) !== fz) return false;
-      if (ft && past(q.tur) !== ft) return false;
+      if (fz && norm(q.zavod) !== fz) return false;
+      if (ft && norm(q.tur) !== ft) return false;
       if (filtr.qalinlik) {
         const qal = son(q.qalinlik);
         if (qal == null || String(qal) !== filtr.qalinlik) return false;
       }
-      if (qq && !past(q.rang).includes(qq) && !past(q.izoh).includes(qq)) return false;
+      if (qq && !norm(q.rang).includes(qq) && !norm(q.izoh).includes(qq)) return false;
       return true;
     });
     return res.sort((a, b) => solish(saraQiymat(a, sort.ustun), saraQiymat(b, sort.ustun), sort.yon));
@@ -504,10 +529,13 @@ export function Rulonlar({
   const matnYoz = (q, kalit) => (xom) => yangila(q, { [kalit]: xom });
   // Raqamli maydonlar: bo'sh bo'lsa '' (kiritilmagan), aks holda son
   const sonYoz = (q, kalit) => (xom) => yangila(q, { [kalit]: xom === '' ? '' : sonQiymat(xom) });
-  // Rang o'zgarganda tur BO'SH bo'lsa — rangdan taxmin qilinadi
+  // Rang o'zgarganda tur BO'SH bo'lsa — rangdan taxmin qilinadi.
+  //  DIQQAT: faqat rang HAQIQATAN tanlanganda. Bo'sh rang uchun turTaxmin()
+  //  standart turni qaytaradi, ya'ni rang tozalanganda tur jimgina standart
+  //  qiymat bilan to'lib qolardi (va o'sha soxta turga narx topilardi).
   const rangYoz = (q) => (rang) => {
     const patch = { rang };
-    if (!String(q.tur || '').trim()) {
+    if (String(rang || '').trim() && !String(q.tur || '').trim()) {
       const t = turTaxmin(rangTur, rang);
       if (t) patch.tur = t;
     }
@@ -525,7 +553,12 @@ export function Rulonlar({
       xaridNarx: null, xaridKurs: null, xaridSana: null,
       izoh: '', tasdiqlanmagan: false,
     });
-    toast("Yangi rulon qo'shildi");
+    // Yangi rulonning maydonlari BO'SH: filtr yoqilgan bo'lsa u ro'yxatga
+    // tushmasdi va foydalanuvchi "bosilmadi" deb tugmani qayta-qayta bosib,
+    // bazada bo'sh rulonlar to'plab qo'yardi. Shuning uchun filtrni tozalaymiz.
+    const filtrBor = Boolean(filtr.zavod || filtr.tur || filtr.qalinlik || filtr.q);
+    if (filtrBor) setFiltr({ zavod: '', tur: '', qalinlik: '', q: '' });
+    toast(filtrBor ? "Yangi rulon qo'shildi — filtr tozalandi" : "Yangi rulon qo'shildi");
   }
 
   function ochirish(q) {
@@ -583,7 +616,10 @@ export function Rulonlar({
       if (u.nom === "Og'irlik") return Math.round(jami.ogirlik);
       if (u.nom === 'Uzunlik') return Math.round(jami.uzunlik);
       if (u.nom === 'Qoldiq') return Math.round(jami.qoldiq);
-      if (u.nom === "Rulon so'm") return Math.round(jami.qiymat);
+      // Ombor qiymati = Σ (qoldiq × 1 m tannarx) — bu "Rulon so'm" USTUNINING
+      // yig'indisi EMAS, shuning uchun o'sha ustunga qo'yilmaydi: yorliq bilan
+      // izoh ustunida chiqadi.
+      if (u.nom === 'Izoh') return `Ombor qiymati: ${fmt(jami.qiymat)} so'm`;
       return '';
     });
     downloadXLSX('ombor-rulonlar.xlsx', {
@@ -785,11 +821,12 @@ export function Rulonlar({
                     <td className="px-2 py-2 text-right tabular-nums" title="Ombordagi umumiy qoldiq">
                       {olchovKor(jami.qoldiq)} m
                     </td>
-                    <td className="px-2 py-2" colSpan={2} />
-                    <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap" title="Ombordagi mahsulotning umumiy qiymati">
-                      {fmt(jami.qiymat)} so'm
+                    {/* Ombor qiymati = Σ (qoldiq × 1 m tannarx). Bu "Rulon so'm"
+                        ustunining yig'indisi EMAS, shuning uchun ustunga
+                        bog'lanmaydi — yorliq bilan alohida chiqadi. */}
+                    <td className="px-2 py-2 text-right whitespace-nowrap" colSpan={8}>
+                      Ombor qiymati: <span className="tabular-nums">{fmt(jami.qiymat)}</span> so'm
                     </td>
-                    <td className="px-2 py-2" colSpan={5} />
                   </tr>
                 </tfoot>
               </table>

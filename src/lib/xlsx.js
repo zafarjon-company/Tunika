@@ -71,9 +71,15 @@ const fonToFill = (fonIdx) => (fonIdx === 0 ? 0 : fonIdx + 2);
 //  XML YORDAMCHILARI
 // ============================================================
 
-// XML da mumkin bo'lmagan boshqaruv belgilari (\t \n \r dan tashqari) —
-// ular fayl ichiga tushsa Excel "buzilgan" deb ochmaydi, shuning uchun olib tashlaymiz.
-const XATO_BELGI = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+// XML 1.0 ruxsat bermaydigan belgilar. Ikki guruh:
+//   1) boshqaruv belgilari (\t \n \r dan tashqari);
+//   2) U+FFFE va U+FFFF — "nobelgi"lar (masalan noto'g'ri dekodlangan BOM yoki
+//      buzuq nusxa-ko'chirishdan Firestore ga tushib qolgan matnlarda uchraydi).
+// Bittasi ham fayl ichiga tushsa XML butunlay yaroqsiz bo'ladi va Excel bitta
+// katakni emas, BUTUN kitobni "buzilgan" deb ochmaydi — shuning uchun olib tashlaymiz.
+// Yolg'iz surrogat (\uD800-\uDFFF) uchun alohida chora kerak emas: uni TextEncoder
+// yozishda U+FFFD ga aylantiradi, bu esa XML uchun yaroqli belgi.
+const XATO_BELGI = /[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g;
 
 // & < > " ' ekranlash. Kirill/o'zbek harflari tegilmaydi — UTF-8 da yoziladi.
 export function escXml(xom) {

@@ -10,10 +10,14 @@
 //
 //  Forma LOKAL state da turadi: "Saqlash" bosilmaguncha
 //  Firestore'ga hech narsa yozilmaydi. Tashqaridan (boshqa
-//  qurilmadan) ma'lumot o'zgarsa — forma qayta yuklanadi.
+//  qurilmadan) ma'lumot o'zgarsa — forma qayta yuklanadi, LEKIN
+//  faqat lokal tahrir bo'lmasa. Tahrir bor bo'lsa forma tegilmaydi
+//  va sariq ogoh + "Yangilash" tugmasi ko'rsatiladi.
 //
 //  Panel tagida BOSHLANG'ICH MA'LUMOT (seed) bloki: seed
-//  to'plamini Firestore'ga yozadi (mavjud id lar ustiga).
+//  to'plamini Firestore'ga yozadi. DIQQAT: narx/rulon ro'yxatlari
+//  merge bilan (id lar ustiga), sozlama va rang→tur hujjatlari esa
+//  TO'LIQ almashtiriladi — bu foydalanuvchiga ochiq aytiladi.
 // ============================================================
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
@@ -66,6 +70,27 @@ function kgObyekt(qatorlar) {
   }
   return out;
 }
+
+// Qator butunlay bo'shmi? (ikkala katak ham yozilmagan — jim tashlab yuboriladi)
+const bosQator = (r) => String(r.q || '').trim() === '' && String(r.v || '').trim() === '';
+
+// Yarim to'ldirilgan / nol qatorlarning id lari.
+//  kgObyekt() bunday qatorlarni JIMGINA tashlab yuboradi — foydalanuvchi esa
+//  "saqlandi" xabarini ko'rib, qator jadvalga tushdi deb o'ylaydi. Shuning
+//  uchun saqlashdan OLDIN ogohlantiramiz (dublikat kabi).
+function notoliqlar(qatorlar) {
+  const out = new Set();
+  for (const r of qatorlar) {
+    if (bosQator(r)) continue;              // bo'm-bo'sh qator — xato emas
+    const v = son(r.v);
+    if (!qalKalit(r.q) || v == null || !(v > 0)) out.add(r.id);
+  }
+  return out;
+}
+
+// Qatordagi qaysi katak yaroqsiz (qizil chegara aynan shu katakka qo'yiladi)
+const qalXato = (r) => !qalKalit(r.q);
+const kgXato = (r) => { const v = son(r.v); return v == null || !(v > 0); };
 
 // Bir xil qalinlik ikki marta kiritilgan qatorlarning id lari
 function dublikatlar(qatorlar) {
@@ -149,7 +174,7 @@ function MatnMaydon({ label, value, onChange, disabled, hint, placeholder }) {
 }
 
 // ----- kg/m jadvalining bitta guruhi (SMZ yoki BOSHQA) -----
-function KgGuruh({ nom, izoh, qatorlar, dubl, canEdit, onQator, onQosh, onOchir }) {
+function KgGuruh({ nom, izoh, qatorlar, dubl, notoliq, canEdit, onQator, onQosh, onOchir }) {
   return (
     <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50">
       <div className="flex items-baseline justify-between mb-2">
@@ -167,22 +192,28 @@ function KgGuruh({ nom, izoh, qatorlar, dubl, canEdit, onQator, onQosh, onOchir 
         <p className="text-[11px] text-slate-400 py-2 text-center">Jadval bo'sh — faqat koeffitsient ishlatiladi</p>
       )}
 
-      {qatorlar.map((r) => (
-        <div key={r.id} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 items-center mb-1.5">
-          <input inputMode="decimal" value={r.q} disabled={!canEdit} placeholder="0.40"
-            onChange={(e) => { const s = sonMatn(e.target.value); if (s !== null) onQator(r.id, { q: s }); }}
-            onFocus={(e) => e.target.select()} onWheel={(e) => e.target.blur()}
-            className={`w-full px-2 py-1.5 border rounded bg-white tabular-nums disabled:bg-slate-100 disabled:text-slate-400 ${dubl.has(r.id) ? 'border-red-400' : 'border-slate-300'}`} />
-          <input inputMode="decimal" value={r.v} disabled={!canEdit} placeholder="0"
-            onChange={(e) => { const s = sonMatn(e.target.value); if (s !== null) onQator(r.id, { v: s }); }}
-            onFocus={(e) => e.target.select()} onWheel={(e) => e.target.blur()}
-            className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white tabular-nums disabled:bg-slate-100 disabled:text-slate-400" />
-          <button type="button" onClick={() => onOchir(r.id)} disabled={!canEdit} title="Qatorni o'chirish"
-            className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-red-600 disabled:opacity-30">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      ))}
+      {qatorlar.map((r) => {
+        // Qizil chegara AYNAN yaroqsiz katakka qo'yiladi
+        const yarim = notoliq.has(r.id);
+        const qQizil = dubl.has(r.id) || (yarim && qalXato(r));
+        const vQizil = yarim && kgXato(r);
+        return (
+          <div key={r.id} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 items-center mb-1.5">
+            <input inputMode="decimal" value={r.q} disabled={!canEdit} placeholder="0.40"
+              onChange={(e) => { const s = sonMatn(e.target.value); if (s !== null) onQator(r.id, { q: s }); }}
+              onFocus={(e) => e.target.select()} onWheel={(e) => e.target.blur()}
+              className={`w-full px-2 py-1.5 border rounded bg-white tabular-nums disabled:bg-slate-100 disabled:text-slate-400 ${qQizil ? 'border-red-400' : 'border-slate-300'}`} />
+            <input inputMode="decimal" value={r.v} disabled={!canEdit} placeholder="0"
+              onChange={(e) => { const s = sonMatn(e.target.value); if (s !== null) onQator(r.id, { v: s }); }}
+              onFocus={(e) => e.target.select()} onWheel={(e) => e.target.blur()}
+              className={`w-full px-2 py-1.5 border rounded bg-white tabular-nums disabled:bg-slate-100 disabled:text-slate-400 ${vQizil ? 'border-red-400' : 'border-slate-300'}`} />
+            <button type="button" onClick={() => onOchir(r.id)} disabled={!canEdit} title="Qatorni o'chirish"
+              className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:text-red-600 disabled:opacity-30">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        );
+      })}
 
       <button type="button" onClick={onQosh} disabled={!canEdit}
         className="mt-1 w-full py-1.5 rounded border border-dashed border-slate-300 text-[11px] text-slate-500 bg-white flex items-center justify-center gap-1 disabled:opacity-40">
@@ -212,19 +243,35 @@ export function OmborSozlama({
   const [forma, setForma] = useState(asl);
   const [rt, setRt] = useState(aslRT);
 
-  // Tashqaridan (Firestore'dan) ma'lumot o'zgarsa — formani qayta yuklaymiz.
   // Taqqoslash MATN bo'yicha: prop obyekti har renderda yangi bo'lsa ham
   // mazmuni o'zgarmagan bo'lsa forma qayta yuklanmaydi.
   const aslMatn = solish(asl, aslRT);
+  const joriyMatn = solish(forma, rt);
+  const ozgargan = joriyMatn !== aslMatn;
+
+  // Boshqa qurilmada o'zgargani haqida ogoh (lokal tahrir bosib ketilmasin)
+  const [tashqiYangi, setTashqiYangi] = useState(false);
+
+  // oldingiRef — oxirgi YUKLANGAN (yoki saqlangan) holat matni. Lokal tahrir
+  // bor-yo'qligi shu bilan aniqlanadi: joriy forma shu matndan farq qilsa —
+  // demak foydalanuvchi biror narsa yozgan.
   const oldingiRef = useRef(aslMatn);
+  const joriyRef = useRef(joriyMatn);
+  joriyRef.current = joriyMatn;
+
+  // Tashqaridan (Firestore'dan) ma'lumot o'zgarsa:
+  //  • lokal tahrir YO'Q bo'lsa — jimgina qayta yuklaymiz;
+  //  • lokal tahrir BOR bo'lsa — TEGMAYMIZ, faqat ogoh ko'rsatamiz. Aks holda
+  //    yozayotgan katak o'rtada eski qiymatga qaytib, fokus uchib ketardi.
   useEffect(() => {
-    if (oldingiRef.current === aslMatn) return;
+    const oldingi = oldingiRef.current;
+    if (oldingi === aslMatn) return;
     oldingiRef.current = aslMatn;
+    if (joriyRef.current !== oldingi) { setTashqiYangi(true); return; }
     setForma(asl);
     setRt(aslRT);
+    setTashqiYangi(false);
   }, [aslMatn]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const ozgargan = solish(forma, rt) !== aslMatn;
 
   // ----- Formani tahrirlash -----
   const tahrir = (patch) => setForma((f) => ({ ...f, ...patch }));
@@ -271,14 +318,34 @@ export function OmborSozlama({
   }, [rt]);
 
   // ----- Tekshiruvlar -----
+  //  Bu qiymatlar butun rulonlar jadvalini boshqaradi: kurs 0 bo'lsa rulon
+  //  so'mi, 1 m tannarxi va ikkala sotuv narxi ham "—" ga aylanadi; koef 0
+  //  bo'lsa jadvalda yo'q qalinlik uchun kg/m umuman hisoblanmaydi. Shuning
+  //  uchun bo'sh / nol qiymat bilan SAQLASHGA yo'l qo'ymaymiz.
+  const musbatXato = (n) => (!(n != null && n > 0) ? "0 dan katta bo'lishi kerak" : '');
+  const kurs = son(forma.kurs);
+  const ustama = son(forma.ustama);
   const b1 = son(forma.bolizvchi1);
   const b2 = son(forma.bolizvchi2);
-  const b1Xato = !(b1 != null && b1 > 0) ? "0 dan katta bo'lishi kerak" : '';
-  const b2Xato = !(b2 != null && b2 > 0) ? "0 dan katta bo'lishi kerak" : '';
+  const kSMZ = son(forma.koefSMZ);
+  const kBoshqa = son(forma.koefBoshqa);
+  const kursXato = musbatXato(kurs);
+  // Ustama 0 bo'lishi mumkin (ustamasiz), lekin BO'SH qolishi mumkin emas
+  const ustamaXato = ustama == null ? "Bo'sh qoldirib bo'lmaydi (ustama yo'q bo'lsa 0 yozing)" : '';
+  const b1Xato = musbatXato(b1);
+  const b2Xato = musbatXato(b2);
+  const kSMZXato = musbatXato(kSMZ);
+  const kBoshqaXato = musbatXato(kBoshqa);
+  const maydonXato = !!(kursXato || ustamaXato || b1Xato || b2Xato || kSMZXato || kBoshqaXato);
+
   const dublSMZ = useMemo(() => dublikatlar(forma.kg.SMZ), [forma.kg.SMZ]);
   const dublBoshqa = useMemo(() => dublikatlar(forma.kg.BOSHQA), [forma.kg.BOSHQA]);
   const dublBor = dublSMZ.size > 0 || dublBoshqa.size > 0;
-  const xatoBor = !!b1Xato || !!b2Xato || dublBor;
+  const notoliqSMZ = useMemo(() => notoliqlar(forma.kg.SMZ), [forma.kg.SMZ]);
+  const notoliqBoshqa = useMemo(() => notoliqlar(forma.kg.BOSHQA), [forma.kg.BOSHQA]);
+  const notoliqBor = notoliqSMZ.size > 0 || notoliqBoshqa.size > 0;
+
+  const xatoBor = maydonXato || dublBor || notoliqBor;
 
   // Ustama foizi: 1 m tannarx ÷ b → +X %
   const foizMatn = (b) => (b != null && b > 0
@@ -286,39 +353,56 @@ export function OmborSozlama({
     : '');
 
   // Kurs o'zgarganda kursSana bugungi kunga yangilanadi
-  const kursOzgardi = son(forma.kurs) !== son(sozlama.kurs);
+  const kursOzgardi = kurs !== son(sozlama.kurs);
 
   // ----- Saqlash / bekor qilish -----
   function saqla() {
     if (!canEdit || xatoBor || !ozgargan) return;
     const yangi = {
       ...sozlama, // notanish maydonlar yo'qolmasin
-      kurs: son(forma.kurs) ?? 0,
-      ustama: son(forma.ustama) ?? 0,
+      kurs: kurs ?? 0,
+      ustama: ustama ?? 0,
       bolizvchi1: b1,
       bolizvchi2: b2,
       nom1: forma.nom1.trim(),
       nom2: forma.nom2.trim(),
-      koefSMZ: son(forma.koefSMZ) ?? 0,
-      koefBoshqa: son(forma.koefBoshqa) ?? 0,
+      koefSMZ: kSMZ ?? 0,
+      koefBoshqa: kBoshqa ?? 0,
       kgPerM: { SMZ: kgObyekt(forma.kg.SMZ), BOSHQA: kgObyekt(forma.kg.BOSHQA) },
       kursSana: kursOzgardi ? bugun() : (sozlama.kursSana || ''),
     };
+    const yangiRT = {
+      qoidalar: rt.qoidalar
+        .map((q) => ({ naqsh: (q.naqsh || '').trim(), tur: q.tur || '' }))
+        .filter((q) => q.naqsh),
+      standart: rt.standart || '',
+    };
     if (updateSozlama) updateSozlama(yangi);
-    if (updateRangTur) {
-      updateRangTur({
-        qoidalar: rt.qoidalar
-          .map((q) => ({ naqsh: (q.naqsh || '').trim(), tur: q.tur || '' }))
-          .filter((q) => q.naqsh),
-        standart: rt.standart || '',
-      });
-    }
+    if (updateRangTur) updateRangTur(yangiRT);
+
+    // Formani HAQIQATAN yozilgan qiymatlardan qayta yasaymiz. Aks holda
+    // normallashtirishda yo'qoladigan o'zgarishlardan (bo'sh qator, naqshsiz
+    // qoida, ortiqcha bo'shliq, "0,95" ↔ "0.95") keyin yozilgan obyekt
+    // aslidagiga aynan teng chiqadi — proplar o'zgarmaydi, yuqoridagi effekt
+    // ishlamaydi va forma abadiy "saqlanmagan" holatida qolib ketardi.
+    const yAsl = formaYasa(yangi);
+    const yRT = rtYasa(yangiRT);
+    const yMatn = solish(yAsl, yRT);
+    oldingiRef.current = yMatn;
+    // Mazmun aynan bir xil bo'lsa tegmaymiz — inputlar remount bo'lib
+    // kursor/fokus sakramasin.
+    if (yMatn !== joriyMatn) { setForma(yAsl); setRt(yRT); }
+    setTashqiYangi(false);
     if (showToast) showToast('Sozlama saqlandi');
   }
 
+  // Bekor qilish = eng so'nggi saqlangan (proplardagi) holatga qaytish.
+  // Tashqi o'zgarish ogohi ham shu bilan yopiladi.
   function bekor() {
+    oldingiRef.current = aslMatn;
     setForma(asl);
     setRt(aslRT);
+    setTashqiYangi(false);
   }
 
   // ----- Boshlang'ich ma'lumot (seed) -----
@@ -328,9 +412,12 @@ export function OmborSozlama({
   const xujjatSoni = useMemo(() => ({
     'ombor-narxlar': Object.keys(toplam['ombor-narxlar'] || {}).length,
     'ombor-rulonlar': Object.keys(toplam['ombor-rulonlar'] || {}).length,
-    'ombor-sozlama': 1,
-    'ombor-rang-tur': 1,
   }), [toplam]);
+
+  // Bu ikki hujjat MERGE emas, TO'LIQ almashtirib yoziladi (App.jsx: storage.save).
+  // Narx/rulon ro'yxatlari esa id bo'yicha merge (storage.saveField).
+  const TOLIQ_ALMASH = ['ombor-sozlama', 'ombor-rang-tur'];
+  const toliqmi = (k) => TOLIQ_ALMASH.includes(k);
 
   const SEED_TUGMALAR = [
     { k: 'hammasi', label: 'Hammasi', kalitlar: ['ombor-sozlama', 'ombor-rang-tur', 'ombor-narxlar', 'ombor-rulonlar'] },
@@ -341,9 +428,20 @@ export function OmborSozlama({
 
   async function seedBos(t) {
     if (!canEdit || !onSeed || seedIsh) return;
-    const royxat = t.kalitlar.map((k) => `  • ${k} — ${xujjatSoni[k] || 0} ta`).join('\n');
-    const savol = `Boshlang'ich ma'lumot yoziladi:\n${royxat}\n\n`
-      + "DIQQAT: bir xil id li MAVJUD yozuvlar USTIGA yoziladi (o'zgartirganlaringiz yo'qoladi).\nDavom etamizmi?";
+    const royxat = t.kalitlar
+      .map((k) => `  • ${k} — ${toliqmi(k) ? "TO'LIQ ALMASHTIRILADI" : `${xujjatSoni[k] || 0} ta yozuv (id ustiga)`}`)
+      .join('\n');
+    const ogohlar = [];
+    if (t.kalitlar.some(toliqmi)) {
+      ogohlar.push("Sozlama va rang → tur qoidalari TO'LIQ almashtiriladi — qo'shgan"
+        + " qalinliklaringiz, qoidalaringiz va joriy kurs butunlay o'chadi.");
+    }
+    if (t.kalitlar.some((k) => !toliqmi(k))) {
+      ogohlar.push('Bir xil id li mavjud narx / rulon yozuvlari ustiga yoziladi'
+        + " (qo'lda kiritilgan boshqa yozuvlarga tegilmaydi).");
+    }
+    const savol = `Boshlang'ich ma'lumot yoziladi:\n${royxat}\n\nDIQQAT:\n`
+      + `${ogohlar.map((s) => `  • ${s}`).join('\n')}\n\nDavom etamizmi?`;
     if (!window.confirm(savol)) return;
     setSeedIsh(t.k); setSeedNatija(''); setSeedXato('');
     try {
@@ -383,9 +481,10 @@ export function OmborSozlama({
           <span className="block text-sm font-bold text-slate-800 uppercase tracking-wide">Ombor sozlamalari</span>
           {!ochiq && <span className="block text-xs text-slate-500 tabular-nums truncate">{qisqacha}</span>}
         </span>
-        {ozgargan && (
-          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold whitespace-nowrap">
-            Saqlanmagan o'zgarishlar
+        {(ozgargan || tashqiYangi) && (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${
+            tashqiYangi ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>
+            {tashqiYangi ? "Tashqi o'zgarish" : "Saqlanmagan o'zgarishlar"}
           </span>
         )}
         <span className="text-slate-400 flex-shrink-0">
@@ -395,16 +494,32 @@ export function OmborSozlama({
 
       {ochiq && (
         <div className="space-y-4">
+          {/* ----- 0) Boshqa qurilmada o'zgardi ----- */}
+          {tashqiYangi && (
+            <div className="flex items-start gap-1.5 text-[11px] bg-amber-50 border border-amber-300 text-amber-800 rounded p-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+              <span className="flex-1">
+                Ma'lumot boshqa qurilmada o'zgardi. Sizning tahrirlaringiz saqlanmagani uchun
+                forma o'zgartirilmadi — "Saqlash" bossangiz o'sha o'zgarish bosib ketiladi,
+                "Yangilash" bossangiz esa tahrirlaringiz o'chib, yangi ma'lumot yuklanadi.
+              </span>
+              <button type="button" onClick={bekor}
+                className="px-2 py-1 rounded border border-amber-300 bg-white text-amber-800 font-medium whitespace-nowrap flex items-center gap-1">
+                <RotateCcw className="w-3.5 h-3.5" /> Yangilash
+              </button>
+            </div>
+          )}
+
           {/* ----- 1) Asosiy qiymatlar ----- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SonMaydon
               label="Dollar kursi (so'm)" value={forma.kurs} disabled={!canEdit}
-              onChange={(v) => tahrir({ kurs: v })}
+              onChange={(v) => tahrir({ kurs: v })} xato={kursXato}
               hint={`Oxirgi o'zgartirilgan: ${sozlama.kursSana || '—'}${kursOzgardi ? ` → ${bugun()}` : ''}`} />
 
             <SonMaydon
               label="Ustama ($/tonna)" value={forma.ustama} disabled={!canEdit}
-              onChange={(v) => tahrir({ ustama: v })}
+              onChange={(v) => tahrir({ ustama: v })} xato={ustamaXato}
               hint="Zavod ro'yxatidagi narxga qo'shiladi" />
 
             <SonMaydon
@@ -429,12 +544,12 @@ export function OmborSozlama({
 
             <SonMaydon
               label="SMZ koeffitsienti" value={forma.koefSMZ} disabled={!canEdit}
-              onChange={(v) => tahrir({ koefSMZ: v })}
+              onChange={(v) => tahrir({ koefSMZ: v })} xato={kSMZXato}
               hint="Jadvalda yo'q qalinlik uchun" />
 
             <SonMaydon
               label="BOSHQA koeffitsienti" value={forma.koefBoshqa} disabled={!canEdit}
-              onChange={(v) => tahrir({ koefBoshqa: v })}
+              onChange={(v) => tahrir({ koefBoshqa: v })} xato={kBoshqaXato}
               hint="Jadvalda yo'q qalinlik uchun" />
           </div>
 
@@ -451,11 +566,13 @@ export function OmborSozlama({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <KgGuruh
-                nom="SMZ" izoh="faqat SMZ zavodi" qatorlar={forma.kg.SMZ} dubl={dublSMZ} canEdit={canEdit}
+                nom="SMZ" izoh="faqat SMZ zavodi" qatorlar={forma.kg.SMZ}
+                dubl={dublSMZ} notoliq={notoliqSMZ} canEdit={canEdit}
                 onQator={(id, p) => kgTahrir('SMZ', id, p)}
                 onQosh={() => kgQosh('SMZ')} onOchir={(id) => kgOchir('SMZ', id)} />
               <KgGuruh
-                nom="BOSHQA" izoh={boshqaZavodlar} qatorlar={forma.kg.BOSHQA} dubl={dublBoshqa} canEdit={canEdit}
+                nom="BOSHQA" izoh={boshqaZavodlar} qatorlar={forma.kg.BOSHQA}
+                dubl={dublBoshqa} notoliq={notoliqBoshqa} canEdit={canEdit}
                 onQator={(id, p) => kgTahrir('BOSHQA', id, p)}
                 onQosh={() => kgQosh('BOSHQA')} onOchir={(id) => kgOchir('BOSHQA', id)} />
             </div>
@@ -464,6 +581,16 @@ export function OmborSozlama({
               <div className="mt-2 flex items-start gap-1.5 text-[11px] bg-red-50 border border-red-300 text-red-700 rounded p-2">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
                 <span>Bir xil qalinlik takrorlangan — qizil kataklarni tuzating (aks holda saqlab bo'lmaydi).</span>
+              </div>
+            )}
+
+            {notoliqBor && (
+              <div className="mt-2 flex items-start gap-1.5 text-[11px] bg-red-50 border border-red-300 text-red-700 rounded p-2">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                <span>
+                  Qalinlik yoki kg/m to'ldirilmagan (yoki 0) — bunday qator jadvalga
+                  TUSHMAYDI. Qizil kataklarni to'ldiring yoki qatorni o'chiring.
+                </span>
               </div>
             )}
           </div>
@@ -565,8 +692,12 @@ export function OmborSozlama({
             <div className="pt-2 border-t border-slate-100">
               <SectionTitle icon={Database}>Boshlang'ich ma'lumot</SectionTitle>
               <p className="text-[11px] text-slate-500 -mt-2 mb-2">
-                Tayyor ro'yxatlarni Firestore'ga yozadi. Bir xil id li mavjud yozuvlar
-                ustiga yoziladi, qo'lda kiritilgan boshqa yozuvlarga tegmaydi.
+                Tayyor ro'yxatlarni Firestore'ga yozadi. <b>Narx ro'yxati</b> va <b>rulonlar</b> —
+                bir xil id li yozuvlar ustiga yoziladi, qo'lda kiritilgan boshqa yozuvlarga tegmaydi.
+              </p>
+              <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-2">
+                <b>Sozlama</b> va <b>rang → tur qoidalari</b> esa TO'LIQ ALMASHTIRILADI —
+                qo'shgan qalinliklaringiz, qoidalaringiz va joriy kurs o'chadi.
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

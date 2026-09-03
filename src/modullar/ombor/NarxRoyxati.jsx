@@ -170,13 +170,21 @@ function BoshUstun({ ustun, sort, onSort }) {
 //  mavjud FAOL yozuvlar qalinliklari bilan chiqadi, har biriga yangi
 //  narx yoziladi. Saqlanganda: narx kiritilgan ESKI yozuv faol:false
 //  ga o'tadi (o'chirilmaydi — tarix), o'rniga yangi sana bilan YANGI
-//  yozuv qo'shiladi. Narx kiritilmagan qatorlarga TEGILMAYDI.
+//  yozuv qo'shiladi.
+//
+//  Narx kiritilmagan qatorlar standart holatda TEGILMAYDI (eski sana
+//  bilan faol qoladi) — chunki ularni ham arxivlash o'sha qalinlikni
+//  FAOL narxsiz qoldiradi. Kimga to'liq almashtirish kerak bo'lsa —
+//  "narx kiritilmagan eski qatorlarni ham arxivlash" belgisi bor.
+//  Tasdiq panelida uchala son (qo'shiladi / arxivlanadi / tegilmaydi)
+//  alohida ko'rsatiladi.
 // ============================================================
-function YangiRoyxatModal({ royxat, zavodlar, turlar, onClose, onSaqla }) {
+function YangiRoyxatModal({ royxat, zavodlar, turlar, band, onClose, onSaqla }) {
   const [zavod, setZavod] = useState('');
   const [tur, setTur] = useState('');
   const [sana, setSana] = useState(toDateInput());
   const [kiritilgan, setKiritilgan] = useState({}); // { [eskiId]: 'matn' }
+  const [hammasiniArxivla, setHammasiniArxivla] = useState(false);
 
   // Tanlovga mos FAOL yozuvlar (zavod/tur bo'sh = hammasi)
   const moslar = useMemo(() => royxat
@@ -186,12 +194,21 @@ function YangiRoyxatModal({ royxat, zavodlar, turlar, onClose, onSaqla }) {
     .slice()
     .sort(standartCmp), [royxat, zavod, tur]);
 
-  // Narxi kiritilgan (musbat) qatorlar — faqat shular yoziladi
-  const yoziladi = moslar
+  // Narxi kiritilgan (musbat) qatorlar — YANGI yozuv aynan shular uchun qo'shiladi
+  const qoshiladi = moslar
     .map((n) => ({ eski: n, yangiNarx: sonQiymat(kiritilgan[n.id]) }))
     .filter((x) => x.yangiNarx > 0);
 
-  const tayyor = yoziladi.length > 0 && !!sana;
+  // Arxivlanadigan ESKI yozuvlar — qo'shish ro'yxatidan ALOHIDA hisoblanadi:
+  //  standart — faqat o'rniga yangisi yoziladiganlar;
+  //  belgi yoqilsa — tanlovdagi barcha mos yozuvlar (to'liq almashtirish).
+  const yangiliklar = new Set(qoshiladi.map((x) => x.eski.id));
+  const arxivlanadi = hammasiniArxivla ? moslar : moslar.filter((n) => yangiliklar.has(n.id));
+  const tegilmaydi = moslar.length - arxivlanadi.length;
+  // Yangi narxsiz arxivlanadiganlar — ular uchun FAOL narx qolmaydi (ogohlantiriladi)
+  const narxsizQoladi = arxivlanadi.filter((n) => !yangiliklar.has(n.id)).length;
+
+  const tayyor = qoshiladi.length > 0 && !!sana;
 
   function eskilarBilanToldir() {
     const next = { ...kiritilgan };
@@ -267,26 +284,64 @@ function YangiRoyxatModal({ royxat, zavodlar, turlar, onClose, onSaqla }) {
           </div>
         )}
 
-        {/* Tasdiqlashdan oldingi hisobot */}
+        {/* Narx kiritilmagan qatorlarni ham arxivlash (to'liq almashtirish) */}
+        {moslar.length > 0 && (
+          <label className="flex items-start gap-2 text-slate-600">
+            <input type="checkbox" checked={hammasiniArxivla} className="mt-0.5"
+              onChange={(e) => setHammasiniArxivla(e.target.checked)} />
+            <span>
+              Narx kiritilmagan eski qatorlarni ham arxivlash
+              <span className="block text-[10px] text-slate-400">
+                Yoqilsa, bu tanlovdagi barcha eski yozuvlar tarixga o'tadi — ro'yxatda ikki xil sana aralashmaydi.
+              </span>
+            </span>
+          </label>
+        )}
+
+        {/* Tasdiqlashdan oldingi hisobot — uchala son ALOHIDA */}
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1">
           <div className="flex justify-between">
-            <span className="text-slate-500">Arxivlanadi (faol emas bo'ladi)</span>
-            <b className="tabular-nums text-slate-900">{yoziladi.length} ta</b>
+            <span className="text-slate-500">Yangi narx kiritildi (yozuv qo'shiladi)</span>
+            <b className="tabular-nums text-slate-900">{qoshiladi.length} ta</b>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Yangi yozuv qo'shiladi</span>
-            <b className="tabular-nums text-slate-900">{yoziladi.length} ta</b>
+            <span className="text-slate-500">Arxivlanadi (faol emas bo'ladi)</span>
+            <b className="tabular-nums text-slate-900">{arxivlanadi.length} ta</b>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Tegilmaydi (eski sana bilan faol qoladi)</span>
+            <b className="tabular-nums text-slate-900">{tegilmaydi} ta</b>
           </div>
           <div className="text-[10px] text-slate-400">
-            Eski yozuvlar o'chirilmaydi — tarix sifatida saqlanadi. Narx kiritilmagan qatorlarga tegilmaydi.
+            Eski yozuvlar o'chirilmaydi — tarix sifatida saqlanadi.
           </div>
         </div>
 
+        {/* Tegilmagan qatorlar — ro'yxatda ikki xil sana qoladi */}
+        {tegilmaydi > 0 && (
+          <div className="text-[10px] text-slate-500">
+            <b className="tabular-nums">{tegilmaydi}</b> ta qalinlik eski sanasi bilan faol qoladi —
+            "Oxirgi sana" butun ro'yxatni ifodalamaydi.
+          </div>
+        )}
+
+        {/* Yangi narxsiz arxivlash — o'sha qalinlik FAOL narxsiz qoladi */}
+        {narxsizQoladi > 0 && (
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg p-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <b className="tabular-nums">{narxsizQoladi}</b> ta qalinlik yangi narxsiz arxivlanadi —
+              ular uchun faol narx qolmaydi va rulonlarda "narx yo'q" ogohi chiqadi.
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 pt-1">
-          <button onClick={onClose} className="flex-1 py-2 border-2 border-slate-200 rounded-lg bg-white">Bekor</button>
-          <button onClick={() => onSaqla(yoziladi, sana)} disabled={!tayyor}
+          <button onClick={onClose} disabled={band}
+            className="flex-1 py-2 border-2 border-slate-200 rounded-lg bg-white disabled:opacity-40">Bekor</button>
+          <button onClick={() => onSaqla({ qoshiladi, arxivlanadi }, sana)} disabled={!tayyor || band}
             className="flex-1 py-2 bg-slate-900 text-white rounded-lg font-medium disabled:opacity-40 flex items-center justify-center gap-1.5">
-            <Save className="w-4 h-4" /> Saqlash
+            <Save className="w-4 h-4" /> {band ? 'Saqlanmoqda…' : 'Saqlash'}
           </button>
         </div>
       </div>
@@ -305,6 +360,7 @@ export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }
   const [form, setForm] = useState(BLANK);
   const [tahrir, setTahrir] = useState(null);          // tahrirlanayotgan yozuv nusxasi
   const [yangiRoyxat, setYangiRoyxat] = useState(false); // "Yangi narx ro'yxati" oynasi
+  const [saqlanmoqda, setSaqlanmoqda] = useState(false); // ro'yxat ketma-ket yozilmoqda
 
   const [fZavod, setFZavod] = useState('');
   const [fTur, setFTur] = useState('');
@@ -384,7 +440,13 @@ export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }
       if (!map.has(k)) map.set(k, { kalit: k, zavod: n.zavod || '—', tur: n.tur || '—', satrlar: [] });
       map.get(k).satrlar.push(n);
     }
-    const out = [...map.values()];
+    // Sarlavhadagi hisoblagich — QATORLAR emas, NOYOB QALINLIKLAR soni.
+    // (Tarix ko'rsatilganda yoki dublikat bo'lsa bir qalinlik bir nechta
+    // qatorda uchraydi; ular bitta qalinlik deb sanaladi.)
+    const out = [...map.values()].map((g) => ({
+      ...g,
+      qalinlikSoni: new Set(g.satrlar.map((n) => son(n.qalinlik))).size,
+    }));
     out.sort((a, b) => a.zavod.localeCompare(b.zavod) || a.tur.localeCompare(b.tur));
     return out;
   }, [korinadigan]);
@@ -472,23 +534,50 @@ export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }
     toast(yangi ? 'Faollashtirildi' : 'Arxivlandi');
   }
 
-  // Yangi narx ro'yxati: eski yozuv arxivlanadi, yangisi yangi sana bilan qo'shiladi
-  function yangiRoyxatSaqla(satrlar, sana) {
-    for (const { eski, yangiNarx } of satrlar) {
-      setNarx(eski.id, { ...eski, faol: false });
-      const id = genId();
-      setNarx(id, {
-        id,
-        zavod: eski.zavod || '',
-        tur: eski.tur || '',
-        qalinlik: son(eski.qalinlik) || 0,
-        narx: yangiNarx,
-        sana,
-        faol: true,
-      });
+  // Yangi narx ro'yxati: yangi yozuv qo'shiladi, eskisi arxivlanadi.
+  //
+  //  IKKI QOIDA (ikkalasi ham ma'lumot yo'qotmaslik uchun):
+  //   1) TARTIB: har juftlikda AVVAL yangi yozuv yoziladi, KEYIN eskisi
+  //      arxivlanadi. setNarx (App.jsx → xaritaYoz) har chaqiruvda alohida
+  //      yozuv qiladi va xatoda faqat O'SHA yozuvni orqaga qaytaradi, ya'ni
+  //      qisman muvaffaqiyatsizlik mumkin. Teskari tartibda o'sha
+  //      zavod+tur+qalinlik butunlay FAOL narxsiz qolib ketardi (narxTop null
+  //      → rulonlarda "narx yo'q"). Bu tartibda eng yomon holat — vaqtincha
+  //      DUBLIKAT: u yuqoridagi sariq ogohda ko'rinadi va qo'lda tuzatiladi.
+  //   2) KETMA-KET: har yozuv `await` qilinadi. Barcha narxlar BITTA Firestore
+  //      hujjatida (shop/ombor-narxlar) — o'nlab parallel yozuv hujjat bo'yicha
+  //      yozuv chegarasiga urilib, bir qismi xato bilan qaytardi.
+  //  Toast ham faqat hamma yozuv tugagach chiqadi (oldin "muvaffaqiyatli" deb
+  //  chiqib, keyin xato toasti kelib qolardi).
+  async function yangiRoyxatSaqla({ qoshiladi = [], arxivlanadi = [] }, sana) {
+    const arxivIdlar = new Set(arxivlanadi.map((n) => n.id));
+    const yozilgan = new Set();
+    setSaqlanmoqda(true);
+    try {
+      for (const { eski, yangiNarx } of qoshiladi) {
+        const id = genId();
+        await setNarx(id, {
+          id,
+          zavod: eski.zavod || '',
+          tur: eski.tur || '',
+          qalinlik: son(eski.qalinlik) || 0,
+          narx: yangiNarx,
+          sana,
+          faol: true,
+        });
+        yozilgan.add(eski.id);
+        if (arxivIdlar.has(eski.id)) await setNarx(eski.id, { ...eski, faol: false });
+      }
+      // Narx kiritilmagan, lekin arxivlash tanlangan qolgan eski yozuvlar
+      for (const eski of arxivlanadi) {
+        if (yozilgan.has(eski.id)) continue;
+        await setNarx(eski.id, { ...eski, faol: false });
+      }
+    } finally {
+      setSaqlanmoqda(false);
     }
     setYangiRoyxat(false);
-    toast(`${satrlar.length} ta narx yangilandi (eskisi arxivlandi)`);
+    toast(`${qoshiladi.length} ta narx yangilandi · ${arxivlanadi.length} ta arxivlandi`);
   }
 
   // Tahrirlashni boshlash — raqamlar formada MATN sifatida turadi (vergul ham mumkin)
@@ -665,7 +754,8 @@ export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }
                             <span className="text-slate-300">·</span>
                             <span className="font-semibold text-slate-600">{g.tur}</span>
                             <span className="ml-auto text-[11px] text-slate-500 tabular-nums whitespace-nowrap">
-                              {g.satrlar.length} ta qalinlik
+                              {g.qalinlikSoni} ta qalinlik
+                              {g.satrlar.length !== g.qalinlikSoni && ` · ${g.satrlar.length} yozuv`}
                             </span>
                           </div>
                         </td>
@@ -739,8 +829,9 @@ export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }
       {/* ----- Yangi narx ro'yxati oynasi ----- */}
       {yangiRoyxat && (
         <YangiRoyxatModal
-          royxat={royxat} zavodlar={zavodlar} turlar={turlar}
-          onClose={() => setYangiRoyxat(false)} onSaqla={yangiRoyxatSaqla} />
+          royxat={royxat} zavodlar={zavodlar} turlar={turlar} band={saqlanmoqda}
+          onClose={() => { if (!saqlanmoqda) setYangiRoyxat(false); }}
+          onSaqla={yangiRoyxatSaqla} />
       )}
     </Card>
   );
