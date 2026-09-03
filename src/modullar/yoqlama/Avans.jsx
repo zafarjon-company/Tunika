@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Check, Wallet, ChevronDown } from 'lucide-react';
 import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
-import { fmt, toMonthInput, formatDate, formatDay, daysInMonth, makeBlankPayment, ishchiHisobi, sonQiymat, oyFaolmi } from '../../lib/helpers.js';
+import { fmt, toMonthInput, formatDate, formatDay, daysInMonth, makeBlankPayment, ishchiHisobi, oyIshlangan, sonQiymat, oyFaolmi } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 function oyLabel(oy) {
@@ -125,6 +125,10 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
           // berishdan oldin ishchining haqiqiy qoldig'i ko'rinib tursin.
           // "Hozirgi haqqi" to'langan maoshlarni ham ayiradi.
           const h = ishchiHisobi(i, yoqlama, avanslar, maoshlar);
+          // "Ishlangan" FAQAT tanlangan oy uchun hisoblanadi (butun davr emas):
+          // yo'qlamadan shu oyning "keldi"/"yarim" kunlari yig'iladi.
+          // Maosh bo'limidagi oylikBalans(...).ishlangan bilan bir xil qiymat.
+          const ishlanganOy = oyIshlangan(i, yoqlama, oy);
           return (
             <Card key={i.id}>
               <div className="flex items-center justify-between gap-2 mb-2">
@@ -141,11 +145,12 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
                 </div>
               </div>
 
-              {/* Umumiy hisob — Ishlangan · Avans · Hozirgi haqqi (butun davr) */}
+              {/* Ishlangan — FAQAT tanlangan oy; Avans va Hozirgi haqqi — butun davr
+                  (shuning uchun ularning yorlig'ida "jami" / "hozirgi" turadi) */}
               <div className="grid grid-cols-3 gap-1.5 mb-2">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Ishlangan</div>
-                  <div className="text-xs font-bold tabular-nums text-slate-700 leading-tight">{fmt(h.ishlangan)}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Ishlangan (shu oy)</div>
+                  <div className="text-xs font-bold tabular-nums text-slate-700 leading-tight">{fmt(ishlanganOy)}</div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center">
                   <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Avans (jami)</div>
