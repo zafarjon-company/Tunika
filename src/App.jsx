@@ -991,13 +991,15 @@ export default function App() {
   // — Sozlama panelida ham, konsolda ham ko'rsatiladi (prompt 5-bosqich, 1-bosqich).
   async function seedOmbor(nima = 'hammasi') {
     const toplam = seedToplam();
-    const KALIT = {
-      narxlar: 'ombor-narxlar', rulonlar: 'ombor-rulonlar',
-      sozlama: 'ombor-sozlama', rangTur: 'ombor-rang-tur',
+    // Guruhlar Sozlama panelidagi tugmalar bilan AYNAN bir xil bo'lishi shart —
+    // panel foydalanuvchiga qaysi kalitlar yozilishini oldindan ko'rsatadi.
+    const GURUH = {
+      hammasi:  ['ombor-sozlama', 'ombor-rang-tur', 'ombor-narxlar', 'ombor-rulonlar'],
+      sozlama:  ['ombor-sozlama', 'ombor-rang-tur'],
+      narxlar:  ['ombor-narxlar'],
+      rulonlar: ['ombor-rulonlar'],
     };
-    const kalitlar = nima === 'hammasi'
-      ? ['ombor-sozlama', 'ombor-rang-tur', 'ombor-narxlar', 'ombor-rulonlar']
-      : [KALIT[nima]].filter(Boolean);
+    const kalitlar = GURUH[nima] || [];
     const natija = {};
     for (const kalit of kalitlar) {
       const qiymat = toplam[kalit];
