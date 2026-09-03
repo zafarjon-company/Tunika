@@ -87,6 +87,51 @@ rost('sariq fon rangi bor', matn.includes('FFFEF3C7'));
 rost('XML ekranlash ishladi', matn.includes('Qizil &lt;SMZ&gt; &amp; &quot;AB&quot;'));
 rost('xom "<SMZ>" faylga tushmagan', !matn.includes('Qizil <SMZ>'));
 
+// ============================================================
+//  CHEKKA HOLATLAR — yiqilmasligi kerak
+// ============================================================
+console.log('\n=== XLSX — CHEKKA HOLATLAR ===\n');
+
+// Bo'sh varaq (ustun ham, qator ham yo'q)
+const bosh = xlsxBaytlar({});
+rost("bo'sh varaq yasaldi", bosh.length > 800);
+rost("bo'sh varaqda avtofiltr yo'q", !Buffer.from(bosh).toString('utf8').includes('autoFilter'));
+
+// Qatorsiz, faqat sarlavha
+const faqatSarlavha = Buffer.from(xlsxBaytlar({
+  nom: 'X', ustunlar: [{ nom: 'A', tur: 'son' }], qatorlar: [],
+})).toString('utf8');
+rost('faqat sarlavha — dimension A1:A1', faqatSarlavha.includes('ref="A1:A1"'));
+
+// Uzun varaq nomi 31 belgigacha qirqiladi, taqiqlangan belgilar tozalanadi
+const uzun = Buffer.from(xlsxBaytlar({ nom: 'A/B:C*D?E[F]G 1234567890 1234567890 1234567890' })).toString('utf8');
+const nomM = uzun.match(/<sheet name="([^"]*)"/);
+tekshir("varaq nomi uzunligi <= 31", true, !!nomM && nomM[1].length <= 31);
+rost('taqiqlangan belgilar tozalandi', !!nomM && !/[\\/?*[\]:]/.test(nomM[1]));
+
+// Juda katta / xato sonlar
+const chekka = Buffer.from(xlsxBaytlar({
+  nom: 'Chekka',
+  ustunlar: [{ nom: 'n', tur: 'son' }],
+  qatorlar: [
+    { katak: [1e21] },       // eksponentli yozuvga tushadigan son
+    { katak: [Number.NaN] }, // xato — bo'sh katak bo'lishi kerak
+    { katak: [Infinity] },   // xato — bo'sh katak bo'lishi kerak
+    { katak: [-1234.56] },
+  ],
+})).toString('utf8');
+rost('1e21 oddiy o\'nlik ko\'rinishda', chekka.includes('<v>1000000000000000000000</v>'));
+rost('NaN/Infinity faylga tushmadi', !/NaN|Infinity/.test(chekka));
+rost('manfiy kasr son bor', chekka.includes('<v>-1234.56</v>'));
+
+// Ustunlardan ko'p katak berilgan qator — kataklar yo'qolmasligi kerak
+const kengroq = Buffer.from(xlsxBaytlar({
+  nom: 'Keng',
+  ustunlar: [{ nom: 'A', tur: 'matn' }],
+  qatorlar: [{ katak: ['a', 'b', 'c'] }],
+})).toString('utf8');
+rost('ortiqcha kataklar saqlandi (A1:C2)', kengroq.includes('ref="A1:C2"'));
+
 console.log(`\n  Fayl: ${CHIQISH}`);
 console.log(`\n=== NATIJA: ${jami - xato}/${jami} o'tdi ===\n`);
 process.exit(xato ? 1 : 0);

@@ -100,15 +100,20 @@ export function ustunHarfi(indeks) {
 // Katak manzili: (0,0) → "A1"
 const katakManzil = (ustun, qator) => `${ustunHarfi(ustun)}${qator}`;
 
-// Sonni XML ga yozish uchun satr. Eksponentli yozuv (1e+21) Excelda o'qilmaydi —
-// uni oddiy o'nlik ko'rinishga o'tkazamiz. Yaxlitlash QILINMAYDI: son qanday
-// bo'lsa shundayligicha yoziladi, ko'rinishni numFmt hal qiladi.
+// Sonni XML ga yozish uchun satr. Eksponentli yozuv (1e+21, 1e-7) Excelda
+// o'qilmaydi — uni oddiy o'nlik ko'rinishga o'tkazamiz. Yaxlitlash QILINMAYDI:
+// son qanday bo'lsa shundayligicha yoziladi, ko'rinishni numFmt hal qiladi.
+//  DIQQAT: 1e21 dan katta BUTUN sonlarda toFixed() ham eksponent qaytaradi,
+//  shuning uchun u yerda BigInt ishlatiladi.
 function xmlSon(n) {
   if (!Number.isFinite(n)) return null;
-  if (Number.isInteger(n)) return String(n);
   const s = String(n);
   if (!/[eE]/.test(s)) return s;
-  return n.toFixed(12).replace(/0+$/, '').replace(/\.$/, '');
+  if (Number.isInteger(n)) {
+    try { return BigInt(n).toString(); } catch (e) { return s; }
+  }
+  // Kichik kasrlar (1e-7) — 20 xona yetarli, ortiqcha nollar olib tashlanadi
+  return n.toFixed(20).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 // ============================================================
@@ -210,8 +215,7 @@ const NS_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const NS_PKG_REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const NS_DOC_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
-const contentTypesXml = () => `${XML_BOSH}
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`
+const contentTypesXml = () => `${XML_BOSH}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`
   + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
   + '<Default Extension="xml" ContentType="application/xml"/>'
   + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
