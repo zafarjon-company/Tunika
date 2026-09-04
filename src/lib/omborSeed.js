@@ -5,36 +5,35 @@
 //    • dropdownlar uchun ro'yxatlar (zavod / tur / rang),
 //    • hisob ishlashi uchun zarur boshlang'ich SOZLAMA.
 //
-//  NARX RO'YXATI va RULONLAR bu yerda YO'Q — ularni foydalanuvchi
-//  interfeysdan o'zi kiritadi (Ombor → Narx ro'yxati va Rulonlar).
-//  Shu sabab kodda birorta zavod narxi ham, birorta rulon ham
-//  qattiq yozilmagan.
+//  RULONLAR bu yerda YO'Q — foydalanuvchi interfeysdan o'zi kiritadi.
+//  Har rulonning narxi va kursi rulonning o'zida yoziladi (daftardagidek),
+//  shu sabab kodda birorta narx ham, birorta rulon ham qattiq yozilmagan.
 //
 //  Firestore kalitlari (loyihaning `shop/<kalit>` modeli):
-//    'ombor-sozlama'   → { kurs, ustama, bolizvchi1, bolizvchi2,
-//                          nom1, nom2, kgPerM, koefSMZ, koefBoshqa, kursSana }
+//    'ombor-sozlama'   → { kurs, yolkiraTonna, bolizvchi1, bolizvchi2,
+//                          nom1, nom2, kgPerM, koefSMZ, koefBoshqa, kursSana,
+//                          zavodlar, turlar, ranglar }
 //    'ombor-rang-tur'  → { qoidalar: [{ naqsh, tur }], standart }
-//    'ombor-narxlar'   → { [id]: { id, zavod, tur, qalinlik, narx, sana, faol } }  ← bo'sh boshlanadi
-//    'ombor-rulonlar'  → { [id]: { id, nomer, rang, zavod, tur, qalinlik, ... } }  ← bo'sh boshlanadi
+//    'ombor-rulonlar'  → { [id]: { id, nomer, sana, zavod, tur, rang, qalinlik,
+//                                  ogirlik, narxTonna, kurs, uzunlik, yolkiraTonna,
+//                                  qoldiq, izoh, tasdiqlanmagan } }  ← bo'sh boshlanadi
 // ============================================================
 
-// ----- Dropdown ro'yxatlari -----
-//  Bular faqat TANLASH QULAY bo'lishi uchun. Ro'yxatda yo'q zavod yoki
-//  turni kiritsangiz, u ham dropdownga qo'shilib qoladi (komponentlar
-//  mavjud yozuvlardagi noyob qiymatlarni shu ro'yxatga qo'shib beradi).
-export const ZAVODLAR = ['SMZ', 'Aziya Steel', 'Master Class (Xitoy)', 'TMZ', 'Demir Master Prime'];
-
-export const TURLAR = ['оцинковка', 'полимерка', 'хопёр', 'глянцевый', 'глянцевый (плёнка)', 'Мебел'];
-
-export const RANGLAR = ['Mokriy', 'Oq', 'Qaymoq', 'Shokolad', 'Bordo', 'Somon', 'Granit', 'Qora', 'Sariq'];
+// ----- Dropdown ro'yxatlari — BOSHLANG'ICH qiymat -----
+//  Bular faqat bo'sh bazada ko'rinadigan boshlang'ich ro'yxat. Haqiqiy
+//  ro'yxat `ombor-sozlama` ichida saqlanadi va Sozlama panelidan
+//  tahrirlanadi (qo'shish / o'zgartirish / o'chirish / tartib almashtirish).
+//  Bundan tashqari mavjud yozuvlardagi noyob qiymatlar ham dropdownga
+//  qo'shilib boradi — shuning uchun ro'yxatdan o'chirilgan nom eski
+//  yozuvlarda ko'rinishda qolaveradi (ma'lumot yo'qolmaydi).
 
 // ----- Boshlang'ich sozlama (Sozlama panelidan tahrirlanadi) -----
 //  Bularsiz hisob umuman ishlamaydi (kurs 0 bo'lsa hamma narx "—" chiqadi),
 //  shuning uchun ular boshlang'ich qiymat sifatida turadi. Hammasi
 //  interfeysdan o'zgartiriladi va Firestore'da saqlanadi.
 export const SOZLAMA_BOSHLANGICH = {
-  kurs: 12000,        // dollar kursi, so'm
-  ustama: 50,         // zavod ro'yxatiga qo'shiladigan $/tonna
+  kurs: 12000,        // yangi rulon uchun taklif qilinadigan kurs (har rulonda o'zgartiriladi)
+  yolkiraTonna: 10,   // standart yo'lkira, $/tonna (har rulonda o'zgartiriladi)
   bolizvchi1: 0.95,   // 1-sotuv narxi = 1 m tannarx ÷ 0.95
   bolizvchi2: 0.90,   // 2-sotuv narxi = 1 m tannarx ÷ 0.90
   nom1: '5%',         // 1-ustun sarlavhasi
@@ -49,7 +48,28 @@ export const SOZLAMA_BOSHLANGICH = {
   koefSMZ: 9.35,
   koefBoshqa: 9.05,
   kursSana: '',       // kurs oxirgi marta qachon o'zgartirilgan
+  // Dropdown ro'yxatlari — Sozlama panelidan to'liq tahrirlanadi
+  //  "Kimdan / zavod" — daftardagidek: zavod yoki yetkazib beruvchi ("SMZ Momin")
+  zavodlar: ['SMZ', 'Xitoy', 'Aziya Steel', 'TMZ'],
+  //  Tur — qoplama turi; zavod bilan birga "SMZ rangli", "Xitoy xapyor" bo'lib o'qiladi
+  turlar: ['Rangli', 'Xapyor', 'Atsenkovka', 'Yaltiroq', 'Salafan', 'Mebel'],
+  ranglar: ['Mokriy', 'Oq', 'Qaymoq', 'Shokolad', 'Bordo', 'Somon', 'Granit', 'Qora', 'Sariq', "Ko'k", 'Yashil'],
 };
+
+// Eski kod (va rang→tur qoidalari tahriri) uchun qulay yorliqlar —
+// sozlamada ro'yxat bo'lmasa shular ishlatiladi.
+export const ZAVODLAR = SOZLAMA_BOSHLANGICH.zavodlar;
+export const TURLAR = SOZLAMA_BOSHLANGICH.turlar;
+export const RANGLAR = SOZLAMA_BOSHLANGICH.ranglar;
+
+// Sozlamadagi ro'yxatni xavfsiz o'qish.
+//  Maydon YO'Q bo'lsa (eski sozlama hujjati) — boshlang'ich ro'yxat.
+//  Maydon BOR, lekin bo'sh massiv bo'lsa — bo'sh qoladi: foydalanuvchi
+//  ro'yxatni ataylab tozalagan bo'lsa, standart nomlar qaytib kelmasin.
+export function sozlamaRoyxat(sozlama, nom) {
+  const v = sozlama && sozlama[nom];
+  return Array.isArray(v) ? v : (SOZLAMA_BOSHLANGICH[nom] || []);
+}
 
 // ----- Rang → tur taxmini -----
 //  Rulon qo'shganda rang tanlansa, tur BO'SH bo'lsa shu qoidalar bo'yicha
@@ -58,14 +78,15 @@ export const SOZLAMA_BOSHLANGICH = {
 //  Sozlama panelida tahrirlanadi.
 export const RANG_TUR_BOSHLANGICH = {
   qoidalar: [
-    { naqsh: 'atsenkovka', tur: 'оцинковка' },
-    { naqsh: 'salafan',    tur: 'глянцевый (плёнка)' },
-    { naqsh: 'plyonka',    tur: 'глянцевый (плёнка)' },
-    { naqsh: 'yaltiroq',   tur: 'глянцевый' },
-    { naqsh: 'xopyor',     tur: 'хопёр' },
-    { naqsh: 'mebel',      tur: 'Мебел' },
+    { naqsh: 'atsenkovka', tur: 'Atsenkovka' },
+    { naqsh: 'salafan',    tur: 'Salafan' },
+    { naqsh: 'plyonka',    tur: 'Salafan' },
+    { naqsh: 'yaltiroq',   tur: 'Yaltiroq' },
+    { naqsh: 'xopyor',     tur: 'Xapyor' },
+    { naqsh: 'xapyor',     tur: 'Xapyor' },
+    { naqsh: 'mebel',      tur: 'Mebel' },
   ],
-  standart: 'полимерка',
+  standart: 'Rangli',
 };
 
 // ----- Boshlang'ich to'plam -----

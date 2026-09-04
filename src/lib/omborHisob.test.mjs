@@ -1,10 +1,13 @@
 // ============================================================
-//  OMBOR HISOBI — MAJBURIY TEST HOLATLARI (prompt 2.1-bo'lim)
+//  OMBOR HISOBI — TESTLAR
 //  Ishga tushirish:  node src/lib/omborHisob.test.mjs
 //  React kerak emas — sof funksiyalar sinaladi.
+//
+//  Model: har rulonda O'ZINING narxi ($/t), kursi va yo'lkirasi ($/t)
+//  yoziladi — foydalanuvchining daftaridagidek.
 // ============================================================
-import { rulonHisob, kgPerMetr, narxTop, jamiHisob, turTaxmin, zavodGuruh, OGOH } from './omborHisob.js';
-import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH } from './omborSeed.js';
+import { rulonHisob, kgPerMetr, jamiHisob, turTaxmin, zavodGuruh, norm, OGOH } from './omborHisob.js';
+import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, sozlamaRoyxat } from './omborSeed.js';
 
 const R = (n) => Math.round(n);
 let xato = 0;
@@ -17,170 +20,214 @@ function tekshir(nom, kutilgan, olingan) {
   console.log(`${ok ? '  ✅' : '  ❌'} ${nom}: ${olingan}${ok ? '' : `  (kutilgan: ${kutilgan})`}`);
 }
 
-// Test uchun sozlama: kurs har holatda alohida beriladi, ustama = 50.
-// Narx ro'yxatida "toza" zavod narxi turadi, ustama ustiga qo'shiladi —
-// ya'ni jadvaldagi 1120 $/t = 1070 (zavod) + 50 (ustama).
-const USTAMA = 50;
-function ctxYasa(kurs, tozaNarx) {
-  return {
-    sozlama: { ...SOZLAMA_BOSHLANGICH, kurs, ustama: USTAMA },
-    narxlar: [{ id: 't1', zavod: 'SMZ', tur: 'полимерка', qalinlik: 0.4, narx: tozaNarx, sana: '2026-07-30', faol: true }],
-  };
-}
-const rulonYasa = (ogirlik, uzunlik) => ({
-  id: 'r1', nomer: 1, rang: 'Mokriy', zavod: 'SMZ', tur: 'полимерка',
-  qalinlik: 0.4, ogirlik, uzunlik,
+// Daftardagi qatorlarda yo'lkira YO'Q — shuning uchun 0 bilan solishtiramiz.
+const ctx0 = { sozlama: { ...SOZLAMA_BOSHLANGICH, yolkiraTonna: 0 } };
+// Rulon yasash: narx va kurs rulonning O'ZIDA
+const rulonYasa = (ogirlik, narxTonna, kurs, uzunlik, qoshimcha = {}) => ({
+  id: 'r1', nomer: 1, rang: 'Mokriy', zavod: 'SMZ', tur: 'Rangli', qalinlik: 0.4,
+  ogirlik, narxTonna, kurs, uzunlik, ...qoshimcha,
 });
 
-console.log('\n=== 2.1 — MAJBURIY TEST HOLATLARI ===\n');
+console.log('\n=== 1) DAFTARDAGI QATORLAR (yo\'lkirasiz) ===\n');
 
-// ---- 1-holat: daftardagi haqiqiy yozuv ----
-//  DIQQAT: daftarda 1 m = 49 080 so'm yozilgan, lekin uzunlik AYNAN 1422 m
-//  bo'lganda aniq hisob 49 080,73 beradi → yaxlitlanganda 49 081.
-//  Sababi: daftardagi uzunlik ekranga yaxlitlab yozilgan (haqiqiy uzunlik
-//  ~1422,02 m). Pastdagi 1b-tekshiruv shuni isbotlaydi: uzunlik 1422,0212
-//  bo'lsa daftarning UCHALA raqami ham AYNAN chiqadi.
-//  Prompt 2-bo'limi va 6.4-qoidasi ("oraliq hisoblarda yaxlitlash yo'q")
-//  bajarildi — 2- va 3-holatlar aynan shu qoida bilan mos keladi
-//  (kesib tashlash/floor ishlatilsa 2-holat buziladi).
-console.log("1a) og'irlik 5150 kg, narx 1120 $/t, kurs 12100, uzunlik 1422 m (aniq hisob)");
+// ---- 18-qator (daftar): 5150 kg, 1120 $/t, kurs 12100, 1422 m ----
+//  Daftarda 1 m = 49 080 (kesib yozilgan), aniq hisob 49 080,73 → 49 081.
+console.log("18-qator: 5150 kg × 1120 $/t, kurs 12100, uzunlik 1422 m");
 {
-  const h = rulonHisob(rulonYasa(5150, 1422), ctxYasa(12100, 1120 - USTAMA));
-  tekshir('yangi narx $/t', 1120, R(h.yangiNarx));
-  tekshir('rulon $',       5768, R(h.rulonDollar));           // daftar: 5 768 $
-  tekshir("rulon so'm", 69792800, R(h.rulonSom));             // daftar: 69 792 800
-  tekshir("1 m tannarx",  49081, R(h.metrTannarx));           // daftar: 49 080 (0,73 farq)
-  tekshir('÷0.95',        51664, R(h.sotuv1));                // daftar: 51 663
-  tekshir('÷0.90',        54534, R(h.sotuv2));                // daftar: 54 533
+  const h = rulonHisob(rulonYasa(5150, 1120, 12100, 1422), ctx0);
+  tekshir('rulon $',       5768, R(h.rulonDollar));
+  tekshir("rulon so'm", 69792800, R(h.rulonSom));
+  tekshir("yo'lkira so'm",    0, R(h.yolkiraSom));
+  tekshir("1 m tannarx",  49081, R(h.metrTannarx));   // daftar: 49 080 (0,73 farq)
+  tekshir('÷0.95',        51664, R(h.sotuv1));
+  tekshir('÷0.90',        54534, R(h.sotuv2));
 }
 
-console.log("\n1b) O'SHA rulon, uzunlik 1422,0212 m — daftar raqamlari AYNAN chiqadi");
+// ---- 34-qator: 5150 kg, 1130 $/t, kurs 12100, 1436 m → daftarda 49 036 ----
+console.log("\n34-qator: 5150 kg × 1130 $/t, kurs 12100, uzunlik 1436 m");
 {
-  const h = rulonHisob(rulonYasa(5150, 1422.0212), ctxYasa(12100, 1120 - USTAMA));
-  tekshir("1 m tannarx",  49080, R(h.metrTannarx));
-  tekshir('÷0.95',        51663, R(h.sotuv1));
-  tekshir('÷0.90',        54533, R(h.sotuv2));
+  const h = rulonHisob(rulonYasa(5150, 1130, 12100, 1436), ctx0);
+  tekshir('rulon $',       5820, R(h.rulonDollar));   // daftar: 5 819,5
+  tekshir("rulon so'm", 70415950, R(h.rulonSom));
+  tekshir("1 m tannarx",  49036, R(h.metrTannarx));
+  tekshir('÷0.95',        51617, R(h.sotuv1));
+  tekshir('÷0.90',        54485, R(h.sotuv2));   // daftar: 54 484 (49 036,18 ÷ 0,9 = 54 484,64 — kalkulyatorda 1 m avval butunlashtirilgan)
 }
 
-// ---- 2-holat ----
-console.log("\n2) og'irlik 5150 kg, narx 1250 $/t, kurs 12000, uzunlik 1422 m");
+// ---- 22-qator: 3612 kg, 1210 $/t, kurs 12200, 780 m → daftarda 68 359 ----
+console.log("\n22-qator: 3612 kg × 1210 $/t, kurs 12200, uzunlik 780 m");
 {
-  const h = rulonHisob(rulonYasa(5150, 1422), ctxYasa(12000, 1250 - USTAMA));
-  tekshir('rulon $',       6438, R(h.rulonDollar));     // 6 437,5
-  tekshir("rulon so'm", 77250000, R(h.rulonSom));
-  tekshir("1 m tannarx",  54325, R(h.metrTannarx));
-  tekshir('÷0.95',        57184, R(h.sotuv1));
-  tekshir('÷0.90',        60361, R(h.sotuv2));
+  const h = rulonHisob(rulonYasa(3612, 1210, 12200, 780, { qalinlik: 0.5 }), ctx0);
+  tekshir("rulon so'm", 53320344, R(h.rulonSom));
+  tekshir("1 m tannarx",  68359, R(h.metrTannarx));
+  tekshir('÷0.95',        71957, R(h.sotuv1));
+  tekshir('÷0.90',        75955, R(h.sotuv2));   // daftar: 75 954 (68 359,42 ÷ 0,9 = 75 954,9 — o'sha sabab)
 }
 
-// ---- 3-holat ----
-console.log("\n3) og'irlik 3612 kg, narx 1330 $/t, kurs 12000, uzunlik 780 m");
+console.log("\n=== 2) YO'LKIRA ===\n");
 {
-  const h = rulonHisob(rulonYasa(3612, 780), ctxYasa(12000, 1330 - USTAMA));
-  tekshir("1 m tannarx",  73907, R(h.metrTannarx));
-  tekshir('÷0.95',        77797, R(h.sotuv1));
-  tekshir('÷0.90',        82119, R(h.sotuv2));
+  // Standart 10 $/t: 5150 kg → 51,5 $ → × 12100 = 623 150 so'm qo'shiladi
+  const ctx10 = { sozlama: { ...SOZLAMA_BOSHLANGICH, yolkiraTonna: 10 } };
+  const h = rulonHisob(rulonYasa(5150, 1130, 12100, 1436), ctx10);
+  tekshir("yo'lkira $ (5,15 t × 10)", 51.5, h.yolkiraDollar);
+  tekshir("yo'lkira so'm",        623150, R(h.yolkiraSom));
+  tekshir("jami so'm",          71039100, R(h.jamiSom));
+  tekshir("1 m tannarx (yo'lkira bilan)", 49470, R(h.metrTannarx));   // 49 036 + 434
+  tekshir("standart ishlatildi belgisi", true, h.yolkiraStandart);
+
+  // Rulonda o'zi yozilgan bo'lsa — standart emas, o'sha
+  const h2 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { yolkiraTonna: 15 }), ctx10);
+  tekshir("rulondagi 15 $/t ustun", 77.25, h2.yolkiraDollar);
+  tekshir("standart emas belgisi", false, h2.yolkiraStandart);
+
+  // Rulonda 0 yozilsa — yo'lkirasiz (standart QAYTIB kelmaydi)
+  const h3 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { yolkiraTonna: 0 }), ctx10);
+  tekshir("rulonda 0 → yo'lkira yo'q", 0, h3.yolkiraDollar);
+  tekshir("0 da tannarx daftardagidek", 49036, R(h3.metrTannarx));
+
+  // Manfiy yozilsa — 0 deb olinadi
+  const h4 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { yolkiraTonna: -5 }), ctx10);
+  tekshir("manfiy → 0", 0, h4.yolkiraDollar);
 }
 
-console.log('\n=== QO\'SHIMCHA TEKSHIRUVLAR ===\n');
+console.log("\n=== 3) NARX VA KURS HAR RULONDA ===\n");
+{
+  // Sozlamadagi kurs FAQAT yangi rulon uchun taklif — hisobda rulondagi kurs ishlatiladi
+  const h = rulonHisob(rulonYasa(5150, 1130, 12500, 1436), { sozlama: { ...SOZLAMA_BOSHLANGICH, kurs: 12000, yolkiraTonna: 0 } });
+  tekshir("rulondagi kurs (12500) ishlatildi", 72743750, R(h.rulonSom));
+  // Eski maydon nomlari ham o'qiladi — avvalgi yozuvlar yo'qolmasin
+  const eski = { id: 'e', nomer: 1, zavod: 'SMZ', tur: 'Rangli', qalinlik: 0.4,
+    ogirlik: 5150, xaridNarx: 1130, xaridKurs: 12100, uzunlik: 1436 };
+  const he = rulonHisob(eski, ctx0);
+  tekshir("eski maydonlar (xaridNarx/xaridKurs) o'qildi", 49036, R(he.metrTannarx));
+}
 
-// kg/m jadvali
-console.log('4) kg/m jadvali va zaxira koeffitsient');
+console.log('\n=== 4) KG/M JADVALI (faqat zaxira va tekshiruv uchun) ===\n');
 tekshir('SMZ 0.40',    3.74, kgPerMetr(SOZLAMA_BOSHLANGICH, 'SMZ', 0.4));
-tekshir('BOSHQA 0.40', 3.62, kgPerMetr(SOZLAMA_BOSHLANGICH, 'Aziya Steel', 0.4));
-tekshir('SMZ 0.25 (jadvalda yo\'q → 0.25×9.35)', 2.3375, kgPerMetr(SOZLAMA_BOSHLANGICH, 'SMZ', 0.25));
-tekshir('BOSHQA 0.25 (0.25×9.05)', 2.2625, kgPerMetr(SOZLAMA_BOSHLANGICH, 'TMZ', 0.25));
-tekshir("'SMZ zavod' ham SMZ guruhi", 'SMZ', zavodGuruh('SMZ zavod'));
-tekshir("'Aziya Steel' -> BOSHQA", 'BOSHQA', zavodGuruh('Aziya Steel'));
-tekshir("bo'sh zavod -> BOSHQA", 'BOSHQA', zavodGuruh(''));
-tekshir("qalinlik yo'q -> kg/m null", null, kgPerMetr(SOZLAMA_BOSHLANGICH, 'SMZ', ''));
-tekshir("sozlama bo'sh {} -> kg/m null", null, kgPerMetr({}, 'SMZ', 0.4));
-
-// Uzunlik og'irlikdan hisoblanishi
-console.log("\n5) Uzunlik kiritilmasa — og'irlikdan hisoblanadi");
+tekshir('BOSHQA 0.40', 3.62, kgPerMetr(SOZLAMA_BOSHLANGICH, 'Xitoy', 0.4));
+tekshir("jadvalda yo'q qalinlik → koef", 2.3375, kgPerMetr(SOZLAMA_BOSHLANGICH, 'SMZ', 0.25));
+tekshir("'SMZ Momin' ham SMZ guruhi", 'SMZ', zavodGuruh('SMZ Momin'));
+tekshir("'Xitoy' → BOSHQA", 'BOSHQA', zavodGuruh('Xitoy'));
 {
-  const h = rulonHisob({ ...rulonYasa(3740, ''), zavod: 'SMZ' }, ctxYasa(12000, 1200));
+  // Uzunlik kiritilmasa — og'irlikdan hisoblanadi va "≈" belgisi qo'yiladi
+  const h = rulonHisob(rulonYasa(3740, 1130, 12100, ''), ctx0);
   tekshir('uzunlik (3740 / 3.74)', 1000, R(h.uzunlik));
   tekshir('uzunlik hisoblanganmi', true, h.uzunlikHisoblangan);
-  tekshir('qoldiq uzunlikka teng', 1000, R(h.qoldiq));
+  tekshir("uzunlik yo'q ogohi CHIQMAYDI (hisoblandi)", false, h.ogohlar.some((o) => o.kod === OGOH.UZUNLIK_YOQ));
 }
 
-// Narx ro'yxati va ogohlantirishlar
-console.log('\n6) Ogohlantirishlar');
+console.log('\n=== 5) OGOHLANTIRISHLAR ===\n');
 {
-  const kod = (h) => h.ogohlar.map((o) => o.kod).join(',');
-  const yoq = rulonHisob({ ...rulonYasa(5150, 1422), zavod: 'TMZ' }, ctxYasa(12000, 1200));
-  tekshir("narx yo'q ogohi", true, kod(yoq).includes(OGOH.NARX_YOQ));
-  tekshir("narx yo'q → yangiNarx null", true, yoq.yangiNarx === null);
-
-  const arzon = rulonHisob({ ...rulonYasa(5150, 1422), xaridNarx: 1400 }, ctxYasa(12000, 1200));
-  tekshir('arzonladi ogohi', true, kod(arzon).includes(OGOH.ARZONLADI));
-
-  // 5150 kg / 1422 m = 3.622 kg/m; SMZ 0.40 kutilgani 3.74 → farq 3.2 % (chegarada, ogoh YO'Q)
-  const chek1 = rulonHisob(rulonYasa(5150, 1422), ctxYasa(12000, 1200));
-  tekshir("±5 % ichida — qalinlik ogohi yo'q", false, kod(chek1).includes(OGOH.QALINLIK));
-  // 5150 kg / 1200 m = 4.29 kg/m → 3.74 dan 14.7 % farq → OGOH
-  const chek2 = rulonHisob(rulonYasa(5150, 1200), ctxYasa(12000, 1200));
-  tekshir('±5 % dan tashqarida — qalinlik ogohi bor', true, kod(chek2).includes(OGOH.QALINLIK));
-
-  const tasdiqsiz = rulonHisob({ ...rulonYasa(5150, 1422), tasdiqlanmagan: true }, ctxYasa(12000, 1200));
-  tekshir('tasdiqlanmagan ogohi', true, kod(tasdiqsiz).includes(OGOH.TASDIQSIZ));
+  const kod = (h) => h.ogohlar.map((o) => o.kod);
+  // Narx yo'q
+  const h1 = rulonHisob(rulonYasa(5150, '', 12100, 1436), ctx0);
+  tekshir("narx yo'q → ogoh", true, kod(h1).includes(OGOH.NARX_YOQ));
+  tekshir("narx yo'q → tannarx null", true, h1.metrTannarx === null);
+  // Kurs yo'q
+  const h2 = rulonHisob(rulonYasa(5150, 1130, '', 1436), ctx0);
+  tekshir("kurs yo'q → ogoh", true, kod(h2).includes(OGOH.NARX_YOQ));
+  tekshir("kurs yo'q matni", true, h2.ogohlar.find((o) => o.kod === OGOH.NARX_YOQ).matn.includes('kurs'));
+  // Uzunlik yo'q va kg/m ham chiqmadi (qalinlik yo'q)
+  const h3 = rulonHisob(rulonYasa(5150, 1130, 12100, '', { qalinlik: '' }), ctx0);
+  tekshir("uzunlik va qalinlik yo'q → uzunlik ogohi", true, kod(h3).includes(OGOH.UZUNLIK_YOQ));
+  // ±5 %: 5150/1422 = 3.62 (SMZ 0.40 kutilgani 3.74 → 3.2 % — chegarada, OGOH YO'Q)
+  const h4 = rulonHisob(rulonYasa(5150, 1130, 12100, 1422), ctx0);
+  tekshir("±5 % ichida — qalinlik ogohi yo'q", false, kod(h4).includes(OGOH.QALINLIK));
+  // 5150/1200 = 4.29 → 14.7 % farq → OGOH
+  const h5 = rulonHisob(rulonYasa(5150, 1130, 12100, 1200), ctx0);
+  tekshir('±5 % dan tashqarida — qalinlik ogohi bor', true, kod(h5).includes(OGOH.QALINLIK));
+  // Daftardagi 33-qator: "0,45" deb yozilgan, lekin 5332/1472 = 3.62 → 0.40 ga o'xshaydi
+  const h6 = rulonHisob(rulonYasa(5332, 1090, 12100, 1472, { qalinlik: 0.45 }), ctx0);
+  tekshir("33-qator (0,45 deb yozilgan) ogoh beradi", true, kod(h6).includes(OGOH.QALINLIK));
+  // Tasdiqlanmagan
+  const h7 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { tasdiqlanmagan: true }), ctx0);
+  tekshir('tasdiqlanmagan ogohi', true, kod(h7).includes(OGOH.TASDIQSIZ));
+  // Og'irlik yo'q — hech qanday pul ogohi chiqmaydi (hali to'ldirilmagan qator)
+  const h8 = rulonHisob({ id: 'b', nomer: 1 }, ctx0);
+  tekshir("bo'sh qatorda pul ogohi yo'q", 0, h8.ogohlar.length);
 }
 
-// Seed narx ro'yxati
-console.log("\n7) Narx ro'yxatidan mos yozuvni topish");
-{
-  // Narx ro'yxati KODDA YO'Q — foydalanuvchi o'zi kiritadi. Shu sabab bu yerda
-  // qo'lda tuzilgan ro'yxat ustida narxTop() mantig'i sinaladi.
-  const narxlar = [
-    { id: 'a', zavod: 'SMZ', tur: 'полимерка', qalinlik: 0.40, narx: 1240, sana: '2026-07-30', faol: true },
-    { id: 'b', zavod: 'SMZ', tur: 'полимерка', qalinlik: 0.45, narx: 1210, sana: '2026-07-30', faol: true },
-    { id: 'c', zavod: 'Aziya Steel', tur: 'хопёр', qalinlik: 0.50, narx: 1180, sana: '2026-07-30', faol: true },
-    // Bir xil zavod+tur+qalinlik, ikki sana — YANGISI olinishi kerak
-    { id: 'd', zavod: 'SMZ', tur: 'глянцевый', qalinlik: 0.40, narx: 1290, sana: '2026-06-01', faol: true },
-    { id: 'e', zavod: 'SMZ', tur: 'глянцевый', qalinlik: 0.40, narx: 1330, sana: '2026-08-15', faol: true },
-    // Arxivlangan yozuv — ISHLATILMASLIGI kerak
-    { id: 'f', zavod: 'TMZ', tur: 'полимерка', qalinlik: 0.60, narx: 999, sana: '2026-07-30', faol: false },
-  ];
-  tekshir('SMZ полимерка 0.40', 1240, narxTop(narxlar, 'SMZ', 'полимерка', 0.4).narx);
-  tekshir('Aziya Steel хопёр 0.50', 1180, narxTop(narxlar, 'Aziya Steel', 'хопёр', 0.5).narx);
-  tekshir('bir nechta mos kelsa — eng YANGI sana', 1330, narxTop(narxlar, 'SMZ', 'глянцевый', 0.4).narx);
-  tekshir("faol:false yozuv ishlatilmaydi", true, narxTop(narxlar, 'TMZ', 'полимерка', 0.6) === null);
-  tekshir("ro'yxatda yo'q zavod → null", true, narxTop(narxlar, "Demir Master Prime", 'полимерка', 0.4) === null);
-  tekshir("qalinlik mos emas → null", true, narxTop(narxlar, 'SMZ', 'полимерка', 0.35) === null);
-  tekshir("bo'sh ro'yxat → null", true, narxTop([], 'SMZ', 'полимерка', 0.4) === null);
-  tekshir("obyekt-xarita ham qabul qilinadi", 1240,
-    narxTop({ a: narxlar[0] }, 'SMZ', 'полимерка', 0.4).narx);
-  // "0.40" (matn) va 0.4 (son) bir xil qalinlik deb qaralishi kerak
-  tekshir("qalinlik matn ko'rinishida ham topiladi", 1240,
-    narxTop([{ zavod: 'SMZ', tur: 'полимерка', qalinlik: '0.40', narx: 1240, faol: true }], 'SMZ', 'полимерка', 0.4).narx);
-  // Registr va ortiqcha bo'shliq farq qilmasin
-  tekshir('registr/bo\'shliq farq qilmaydi', 1180,
-    narxTop(narxlar, '  aziya   steel ', 'ХОПЁР', 0.5).narx);
-}
+console.log("\n=== 6) RANG → TUR ===\n");
+tekshir('Atsenkovka',  'Atsenkovka', turTaxmin(RANG_TUR_BOSHLANGICH, 'Atsenkovka'));
+tekshir('Oq (yaltiroq)', 'Yaltiroq', turTaxmin(RANG_TUR_BOSHLANGICH, 'Oq (yaltiroq)'));
+tekshir('Salafan',     'Salafan',    turTaxmin(RANG_TUR_BOSHLANGICH, 'Salafan'));
+tekshir('Xapyor',      'Xapyor',     turTaxmin(RANG_TUR_BOSHLANGICH, 'Xapyor'));
+tekshir('Qora mebel',  'Mebel',      turTaxmin(RANG_TUR_BOSHLANGICH, 'Qora mebel'));
+tekshir('Mokriy → standart', 'Rangli', turTaxmin(RANG_TUR_BOSHLANGICH, 'Mokriy'));
 
-// Rang → tur
-console.log('\n8) Rang → tur bog\'lanishi');
-tekshir('Atsenkovka',  'оцинковка',           turTaxmin(RANG_TUR_BOSHLANGICH, 'Atsenkovka'));
-tekshir('Oq (yaltiroq)', 'глянцевый',         turTaxmin(RANG_TUR_BOSHLANGICH, 'Oq (yaltiroq)'));
-tekshir('Salafan',     'глянцевый (плёнка)',  turTaxmin(RANG_TUR_BOSHLANGICH, 'Salafan'));
-tekshir('Xopyor',      'хопёр',               turTaxmin(RANG_TUR_BOSHLANGICH, 'Xopyor'));
-tekshir('Qora mebel',  'Мебел',               turTaxmin(RANG_TUR_BOSHLANGICH, 'Qora mebel'));
-tekshir('Mokriy',      'полимерка',           turTaxmin(RANG_TUR_BOSHLANGICH, 'Mokriy'));
-
-// Jami qatori
-console.log('\n9) Jami qatori');
+console.log('\n=== 7) JAMI QATORI ===\n');
 {
-  const ctx = ctxYasa(12000, 1200);
+  const ctx10 = { sozlama: { ...SOZLAMA_BOSHLANGICH, yolkiraTonna: 10 } };
   const qatorlar = [
-    { ...rulonYasa(5150, 1422), id: 'a' },
-    { ...rulonYasa(3612, 780),  id: 'b', nomer: 2 },
-  ].map((r) => ({ ...r, h: rulonHisob(r, ctx) }));
+    { ...rulonYasa(5150, 1130, 12100, 1436), id: 'a' },
+    { ...rulonYasa(3612, 1210, 12200, 780), id: 'b', nomer: 2, qalinlik: 0.5 },
+  ].map((r) => ({ ...r, h: rulonHisob(r, ctx10) }));
   const j = jamiHisob(qatorlar);
   tekshir('rulonlar soni', 2, j.soni);
   tekshir("umumiy og'irlik (kg)", 8762, R(j.ogirlik));
-  tekshir('umumiy qoldiq (m)', 2202, R(j.qoldiq));
-  tekshir("ombor qiymati (so'm)", R(qatorlar[0].h.qoldiqQiymat + qatorlar[1].h.qoldiqQiymat), R(j.qiymat));
+  tekshir('umumiy uzunlik (m)', 2216, R(j.uzunlik));
+  tekshir("jami so'm (yo'lkira bilan)", R(qatorlar[0].h.jamiSom + qatorlar[1].h.jamiSom), R(j.jamiSom));
+  tekshir("jami yo'lkira so'm", R(qatorlar[0].h.yolkiraSom + qatorlar[1].h.yolkiraSom), R(j.yolkiraSom));
+  // Jadval tagidagi yig'indilar: rulon $ / rulon so'm (yo'lkirasiz) va yo'lkira $
+  tekshir('jami rulon $ (yo\'lkirasiz)', R(5.15 * 1130 + 3.612 * 1210), R(j.rulonDollar));
+  tekshir("jami rulon so'm (yo'lkirasiz)", R(5.15 * 1130 * 12100 + 3.612 * 1210 * 12200), R(j.rulonSom));
+  tekshir("jami yo'lkira $", R((5.15 + 3.612) * 10), R(j.yolkiraDollar));
+  tekshir("jami $ = rulon $ + yo'lkira $", R(j.rulonDollar + j.yolkiraDollar), R(j.jamiDollar));
+  tekshir("jami so'm = rulon so'm + yo'lkira so'm", R(j.rulonSom + j.yolkiraSom), R(j.jamiSom));
+  tekshir("ombor qiymati (qoldiq × tannarx)", R(qatorlar[0].h.qoldiqQiymat + qatorlar[1].h.qoldiqQiymat), R(j.qiymat));
+}
+
+console.log("\n=== 8) TANLOV RO'YXATLARI ===\n");
+{
+  const teng = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  tekshir("maydon yo'q → boshlang'ich", true, teng(sozlamaRoyxat({}, 'zavodlar'), SOZLAMA_BOSHLANGICH.zavodlar));
+  tekshir("bo'sh massiv bo'sh qoladi", 0, sozlamaRoyxat({ zavodlar: [] }, 'zavodlar').length);
+  tekshir("kiritilgan ro'yxat o'zi qaytadi", true, teng(sozlamaRoyxat({ zavodlar: ['A', 'B'] }, 'zavodlar'), ['A', 'B']));
+  tekshir("massiv emas → boshlang'ich", true, teng(sozlamaRoyxat({ ranglar: 'xato' }, 'ranglar'), SOZLAMA_BOSHLANGICH.ranglar));
+}
+
+console.log("\n=== 9) NOMNI HAMMA RULONDA QAYTA NOMLASH ===\n");
+{
+  // App.jsx dagi omborQaytaNomla bilan bir xil algoritm (endi faqat rulonlar)
+  function qaytaNomla(maydon, eski, yangi, rulonlar) {
+    const e = norm(eski);
+    const y = String(yangi == null ? '' : yangi).trim();
+    if (!e || !y) return 0;
+    const patch = {};
+    for (const id in rulonlar) {
+      const rec = rulonlar[id];
+      if (!rec || rec.ochirilgan) continue;
+      if (norm(rec[maydon]) !== e) continue;
+      patch[id] = { ...rec, [maydon]: y };
+    }
+    Object.assign(rulonlar, patch);
+    return Object.keys(patch).length;
+  }
+  const rulonlar = {
+    a: { id: 'a', zavod: 'SMZ', tur: 'Rangli', rang: 'Oq' },
+    b: { id: 'b', zavod: 'smz', tur: 'Xapyor', rang: 'Oq' },      // registr boshqacha
+    c: { id: 'c', zavod: 'TMZ', tur: 'Rangli', rang: 'Qora' },
+    d: { id: 'd', zavod: 'SMZ', tur: 'Rangli', ochirilgan: true }, // o'chirilgan
+  };
+  tekshir('almashdi (registr farqisiz)', 2, qaytaNomla('zavod', 'SMZ', 'SMZ Momin', rulonlar));
+  tekshir('a → yangi nom', 'SMZ Momin', rulonlar.a.zavod);
+  tekshir('b (kichik harf) ham', 'SMZ Momin', rulonlar.b.zavod);
+  tekshir("c tegilmadi", 'TMZ', rulonlar.c.zavod);
+  tekshir("o'chirilgan tegilmadi", 'SMZ', rulonlar.d.zavod);
+  tekshir("bo'sh eski nom → 0", 0, qaytaNomla('zavod', '', 'X', rulonlar));
+  tekshir("bo'sh yangi nom → 0", 0, qaytaNomla('zavod', 'TMZ', '  ', rulonlar));
+
+  // O'zgarishni aniqlash (OmborSozlama: qaytaNomlar)
+  const sanoq = new Map([['smz', 3]]);
+  const aniqla = (r) => {
+    const eski = String(r.asl || '').trim(), yng = String(r.v || '').trim();
+    if (!eski || !yng || norm(eski) === norm(yng)) return false;
+    return (sanoq.get(norm(eski)) || 0) > 0;
+  };
+  tekshir("nom o'zgargan va ishlatilgan → aniqlanadi", true, aniqla({ asl: 'SMZ', v: 'SMZ Momin' }));
+  tekshir("yangi qator (asl bo'sh) → emas", false, aniqla({ asl: '', v: 'Yangi' }));
+  tekshir("faqat registr → emas", false, aniqla({ asl: 'SMZ', v: 'smz' }));
+  tekshir("ishlatilmagan nom → emas", false, aniqla({ asl: 'Demir', v: 'Demir Master' }));
 }
 
 console.log(`\n${'='.repeat(46)}`);

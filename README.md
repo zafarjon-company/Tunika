@@ -67,7 +67,7 @@ npm run preview    # build'ni lokal sinash
         ├── yoqlama/        # Belgilash, Kalendar, Avans
         ├── ishchilar/      # Royxat, Lavozimlar, Qobiliyatlar, Kamchiliklar
         ├── narxlar/        # Listlar, Metrli, Aksessuarlar
-        ├── ombor/          # Materiallar, Harakat, Rulonlar, NarxRoyxati, OmborSozlama
+        ├── ombor/          # Materiallar, Harakat, Rulonlar, OmborSozlama
         ├── hisobot/        # Dashboard, Kassa, Zakaslar, Ishchilar, charts
         ├── jurnal/         # amallar jurnali (log)
         └── sozlamalar/     # Sozlamalar
@@ -86,53 +86,64 @@ npm run preview    # build'ni lokal sinash
   grafiklar.
 - **Ombor** — ikki qism:
   - *Materiallar / Harakat* — material qoldig'i, kirim-chiqim tarixi.
-  - *Rulonlar / Narx ro'yxati* — ombordagi rulonlar va ularning **1 metr
-    uchun tannarxi hamda sotuv narxi**. Barcha kirish qiymatlari
-    (zavod narx ro'yxati, dollar kursi, ustama, bo'luvchilar, kg/m
-    jadvali) interfeysdan tahrirlanadi va Firestore'da saqlanadi —
-    kodda birorta narx qattiq yozilmagan.
+  - *Rulonlar* — ombordagi rulonlar daftar jadvali tartibida va ularning
+    **1 metr uchun tannarxi hamda sotuv narxi**. Har rulon o'z narxi ($/t),
+    kursi va yo'lkirasi bilan yoziladi; standart qiymatlar (kurs, yo'lkira,
+    bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari) interfeysdan
+    tahrirlanadi va Firestore'da saqlanadi — kodda birorta narx qattiq
+    yozilmagan.
 - **Jurnal** — barcha amallar tarixi.
 - **Sozlamalar** — do'kon nomi, kurs, tovarlar, mavzular (ko'plab tema),
   til, tugmalar.
 
 ## Ombor → Rulonlar: hisob zanjiri
 
-Har bir rulon uchun (`src/lib/omborHisob.js`, sof funksiya — React'siz):
+Kiritish formasi va Excel eksporti daftardagi ustunlar tartibida. Yulduzchali
+maydonlar foydalanuvchi kiritadi, qolgani o'zi hisoblanadi
+(`src/lib/omborHisob.js`, sof funksiya — React'siz):
 
-1. **Zavod narxi** — `ombor-narxlar` dan `zavod + tur + qalinlik` bo'yicha
-   topiladi (faqat `faol: true`; bir nechta mos kelsa eng yangi sanasi).
-   Topilmasa narx ustunida `YO'Q` yozilib, qator belgilanadi.
-2. **Yangi narx $/t** = zavod narxi + `ustama`
-3. **Rulon $** = `og'irlik / 1000 × yangi narx`
-4. **Rulon so'm** = rulon $ × `kurs`
-5. **Uzunlik** — kiritilgan bo'lsa o'sha; bo'lmasa `og'irlik / (kg/m)`
-   (`kgPerM` jadvalidan; jadvalda yo'q qalinlik uchun `qalinlik × koef`)
-6. **1 m tannarx** = rulon so'm ÷ uzunlik
-7. **Sotuv 1 / Sotuv 2** = 1 m tannarx ÷ `bolizvchi1` / `bolizvchi2`
+| Ustun | Kim to'ldiradi | Hisob |
+|---|---|---|
+| №, Sana, Kimdan (zavod), Tur, Rang, Qalinlik | kiritiladi | — |
+| Og'irlik (kg) | kiritiladi | — |
+| Narx $/t | kiritiladi | — |
+| **Rulon $** | hisob | `og'irlik / 1000 × narx $/t` |
+| Kurs | kiritiladi (yangi rulonda standart kurs avtomatik) | — |
+| **Rulon so'm** | hisob | `rulon $ × kurs` |
+| Uzunlik (m) | kiritiladi — rulon ichidagi qog'ozdan | bo'sh bo'lsa `og'irlik / (kg/m)` taxminan (≈ belgisi) |
+| Yo'lkira $/t | ixtiyoriy — bo'sh bo'lsa standart (sozlamada, boshlang'ich 10) | — |
+| **Yo'lkira $** | hisob | `og'irlik / 1000 × yo'lkira $/t` |
+| **1 m tannarx** | hisob | `(rulon so'm + yo'lkira so'm) ÷ uzunlik` |
+| **5 % / 10 %** (nomlari sozlamada) | hisob | `1 m tannarx ÷ 0.95` / `÷ 0.90` (bo'luvchilar sozlamada) |
+| Qoldiq (m) | kiritiladi | bo'sh bo'lsa = uzunlik |
 
 Yaxlitlash **faqat ko'rsatishda** (`Math.round`) — oraliq hisoblarda yo'q.
+kg/m jadvali faqat uzunlik yozilmaganda ishlatiladi; uzunlik yozilgan bo'lsa
+haqiqiy kg/m jadvaldagidan ±5 % dan ko'p farq qilsa qator ogohlantiriladi
+(qalinlik noto'g'ri bo'lishi mumkin).
+
 Hisob zanjirini tekshirish:
 
 ```bash
 npm run test:ombor
 ```
 
-Firestore kalitlari: `ombor-sozlama`, `ombor-narxlar`, `ombor-rulonlar`,
-`ombor-rang-tur` (hammasi `shop/<kalit>` modelida).
+Firestore kalitlari: `ombor-sozlama`, `ombor-rulonlar`, `ombor-rang-tur`
+(hammasi `shop/<kalit>` modelida).
 
-**Narx ro'yxati va rulonlar kodda YO'Q** — ular bo'sh boshlanadi va butunlay
-interfeysdan to'ldiriladi:
+**Rulonlar kodda YO'Q** — ular bo'sh boshlanadi va butunlay interfeysdan
+to'ldiriladi: *Ombor → Rulonlar* — **«Rulon qo'shish»** tugmasi alohida
+forma ochadi; har bir rulon shu formada kiritiladi (hisob natijasi yozayotganda
+jonli ko'rinib turadi) va **«Saqlash»** bosilgandan keyingina ro'yxatga
+tushadi. Sana va kurs avtomatik to'ldiriladi, qolganini foydalanuvchi yozadi.
+Ro'yxatda avval asosiy ma'lumot (kimdan, tur, rang, qalinlik) va **sotuv
+narxlari (5 % / 10 %)** ko'rinadi, keyin xarid tafsilotlari; qatorni bosib
+tahrirlash oynasi ochiladi.
 
-- *Ombor → Narx ro'yxati* — zavod narxlarini kiritish (zavod / tur / qalinlik /
-  narx / sana). Narx kiritilmaguncha rulonlar jadvalida narx ustunlari
-  **`YO'Q`** bo'lib turadi — bu xato emas, ogohlantirish.
-- *Ombor → Rulonlar* — **`+ Rulon`** tugmasi bilan rulon qo'shish, keyin
-  kataklarni bosib joyida to'ldirish.
-
-Kodda faqat *sozlama* boshlang'ich qiymatlari bor (kurs, ustama, bo'luvchilar,
-kg/m jadvali, rang→tur qoidalari) — bularsiz hisob umuman ishlamaydi. Ular ham
-Sozlama panelidan tahrirlanadi; **"Boshlang'ich sozlamaga qaytarish"** tugmasi
-faqat shu sozlamani tiklaydi, narx va rulonlarga tegmaydi.
+Kodda faqat *sozlama* boshlang'ich qiymatlari bor (standart kurs, standart
+yo'lkira, bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari, rang→tur
+qoidalari). Ular Sozlama panelidan tahrirlanadi; **"Boshlang'ich sozlamaga
+qaytarish"** tugmasi faqat shu sozlamani tiklaydi, rulonlarga tegmaydi.
 
 ## Ma'lumotlar qayerda?
 

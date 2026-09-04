@@ -2,7 +2,7 @@
 //  OMBOR → SOZLAMA (3.2-bo'lim)
 // ------------------------------------------------------------
 //  Rulonlar hisobiga kiradigan BARCHA kirish qiymatlari shu
-//  panelda tahrirlanadi: kurs, ustama, sotuv bo'luvchilari,
+//  panelda tahrirlanadi: standart kurs, standart yo'lkira, sotuv bo'luvchilari,
 //  qalinlik → kg/m jadvali, koeffitsientlar va rang → tur
 //  qoidalari. Bu faylda birorta narx / kurs / koeffitsient
 //  QATTIQ YOZILMAGAN — hammasi proplardan keladi va yana
@@ -14,20 +14,24 @@
 //  faqat lokal tahrir bo'lmasa. Tahrir bor bo'lsa forma tegilmaydi
 //  va sariq ogoh + "Yangilash" tugmasi ko'rsatiladi.
 //
-//  Panel tagida BOSHLANG'ICH MA'LUMOT (seed) bloki: seed
-//  to'plamini Firestore'ga yozadi. DIQQAT: narx/rulon ro'yxatlari
-//  merge bilan (id lar ustiga), sozlama va rang→tur hujjatlari esa
-//  TO'LIQ almashtiriladi — bu foydalanuvchiga ochiq aytiladi.
+//  Panel tagida "boshlang'ich sozlamaga qaytarish" bloki: sozlama va
+//  rang→tur hujjatlarini TO'LIQ almashtiradi (rulonlarga tegmaydi) —
+//  bu foydalanuvchiga ochiq aytiladi.
+//
+//  DIQQAT: kurs va yo'lkira bu yerda faqat STANDART qiymat — har bir
+//  rulon o'z kursi va yo'lkirasi bilan yoziladi (daftardagidek). Bu
+//  yerdagi kurs yangi rulon qo'shilganda avtomatik to'ldiriladi,
+//  yo'lkira esa rulonda alohida yozilmagan bo'lsa ishlatiladi.
 // ============================================================
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Settings, ChevronDown, ChevronUp, Plus, Trash2, Save, RotateCcw,
-  Database, Loader2, AlertTriangle, Check,
+  Database, Loader2, AlertTriangle, Check, List,
 } from 'lucide-react';
 import { Card, SectionTitle } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn } from '../../lib/helpers.js';
-import { turTaxmin, son } from '../../lib/omborHisob.js';
-import { ZAVODLAR, TURLAR } from '../../lib/omborSeed.js';
+import { turTaxmin, son, norm } from '../../lib/omborHisob.js';
+import { sozlamaRoyxat } from '../../lib/omborSeed.js';
 
 // ----- Kichik yordamchilar -----
 
@@ -60,6 +64,33 @@ function kgQatorlar(jadval) {
 }
 
 // Qatorlar → kg/m jadvali (bo'sh va yaroqsiz qatorlar tushib qoladi)
+// ----- Tanlov ro'yxatlari (zavod / tur / rang) -----
+//  Tahrirlash paytida matn o'zgargani uchun har qatorga barqaror id kerak
+//  (indeks key ishlatilsa, qator o'chirilganda inputlar aralashib ketadi).
+function royxatQatorlar(arr) {
+  // `asl` — bazada saqlangan nom. Saqlashda `v` bilan solishtirib, nom
+  // o'zgarganini (va uni yozuvlarda ham almashtirish kerakligini) bilamiz.
+  return (arr || []).map((v) => {
+    const t = String(v == null ? '' : v);
+    return { id: genId(), v: t, asl: t };
+  });
+}
+//  Saqlashda: bo'sh qatorlar tashlanadi, takrorlar (registr farqisiz) olib
+//  tashlanadi, tartib esa foydalanuvchi qo'ygan holicha qoladi.
+function royxatMassiv(qatorlar) {
+  const out = [];
+  const korilgan = new Set();
+  for (const r of (qatorlar || [])) {
+    const v = String(r.v == null ? '' : r.v).trim();
+    if (!v) continue;
+    const k = norm(v);
+    if (korilgan.has(k)) continue;
+    korilgan.add(k);
+    out.push(v);
+  }
+  return out;
+}
+
 function kgObyekt(qatorlar) {
   const out = {};
   for (const r of qatorlar) {
@@ -111,7 +142,7 @@ function formaYasa(s) {
   const kg = (o.kgPerM && typeof o.kgPerM === 'object') ? o.kgPerM : {};
   return {
     kurs: xom(o.kurs),
-    ustama: xom(o.ustama),
+    yolkiraTonna: xom(o.yolkiraTonna),
     bolizvchi1: xom(o.bolizvchi1),
     bolizvchi2: xom(o.bolizvchi2),
     nom1: o.nom1 || '',
@@ -119,6 +150,11 @@ function formaYasa(s) {
     koefSMZ: xom(o.koefSMZ),
     koefBoshqa: xom(o.koefBoshqa),
     kg: { SMZ: kgQatorlar(kg.SMZ), BOSHQA: kgQatorlar(kg.BOSHQA) },
+    royxat: {
+      zavodlar: royxatQatorlar(sozlamaRoyxat(o, 'zavodlar')),
+      turlar: royxatQatorlar(sozlamaRoyxat(o, 'turlar')),
+      ranglar: royxatQatorlar(sozlamaRoyxat(o, 'ranglar')),
+    },
   };
 }
 
@@ -135,9 +171,14 @@ function rtYasa(rt) {
 // Ikki formani solishtirish uchun kanonik matn (id lar hisobga olinmaydi)
 function solish(f, r) {
   return JSON.stringify({
-    kurs: f.kurs, ustama: f.ustama, b1: f.bolizvchi1, b2: f.bolizvchi2,
+    kurs: f.kurs, yk: f.yolkiraTonna, b1: f.bolizvchi1, b2: f.bolizvchi2,
     n1: f.nom1, n2: f.nom2, kS: f.koefSMZ, kB: f.koefBoshqa,
     kg: { SMZ: f.kg.SMZ.map((x) => [x.q, x.v]), BOSHQA: f.kg.BOSHQA.map((x) => [x.q, x.v]) },
+    ry: {
+      z: f.royxat.zavodlar.map((x) => x.v),
+      t: f.royxat.turlar.map((x) => x.v),
+      c: f.royxat.ranglar.map((x) => x.v),
+    },
     q: r.qoidalar.map((x) => [x.naqsh, x.tur]),
     st: r.standart,
   });
@@ -226,13 +267,72 @@ function KgGuruh({ nom, izoh, qatorlar, dubl, notoliq, canEdit, onQator, onQosh,
 // ============================================================
 //  ASOSIY KOMPONENT
 // ============================================================
+// ----- Bitta tanlov ro'yxatini tahrirlash bloki -----
+//  sanoq — Map(norm(nom) → nechta yozuvda ishlatilgan). O'chirishdan oldin
+//  foydalanuvchi nimaga tegayotganini ko'rib tursin.
+function RoyxatTahrir({ sarlavha, izoh, qatorlar, sanoq, canEdit, onSet, onQosh, onOchir, onKochir }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-xs font-semibold text-slate-600">{sarlavha}</span>
+        {canEdit && (
+          <button type="button" onClick={onQosh}
+            className="px-2 py-1 rounded border border-slate-300 bg-white text-slate-600 text-[11px] inline-flex items-center gap-1 hover:bg-slate-50">
+            <Plus className="w-3 h-3" /> Qo'shish
+          </button>
+        )}
+      </div>
+      {izoh && <p className="text-[11px] text-slate-400 mb-1.5">{izoh}</p>}
+      <div className="space-y-1">
+        {qatorlar.length === 0 && (
+          <p className="text-[11px] text-slate-400 py-1">Ro'yxat bo'sh — «Qo'shish» bilan boshlang.</p>
+        )}
+        {qatorlar.map((r, i) => {
+          const ishlatilgan = sanoq.get(norm(r.v)) || 0;
+          return (
+            <div key={r.id} className="flex items-center gap-1">
+              <input value={r.v} disabled={!canEdit}
+                onChange={(e) => onSet(r.id, e.target.value)}
+                placeholder="nomi"
+                className="flex-1 min-w-0 px-2 py-1.5 border border-slate-300 rounded bg-white disabled:bg-slate-100" />
+              <span className={`text-[10px] tabular-nums w-14 text-right flex-shrink-0 ${
+                ishlatilgan > 0 ? 'text-slate-500' : 'text-slate-300'}`}
+                title={ishlatilgan > 0 ? `${ishlatilgan} ta yozuvda ishlatilyapti` : 'Hech qayerda ishlatilmagan'}>
+                {ishlatilgan > 0 ? `${ishlatilgan} ta` : '—'}
+              </span>
+              {canEdit && (
+                <>
+                  <button type="button" onClick={() => onKochir(r.id, -1)} disabled={i === 0}
+                    title="Yuqoriga" className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25">
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => onKochir(r.id, 1)} disabled={i === qatorlar.length - 1}
+                    title="Pastga" className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => onOchir(r)}
+                    title="O'chirish" className="p-1 text-slate-400 hover:text-red-600">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function OmborSozlama({
   sozlama = {}, updateSozlama, rangTur = {}, updateRangTur,
-  canEdit = true, showToast, onSeed,
+  rulonlar = {},
+  canEdit = true, showToast, onSeed, onQaytaNomla,
 }) {
   const [ochiq, setOchiq] = useState(false);            // standart holat — YOPIQ
   const [sinov, setSinov] = useState('');               // rang → tur jonli sinovi
   const [seedIsh, setSeedIsh] = useState('');           // sozlama tiklash ishlayaptimi
+  const [saqlanmoqda, setSaqlanmoqda] = useState(false); // qayta nomlash + saqlash davom etyapti
   const [seedNatija, setSeedNatija] = useState('');
   const [seedXato, setSeedXato] = useState('');
 
@@ -286,12 +386,64 @@ export function OmborSozlama({
     ...f, kg: { ...f.kg, [guruh]: f.kg[guruh].filter((r) => r.id !== id) },
   }));
 
+  // ----- Tanlov ro'yxatlari (zavod / tur / rang) -----
+  const royxatSet = (nom, id, v) => setForma((f) => ({
+    ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].map((r) => (r.id === id ? { ...r, v } : r)) },
+  }));
+  const royxatQosh = (nom) => setForma((f) => ({
+    ...f, royxat: { ...f.royxat, [nom]: [...f.royxat[nom], { id: genId(), v: '', asl: '' }] },
+  }));
+  const royxatKochir = (nom, id, yon) => setForma((f) => {
+    const arr = [...f.royxat[nom]];
+    const i2 = arr.findIndex((r) => r.id === id);
+    const j = i2 + yon;
+    if (i2 < 0 || j < 0 || j >= arr.length) return f;
+    [arr[i2], arr[j]] = [arr[j], arr[i2]];
+    return { ...f, royxat: { ...f.royxat, [nom]: arr } };
+  });
+
+  // Har bir nom nechta rulonda ishlatilgan — o'chirish / qayta nomlashdan
+  // oldin ogohlantirish uchun.
+  const sanoq = useMemo(() => {
+    const rul = Object.values(rulonlar || {}).filter((x) => x && !x.ochirilgan);
+    const hisobla = (maydon) => {
+      const m = new Map();
+      for (const x of rul) {
+        const k = norm(x[maydon]);
+        if (k) m.set(k, (m.get(k) || 0) + 1);
+      }
+      return m;
+    };
+    return {
+      zavodlar: hisobla('zavod'),
+      turlar: hisobla('tur'),
+      ranglar: hisobla('rang'),
+    };
+  }, [rulonlar]);
+
+  // O'chirish: ishlatilayotgan nom bo'lsa nima bo'lishini aniq aytamiz.
+  // Eski yozuvlar O'ZGARMAYDI — ro'yxat faqat tanlov variantlari ro'yxati.
+  function royxatOchir(nom, r) {
+    const n = sanoq[nom].get(norm(r.v)) || 0;
+    if (n > 0) {
+      const ok = window.confirm(
+        `"${r.v}" hozir ${n} ta yozuvda ishlatilyapti.\n\n`
+        + "Ro'yxatdan o'chirsangiz o'sha yozuvlar O'ZGARMAYDI va bu nom ularda\n"
+        + "ko'rinib turaveradi — faqat tanlov ro'yxatidan chiqadi.\n\nO'chirilsinmi?",
+      );
+      if (!ok) return;
+    }
+    setForma((f) => ({
+      ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].filter((x) => x.id !== r.id) },
+    }));
+  }
+
   // ----- Rang → tur qoidalari -----
   const qoidaTahrir = (id, patch) => setRt((r) => ({
     ...r, qoidalar: r.qoidalar.map((q) => (q.id === id ? { ...q, ...patch } : q)),
   }));
   const qoidaQosh = () => setRt((r) => ({
-    ...r, qoidalar: [...r.qoidalar, { id: genId(), naqsh: '', tur: r.standart || TURLAR[0] || '' }],
+    ...r, qoidalar: [...r.qoidalar, { id: genId(), naqsh: '', tur: r.standart || '' }],
   }));
   const qoidaOchir = (id) => setRt((r) => ({ ...r, qoidalar: r.qoidalar.filter((q) => q.id !== id) }));
   const qoidaKochir = (index, yonalish) => setRt((r) => {
@@ -311,11 +463,12 @@ export function OmborSozlama({
       if (!s || korilgan.has(s.toLowerCase())) return;
       korilgan.add(s.toLowerCase()); out.push(s);
     };
-    TURLAR.forEach(qosh);
+    // Foydalanuvchi tahrirlayotgan tur ro'yxati (hali saqlanmagan bo'lsa ham)
+    forma.royxat.turlar.forEach((r) => qosh(r.v));
     rt.qoidalar.forEach((q) => qosh(q.tur));
     qosh(rt.standart);
     return out;
-  }, [rt]);
+  }, [rt, forma.royxat.turlar]);
 
   // ----- Tekshiruvlar -----
   //  Bu qiymatlar butun rulonlar jadvalini boshqaradi: kurs 0 bo'lsa rulon
@@ -324,19 +477,21 @@ export function OmborSozlama({
   //  uchun bo'sh / nol qiymat bilan SAQLASHGA yo'l qo'ymaymiz.
   const musbatXato = (n) => (!(n != null && n > 0) ? "0 dan katta bo'lishi kerak" : '');
   const kurs = son(forma.kurs);
-  const ustama = son(forma.ustama);
+  const yolkira = son(forma.yolkiraTonna);
   const b1 = son(forma.bolizvchi1);
   const b2 = son(forma.bolizvchi2);
   const kSMZ = son(forma.koefSMZ);
   const kBoshqa = son(forma.koefBoshqa);
   const kursXato = musbatXato(kurs);
-  // Ustama 0 bo'lishi mumkin (ustamasiz), lekin BO'SH qolishi mumkin emas
-  const ustamaXato = ustama == null ? "Bo'sh qoldirib bo'lmaydi (ustama yo'q bo'lsa 0 yozing)" : '';
+  // Yo'lkira 0 bo'lishi mumkin (yo'lkirasiz), lekin BO'SH yoki MANFIY bo'lmasin
+  const yolkiraXato = yolkira == null
+    ? "Bo'sh qoldirib bo'lmaydi (yo'lkira yo'q bo'lsa 0 yozing)"
+    : (yolkira < 0 ? "Manfiy bo'lmasin" : '');
   const b1Xato = musbatXato(b1);
   const b2Xato = musbatXato(b2);
   const kSMZXato = musbatXato(kSMZ);
   const kBoshqaXato = musbatXato(kBoshqa);
-  const maydonXato = !!(kursXato || ustamaXato || b1Xato || b2Xato || kSMZXato || kBoshqaXato);
+  const maydonXato = !!(kursXato || yolkiraXato || b1Xato || b2Xato || kSMZXato || kBoshqaXato);
 
   const dublSMZ = useMemo(() => dublikatlar(forma.kg.SMZ), [forma.kg.SMZ]);
   const dublBoshqa = useMemo(() => dublikatlar(forma.kg.BOSHQA), [forma.kg.BOSHQA]);
@@ -356,12 +511,45 @@ export function OmborSozlama({
   const kursOzgardi = kurs !== son(sozlama.kurs);
 
   // ----- Saqlash / bekor qilish -----
-  function saqla() {
-    if (!canEdit || xatoBor || !ozgargan) return;
+  // Nomi o'zgargan VA rulonlarda ishlatilayotgan qatorlar — ularni
+  // rulonlarda ham almashtirish kerak (aks holda filtr va guruhlash
+  // buziladi: ro'yxatda "SMZ", rulonda "SMZ zavodi" bo'lib qoladi).
+  const qaytaNomlar = useMemo(() => {
+    const out = [];
+    for (const [nom, maydon] of [['zavodlar', 'zavod'], ['turlar', 'tur'], ['ranglar', 'rang']]) {
+      for (const r of forma.royxat[nom]) {
+        const eski = String(r.asl || '').trim();
+        const yangi = String(r.v || '').trim();
+        if (!eski || !yangi || norm(eski) === norm(yangi)) continue;
+        const soni = sanoq[nom].get(norm(eski)) || 0;
+        if (soni > 0) out.push({ nom, maydon, eski, yangi, soni });
+      }
+    }
+    return out;
+  }, [forma.royxat, sanoq]);
+
+  async function saqla() {
+    if (!canEdit || xatoBor || !ozgargan || saqlanmoqda) return;
+
+    // Nom o'zgargan bo'lsa — nima bo'lishini aniq ko'rsatib tasdiq so'raymiz.
+    // Bekor qilinsa HECH NARSA saqlanmaydi (yarim holat qolmasin).
+    if (qaytaNomlar.length && onQaytaNomla) {
+      const royxat = qaytaNomlar
+        .map((x) => `  • "${x.eski}" → "${x.yangi}"   (${x.soni} ta yozuv)`)
+        .join('\n');
+      const ok = window.confirm(
+        `Nom o'zgardi:\n${royxat}\n\n`
+        + "Mavjud yozuvlarda ham almashtirilsinmi?\n\n"
+        + "OK — hamma joyda yangi nom bo'ladi.\n"
+        + "Bekor — hech narsa saqlanmaydi (nomni qaytarib qo'ying).",
+      );
+      if (!ok) return;
+    }
+
     const yangi = {
       ...sozlama, // notanish maydonlar yo'qolmasin
       kurs: kurs ?? 0,
-      ustama: ustama ?? 0,
+      yolkiraTonna: yolkira ?? 0,
       bolizvchi1: b1,
       bolizvchi2: b2,
       nom1: forma.nom1.trim(),
@@ -369,6 +557,9 @@ export function OmborSozlama({
       koefSMZ: kSMZ ?? 0,
       koefBoshqa: kBoshqa ?? 0,
       kgPerM: { SMZ: kgObyekt(forma.kg.SMZ), BOSHQA: kgObyekt(forma.kg.BOSHQA) },
+      zavodlar: royxatMassiv(forma.royxat.zavodlar),
+      turlar: royxatMassiv(forma.royxat.turlar),
+      ranglar: royxatMassiv(forma.royxat.ranglar),
       kursSana: kursOzgardi ? bugun() : (sozlama.kursSana || ''),
     };
     const yangiRT = {
@@ -377,6 +568,27 @@ export function OmborSozlama({
         .filter((q) => q.naqsh),
       standart: rt.standart || '',
     };
+    // AVVAL yozuvlarni qayta nomlaymiz — xato bo'lsa sozlama ham yozilmaydi,
+    // shunda ro'yxat yangi nomda, yozuvlar eski nomda qolib ketmaydi.
+    let qnMatn = '';
+    if (qaytaNomlar.length && onQaytaNomla) {
+      setSaqlanmoqda(true);
+      try {
+        let rul = 0;
+        for (const x of qaytaNomlar) {
+          const n = await onQaytaNomla(x.maydon, x.eski, x.yangi);
+          rul += (n && n.rulonlar) || 0;
+        }
+        qnMatn = rul ? ` · ${rul} ta rulon yangilandi` : '';
+      } catch (e) {
+        console.error('[ombor qayta nomlash] xato:', e);
+        setSaqlanmoqda(false);
+        if (showToast) showToast('Qayta nomlashda xatolik — hech narsa saqlanmadi');
+        return;
+      }
+      setSaqlanmoqda(false);
+    }
+
     if (updateSozlama) updateSozlama(yangi);
     if (updateRangTur) updateRangTur(yangiRT);
 
@@ -393,7 +605,7 @@ export function OmborSozlama({
     // kursor/fokus sakramasin.
     if (yMatn !== joriyMatn) { setForma(yAsl); setRt(yRT); }
     setTashqiYangi(false);
-    if (showToast) showToast('Sozlama saqlandi');
+    if (showToast) showToast(`Sozlama saqlandi${qnMatn}`);
   }
 
   // Bekor qilish = eng so'nggi saqlangan (proplardagi) holatga qaytish.
@@ -407,16 +619,16 @@ export function OmborSozlama({
 
   // ----- Sozlamani boshlang'ich holatga tiklash -----
   //  DIQQAT: bu FAQAT sozlama va rang → tur qoidalarini yozadi.
-  //  Narx ro'yxati va rulonlarga TEGMAYDI — ularni foydalanuvchi o'zi kiritadi.
+  //  Rulonlarga TEGMAYDI — ularni foydalanuvchi o'zi kiritadi.
   async function tiklaBos() {
     if (!canEdit || !onSeed || seedIsh) return;
     const savol = "Sozlama boshlang'ich holatga qaytariladi:\n"
-      + "  • kurs, ustama, bo'luvchilar, ustun nomlari\n"
+      + "  • standart kurs, standart yo'lkira, bo'luvchilar, ustun nomlari\n"
       + "  • kg/m jadvali va koeffitsientlar\n"
       + "  • rang → tur qoidalari\n\n"
       + "DIQQAT: bular TO'LIQ ALMASHTIRILADI — qo'shgan qalinliklaringiz,\n"
       + "qoidalaringiz va joriy kurs o'chadi.\n\n"
-      + "Narx ro'yxati va rulonlarga TEGILMAYDI.\n\nDavom etamizmi?";
+      + "Rulonlarga TEGILMAYDI.\n\nDavom etamizmi?";
     if (!window.confirm(savol)) return;
     setSeedIsh('tikla'); setSeedNatija(''); setSeedXato('');
     try {
@@ -435,10 +647,11 @@ export function OmborSozlama({
   }
 
   // BOSHQA guruhga kiradigan zavodlar (SMZ dan qolganlari) — eslatma uchun
-  const boshqaZavodlar = ZAVODLAR.filter((z) => !/smz/i.test(z)).join(', ');
+  const boshqaZavodlar = forma.royxat.zavodlar.map((r) => r.v)
+    .filter((z) => z && !/smz/i.test(z)).join(', ');
 
   // Yopiq holatdagi qisqacha ma'lumot
-  const qisqacha = `Kurs ${fmt(sozlama.kurs)} so'm · Ustama ${olchovKor(sozlama.ustama, 2)} $/t`
+  const qisqacha = `Standart kurs ${fmt(sozlama.kurs)} so'm · Yo'lkira ${olchovKor(sozlama.yolkiraTonna, 2)} $/t`
     + ` · ${sozlama.nom1 || '—'} / ${sozlama.nom2 || '—'}`;
 
   const sinovNatija = turTaxmin({ qoidalar: rt.qoidalar, standart: rt.standart }, sinov);
@@ -487,14 +700,14 @@ export function OmborSozlama({
           {/* ----- 1) Asosiy qiymatlar ----- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SonMaydon
-              label="Dollar kursi (so'm)" value={forma.kurs} disabled={!canEdit}
+              label="Standart dollar kursi (so'm)" value={forma.kurs} disabled={!canEdit}
               onChange={(v) => tahrir({ kurs: v })} xato={kursXato}
-              hint={`Oxirgi o'zgartirilgan: ${sozlama.kursSana || '—'}${kursOzgardi ? ` → ${bugun()}` : ''}`} />
+              hint={`Yangi rulon qo'shilganda avtomatik to'ldiriladi (rulonda o'zgartirsa bo'ladi). Oxirgi o'zgartirilgan: ${sozlama.kursSana || '—'}${kursOzgardi ? ` → ${bugun()}` : ''}`} />
 
             <SonMaydon
-              label="Ustama ($/tonna)" value={forma.ustama} disabled={!canEdit}
-              onChange={(v) => tahrir({ ustama: v })} xato={ustamaXato}
-              hint="Zavod ro'yxatidagi narxga qo'shiladi" />
+              label="Standart yo'lkira ($/tonna)" value={forma.yolkiraTonna} disabled={!canEdit}
+              onChange={(v) => tahrir({ yolkiraTonna: v })} xato={yolkiraXato}
+              hint="Rulonda yo'lkira yozilmagan bo'lsa shu ishlatiladi; har rulonda alohida o'zgartirsa bo'ladi" />
 
             <SonMaydon
               label="1-sotuv bo'luvchisi" value={forma.bolizvchi1} disabled={!canEdit}
@@ -567,6 +780,50 @@ export function OmborSozlama({
                 </span>
               </div>
             )}
+          </div>
+
+          {/* ----- 2b) Tanlov ro'yxatlari (zavod / tur / rang) ----- */}
+          <div className="pt-2 border-t border-slate-100">
+            <SectionTitle icon={List}>Tanlov ro'yxatlari</SectionTitle>
+            <p className="text-[11px] text-slate-500 -mt-2 mb-3">
+              Rulonlar jadvalidagi <b>Kimdan</b> (zavod), <b>Tur</b> va <b>Rang</b>
+              {' '}tanlovlarida shu nomlar chiqadi. O'ng tomondagi son — nom nechta rulonda
+              ishlatilayotgani. Nomni <b>o'zgartirsangiz</b> — saqlashda u
+              <b> mavjud yozuvlarda ham almashtiriladi</b> (tasdiq so'raladi).
+              O'chirsangiz esa yozuvlar o'zgarmaydi: eski nom ularda qolib,
+              tanlovda ham ko'rinib turaveradi.
+            </p>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <RoyxatTahrir
+                sarlavha="Zavodlar (kimdan)" izoh="Nomida SMZ bo'lganlar SMZ kg/m jadvalini oladi, qolganlari BOSHQA."
+                qatorlar={forma.royxat.zavodlar} sanoq={sanoq.zavodlar} canEdit={canEdit}
+                onSet={(id, v) => royxatSet('zavodlar', id, v)}
+                onQosh={() => royxatQosh('zavodlar')}
+                onOchir={(r) => royxatOchir('zavodlar', r)}
+                onKochir={(id, yon) => royxatKochir('zavodlar', id, yon)} />
+
+              <RoyxatTahrir
+                sarlavha="Turlar" izoh="Qoplama turi — narx aynan shu bo'yicha topiladi."
+                qatorlar={forma.royxat.turlar} sanoq={sanoq.turlar} canEdit={canEdit}
+                onSet={(id, v) => royxatSet('turlar', id, v)}
+                onQosh={() => royxatQosh('turlar')}
+                onOchir={(r) => royxatOchir('turlar', r)}
+                onKochir={(id, yon) => royxatKochir('turlar', id, yon)} />
+
+              <RoyxatTahrir
+                sarlavha="Ranglar" izoh="Narxga ta'sir qilmaydi — faqat rulonni tanib olish uchun."
+                qatorlar={forma.royxat.ranglar} sanoq={sanoq.ranglar} canEdit={canEdit}
+                onSet={(id, v) => royxatSet('ranglar', id, v)}
+                onQosh={() => royxatQosh('ranglar')}
+                onOchir={(r) => royxatOchir('ranglar', r)}
+                onKochir={(id, yon) => royxatKochir('ranglar', id, yon)} />
+            </div>
+
+            <p className="text-[11px] text-slate-400 mt-2">
+              Bo'sh qatorlar va takror nomlar saqlashda o'zi tashlab yuboriladi.
+              Qalinlik alohida ro'yxat emas — u har qatorda qo'lda yoziladi.
+            </p>
           </div>
 
           {/* ----- 3) Rang → tur qoidalari ----- */}
@@ -654,9 +911,11 @@ export function OmborSozlama({
                 className="px-3 py-2 border-2 border-slate-200 text-slate-700 rounded-lg bg-white font-medium text-sm flex items-center gap-1.5 disabled:opacity-40">
                 <RotateCcw className="w-4 h-4" /> Bekor qilish
               </button>
-              <button type="button" onClick={saqla} disabled={!ozgargan || xatoBor}
+              <button type="button" onClick={saqla} disabled={!ozgargan || xatoBor || saqlanmoqda}
                 className="bg-slate-900 text-white rounded-lg px-3 py-2 font-medium text-sm flex items-center gap-1.5 disabled:opacity-40">
-                <Save className="w-4 h-4" /> Saqlash
+                {saqlanmoqda
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Yangilanmoqda…</>
+                  : <><Save className="w-4 h-4" /> Saqlash</>}
               </button>
             </div>
           )}
@@ -667,8 +926,7 @@ export function OmborSozlama({
               <SectionTitle icon={Database}>Sozlamani tiklash</SectionTitle>
               <p className="text-[11px] text-slate-500 -mt-2 mb-2">
                 Yuqoridagi sozlamalarni boshlang'ich holatga qaytaradi.
-                <b> Narx ro'yxati</b> va <b>rulonlar</b>ga tegmaydi — ular faqat
-                siz kiritgan ma'lumotdan iborat.
+                <b> Rulonlar</b>ga tegmaydi — ular faqat siz kiritgan ma'lumotdan iborat.
               </p>
               <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-2">
                 Sozlama va rang → tur qoidalari <b>TO'LIQ ALMASHTIRILADI</b> —

@@ -58,6 +58,7 @@ import {
 } from './lib/helpers.js';
 import { zakasChiqimlari, kazirokChiqimlari, kamQoldiqlar } from './lib/ombor.js';
 import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, seedToplam } from './lib/omborSeed.js';
+import { norm as omborNorm } from './lib/omborHisob.js';
 import {
   AVTO_ISH_BLANK, normAvtoIsh, kunlikHisobotMatni, zaxiraFayli, bugunKerakmi,
 } from './lib/avtoIsh.js';
@@ -361,11 +362,11 @@ export default function App() {
   // Ombor (material qoldig'i) — obyekt-xarita { id: material }, merge bilan yoziladi
   const [ombor, setOmbor]           = useState({});
   const [omborHarakat, setOmborHarakat] = useState({});
-  // Ombor → Rulonlar moduli. Rulonlar va narxlar obyekt-xarita ({id: yozuv}) —
+  // Ombor → Rulonlar moduli. Rulonlar obyekt-xarita ({id: yozuv}) —
   // 'ombor' bilan bir xil model: merge yozuv, ikki qurilma to'qnashmaydi.
+  // Har rulon o'z narxi, kursi va yo'lkirasi bilan yoziladi (daftardagidek).
   const [omborRulonlar, setOmborRulonlar] = useState({});
-  const [omborNarxlar, setOmborNarxlar]   = useState({});
-  // Sozlama (kurs/ustama/bo'luvchi/kg-m) — boshlang'ich qiymat FAQAT baza bo'sh
+  // Sozlama (standart kurs/yo'lkira/bo'luvchi/kg-m) — boshlang'ich qiymat FAQAT baza bo'sh
   // bo'lganda ko'rinadi; Firestore'dan kelgani darhol ustiga yoziladi.
   const [omborSozlama, setOmborSozlama]   = useState(SOZLAMA_BOSHLANGICH);
   const [omborRangTur, setOmborRangTur]   = useState(RANG_TUR_BOSHLANGICH);
@@ -479,7 +480,6 @@ export default function App() {
       ['ombor', (v) => setOmbor(v && typeof v === 'object' ? v : {})],
       ['ombor-harakat', (v) => setOmborHarakat(v && typeof v === 'object' ? v : {})],
       ['ombor-rulonlar', (v) => setOmborRulonlar(v && typeof v === 'object' ? v : {})],
-      ['ombor-narxlar', (v) => setOmborNarxlar(v && typeof v === 'object' ? v : {})],
       ['ombor-sozlama', (v) => setOmborSozlama(v && typeof v === 'object'
         ? { ...SOZLAMA_BOSHLANGICH, ...v } : SOZLAMA_BOSHLANGICH)],
       ['ombor-rang-tur', (v) => setOmborRangTur(v && typeof v === 'object'
@@ -958,8 +958,6 @@ export default function App() {
   // modelida haqiqiy o'chirish boshqa qurilmadagi yozuvni tiklab yuborardi).
   const rulonlarRef = useRef(omborRulonlar);
   useEffect(() => { rulonlarRef.current = omborRulonlar; }, [omborRulonlar]);
-  const narxlarRef = useRef(omborNarxlar);
-  useEffect(() => { narxlarRef.current = omborNarxlar; }, [omborNarxlar]);
 
   async function xaritaYoz(kalit, setState, ref, id, yozuv) {
     const eski = ref.current[id];
@@ -982,14 +980,41 @@ export default function App() {
   }
 
   const setRulon = (id, rulon) => xaritaYoz('ombor-rulonlar', setOmborRulonlar, rulonlarRef, id, rulon);
-  const setNarx  = (id, narx)  => xaritaYoz('ombor-narxlar',  setOmborNarxlar,  narxlarRef,  id, narx);
+
+  // Tanlov ro'yxatidagi nom o'zgarganda uni BARCHA rulonlarda ham almashtiradi
+  // (masalan "SMZ" → "SMZ zavodi"). BITTA merge yozuv yuboriladi — 100 ta
+  // rulon uchun 100 ta alohida so'rov emas. Natija: { rulonlar: n }.
+  async function omborQaytaNomla(maydon, eski, yangi) {
+    const e = omborNorm(eski);
+    const y = String(yangi == null ? '' : yangi).trim();
+    const natija = { rulonlar: 0 };
+    if (!e || !y) return natija;
+
+    async function ishla(kalit, joriy, setState) {
+      const patch = {};
+      for (const id in joriy) {
+        const rec = joriy[id];
+        if (!rec || rec.ochirilgan) continue;
+        if (omborNorm(rec[maydon]) !== e) continue;
+        patch[id] = tozala({ ...rec, [maydon]: y });
+      }
+      const soni = Object.keys(patch).length;
+      if (!soni) return 0;
+      setState((prev) => ({ ...prev, ...patch }));   // optimistik
+      await storage.saveField(kalit, patch);
+      return soni;
+    }
+
+    natija.rulonlar = await ishla('ombor-rulonlar', rulonlarRef.current, setOmborRulonlar);
+    return natija;
+  }
 
   function updateOmborSozlama(v) { setOmborSozlama(v); persist('ombor-sozlama', v); }
   function updateOmborRangTur(v) { setOmborRangTur(v); persist('ombor-rang-tur', v); }
 
   // Boshlang'ich SOZLAMANI Firestore'ga yozish. Natija: { kalit: nechta hujjat }
-  // Narx ro'yxati va rulonlar bu yerda YOZILMAYDI — ularni foydalanuvchi
-  // interfeysdan o'zi kiritadi (shuning uchun seedToplam ham faqat sozlama beradi).
+  // Rulonlar bu yerda YOZILMAYDI — ularni foydalanuvchi interfeysdan o'zi
+  // kiritadi (shuning uchun seedToplam ham faqat sozlama beradi).
   async function seedOmbor() {
     const toplam = seedToplam();
     const natija = {};
@@ -1703,11 +1728,11 @@ export default function App() {
             aksessuarlar={aksessuarlar} kaziroklar={kaziroklar}
             ranglar={ranglar} currentUser={currentUser}
             canEdit={ruxsat(role, 'ombor')} showToast={showToast}
-            omborRulonlar={omborRulonlar} omborNarxlar={omborNarxlar}
+            omborRulonlar={omborRulonlar}
             omborSozlama={omborSozlama} omborRangTur={omborRangTur}
-            setRulon={setRulon} setNarx={setNarx}
+            setRulon={setRulon}
             updateOmborSozlama={updateOmborSozlama} updateOmborRangTur={updateOmborRangTur}
-            seedOmbor={seedOmbor}
+            seedOmbor={seedOmbor} omborQaytaNomla={omborQaytaNomla}
           />
         )}
         {tab === 'jurnal' && (
