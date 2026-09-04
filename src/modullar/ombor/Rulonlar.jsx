@@ -693,9 +693,25 @@ export function Rulonlar({
           zavodlar={zavodlar} turlar={turlar} qalinliklar={qalinliklar} />
 
         {korinadigan.length === 0 ? (
+          /* Ombor BUTUNLAY bo'sh bo'lishi (hali rulon qo'shilmagan) va filtr
+             hech narsa topmagani — ikki xil holat, matni ham har xil bo'lsin. */
           <div className="text-center py-10 text-slate-400">
             <Layers className="w-10 h-10 mx-auto mb-2 opacity-40" />
-            <p className="text-sm">Rulon topilmadi</p>
+            {qatorlar.length === 0 ? (
+              <>
+                <p className="text-sm text-slate-500">Omborda hali rulon yo'q</p>
+                <p className="text-xs mt-1">
+                  {canEdit
+                    ? "Yuqoridagi \u00abRulon qo'shish\u00bb tugmasi bilan boshlang."
+                    : "Rulon qo'shish uchun ruxsat yo'q."}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">Filtrga mos rulon topilmadi</p>
+                <p className="text-xs mt-1">Jami {qatorlar.length} ta rulon bor — filtrni tozalab ko'ring.</p>
+              </>
+            )}
           </div>
         ) : (
           <>

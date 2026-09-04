@@ -987,31 +987,17 @@ export default function App() {
   function updateOmborSozlama(v) { setOmborSozlama(v); persist('ombor-sozlama', v); }
   function updateOmborRangTur(v) { setOmborRangTur(v); persist('ombor-rang-tur', v); }
 
-  // Boshlang'ich (seed) ma'lumotni Firestore'ga yozish. Natija: { kalit: nechta yozuv }
-  // — Sozlama panelida ham, konsolda ham ko'rsatiladi (prompt 5-bosqich, 1-bosqich).
-  async function seedOmbor(nima = 'hammasi') {
+  // Boshlang'ich SOZLAMANI Firestore'ga yozish. Natija: { kalit: nechta hujjat }
+  // Narx ro'yxati va rulonlar bu yerda YOZILMAYDI — ularni foydalanuvchi
+  // interfeysdan o'zi kiritadi (shuning uchun seedToplam ham faqat sozlama beradi).
+  async function seedOmbor() {
     const toplam = seedToplam();
-    // Guruhlar Sozlama panelidagi tugmalar bilan AYNAN bir xil bo'lishi shart —
-    // panel foydalanuvchiga qaysi kalitlar yozilishini oldindan ko'rsatadi.
-    const GURUH = {
-      hammasi:  ['ombor-sozlama', 'ombor-rang-tur', 'ombor-narxlar', 'ombor-rulonlar'],
-      sozlama:  ['ombor-sozlama', 'ombor-rang-tur'],
-      narxlar:  ['ombor-narxlar'],
-      rulonlar: ['ombor-rulonlar'],
-    };
-    const kalitlar = GURUH[nima] || [];
     const natija = {};
-    for (const kalit of kalitlar) {
-      const qiymat = toplam[kalit];
-      if (!qiymat) continue;
-      // Xarita (rulon/narx) — MERGE bilan (qo'lda kiritilganlar yo'qolmaydi),
-      // sozlama — to'liq yoziladi.
-      const xarita = kalit === 'ombor-narxlar' || kalit === 'ombor-rulonlar';
-      if (xarita) await storage.saveField(kalit, qiymat);
-      else await storage.save(kalit, qiymat);
-      natija[kalit] = xarita ? Object.keys(qiymat).length : 1;
+    for (const kalit of Object.keys(toplam)) {
+      await storage.save(kalit, toplam[kalit]);
+      natija[kalit] = 1;
     }
-    console.log('Ombor seed — yozilgan hujjatlar:', natija);
+    console.log('Ombor sozlamasi tiklandi:', natija);
     return natija;
   }
   // Zakas saqlangach ombordan materialni avtomatik yechish (faqat bog'langan materiallar).

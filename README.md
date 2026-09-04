@@ -57,7 +57,7 @@ npm run preview    # build'ni lokal sinash
     │   ├── xlsx.js         # .xlsx (Excel) yozuvchi — kutubxonasiz, OOXML+ZIP
     │   ├── ombor.js        # ombor materiallari (qoldiq, kirim/chiqim)
     │   ├── omborHisob.js   # rulon tannarxi/sotuv narxi — SOF funksiyalar
-    │   ├── omborSeed.js    # rulonlar moduli uchun boshlang'ich ma'lumot
+    │   ├── omborSeed.js    # rulonlar moduli: ro'yxatlar + boshlang'ich sozlama
     │   └── zaxira.js       # zaxira (backup) / tiklash
     ├── components/
     │   ├── ui.jsx          # Card, SectionTitle, Row, SegmentedControl, modallar
@@ -118,9 +118,21 @@ npm run test:ombor
 ```
 
 Firestore kalitlari: `ombor-sozlama`, `ombor-narxlar`, `ombor-rulonlar`,
-`ombor-rang-tur` (hammasi `shop/<kalit>` modelida). Bo'sh bazada
-Ombor → Rulonlar → Sozlama panelidagi **"Boshlang'ich ma'lumot"** tugmalari
-narx ro'yxati va rulonlarni yozib beradi.
+`ombor-rang-tur` (hammasi `shop/<kalit>` modelida).
+
+**Narx ro'yxati va rulonlar kodda YO'Q** — ular bo'sh boshlanadi va butunlay
+interfeysdan to'ldiriladi:
+
+- *Ombor → Narx ro'yxati* — zavod narxlarini kiritish (zavod / tur / qalinlik /
+  narx / sana). Narx kiritilmaguncha rulonlar jadvalida narx ustunlari
+  **`YO'Q`** bo'lib turadi — bu xato emas, ogohlantirish.
+- *Ombor → Rulonlar* — **`+ Rulon`** tugmasi bilan rulon qo'shish, keyin
+  kataklarni bosib joyida to'ldirish.
+
+Kodda faqat *sozlama* boshlang'ich qiymatlari bor (kurs, ustama, bo'luvchilar,
+kg/m jadvali, rang→tur qoidalari) — bularsiz hisob umuman ishlamaydi. Ular ham
+Sozlama panelidan tahrirlanadi; **"Boshlang'ich sozlamaga qaytarish"** tugmasi
+faqat shu sozlamani tiklaydi, narx va rulonlarga tegmaydi.
 
 ## Ma'lumotlar qayerda?
 

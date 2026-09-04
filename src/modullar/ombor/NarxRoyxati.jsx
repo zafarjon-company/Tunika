@@ -724,9 +724,25 @@ export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }
 
       {/* ----- Jadval ----- */}
       {korinadigan.length === 0 ? (
+        /* Narx ro'yxati BUTUNLAY bo'sh (hali yozuv kiritilmagan) va filtr hech
+           narsa topmagani — ikki xil holat, matni ham har xil bo'lsin. */
         <div className="text-center py-8 text-slate-400">
           <Tags className="w-10 h-10 mx-auto mb-2 opacity-40" />
-          <p className="text-sm">Narx yozuvi topilmadi</p>
+          {royxat.length === 0 ? (
+            <>
+              <p className="text-sm text-slate-500">Narx ro'yxati hali bo'sh</p>
+              <p className="text-xs mt-1 max-w-sm mx-auto">
+                {canEdit
+                  ? "Zavod narxlarini yuqoridagi forma orqali kiriting — narx kiritilmaguncha rulonlar jadvalida narx ustunlari \u00abYO'Q\u00bb bo'lib turadi."
+                  : "Narx kiritish uchun ruxsat yo'q."}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm">Filtrga mos narx topilmadi</p>
+              <p className="text-xs mt-1">Jami {royxat.length} ta yozuv bor — filtrni tozalab ko'ring.</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="overflow-x-auto">

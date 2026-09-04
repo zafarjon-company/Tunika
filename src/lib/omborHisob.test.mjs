@@ -4,7 +4,7 @@
 //  React kerak emas — sof funksiyalar sinaladi.
 // ============================================================
 import { rulonHisob, kgPerMetr, narxTop, jamiHisob, turTaxmin, zavodGuruh, OGOH } from './omborHisob.js';
-import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, seedNarxlar } from './omborSeed.js';
+import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH } from './omborSeed.js';
 
 const R = (n) => Math.round(n);
 let xato = 0;
@@ -128,18 +128,35 @@ console.log('\n6) Ogohlantirishlar');
 }
 
 // Seed narx ro'yxati
-console.log("\n7) Seed narx ro'yxati");
+console.log("\n7) Narx ro'yxatidan mos yozuvni topish");
 {
-  const narxlar = seedNarxlar();
-  tekshir("narx yozuvlari soni", 81, narxlar.length);
-  tekshir('SMZ полимерка 0.40 → 1240', 1240, narxTop(narxlar, 'SMZ', 'полимерка', 0.4).narx);
-  tekshir('SMZ оцинковка 0.18 → 1190', 1190, narxTop(narxlar, 'SMZ', 'оцинковка', 0.18).narx);
-  tekshir('SMZ Мебел 0.35 → 1430', 1430, narxTop(narxlar, 'SMZ', 'Мебел', 0.35).narx);
-  tekshir('Aziya Steel хопёр 0.50 → 1180', 1180, narxTop(narxlar, 'Aziya Steel', 'хопёр', 0.5).narx);
-  tekshir('Master Class (Xitoy) полимерка 0.22 → 1160', 1160, narxTop(narxlar, 'Master Class (Xitoy)', 'полимерка', 0.22).narx);
-  tekshir("TMZ — narx yo'q", true, narxTop(narxlar, 'TMZ', 'полимерка', 0.4) === null);
-  tekshir("faol:false yozuv ishlatilmaydi", true,
-    narxTop([{ zavod: 'SMZ', tur: 'полимерка', qalinlik: 0.4, narx: 999, faol: false }], 'SMZ', 'полимерка', 0.4) === null);
+  // Narx ro'yxati KODDA YO'Q — foydalanuvchi o'zi kiritadi. Shu sabab bu yerda
+  // qo'lda tuzilgan ro'yxat ustida narxTop() mantig'i sinaladi.
+  const narxlar = [
+    { id: 'a', zavod: 'SMZ', tur: 'полимерка', qalinlik: 0.40, narx: 1240, sana: '2026-07-30', faol: true },
+    { id: 'b', zavod: 'SMZ', tur: 'полимерка', qalinlik: 0.45, narx: 1210, sana: '2026-07-30', faol: true },
+    { id: 'c', zavod: 'Aziya Steel', tur: 'хопёр', qalinlik: 0.50, narx: 1180, sana: '2026-07-30', faol: true },
+    // Bir xil zavod+tur+qalinlik, ikki sana — YANGISI olinishi kerak
+    { id: 'd', zavod: 'SMZ', tur: 'глянцевый', qalinlik: 0.40, narx: 1290, sana: '2026-06-01', faol: true },
+    { id: 'e', zavod: 'SMZ', tur: 'глянцевый', qalinlik: 0.40, narx: 1330, sana: '2026-08-15', faol: true },
+    // Arxivlangan yozuv — ISHLATILMASLIGI kerak
+    { id: 'f', zavod: 'TMZ', tur: 'полимерка', qalinlik: 0.60, narx: 999, sana: '2026-07-30', faol: false },
+  ];
+  tekshir('SMZ полимерка 0.40', 1240, narxTop(narxlar, 'SMZ', 'полимерка', 0.4).narx);
+  tekshir('Aziya Steel хопёр 0.50', 1180, narxTop(narxlar, 'Aziya Steel', 'хопёр', 0.5).narx);
+  tekshir('bir nechta mos kelsa — eng YANGI sana', 1330, narxTop(narxlar, 'SMZ', 'глянцевый', 0.4).narx);
+  tekshir("faol:false yozuv ishlatilmaydi", true, narxTop(narxlar, 'TMZ', 'полимерка', 0.6) === null);
+  tekshir("ro'yxatda yo'q zavod → null", true, narxTop(narxlar, "Demir Master Prime", 'полимерка', 0.4) === null);
+  tekshir("qalinlik mos emas → null", true, narxTop(narxlar, 'SMZ', 'полимерка', 0.35) === null);
+  tekshir("bo'sh ro'yxat → null", true, narxTop([], 'SMZ', 'полимерка', 0.4) === null);
+  tekshir("obyekt-xarita ham qabul qilinadi", 1240,
+    narxTop({ a: narxlar[0] }, 'SMZ', 'полимерка', 0.4).narx);
+  // "0.40" (matn) va 0.4 (son) bir xil qalinlik deb qaralishi kerak
+  tekshir("qalinlik matn ko'rinishida ham topiladi", 1240,
+    narxTop([{ zavod: 'SMZ', tur: 'полимерка', qalinlik: '0.40', narx: 1240, faol: true }], 'SMZ', 'полимерка', 0.4).narx);
+  // Registr va ortiqcha bo'shliq farq qilmasin
+  tekshir('registr/bo\'shliq farq qilmaydi', 1180,
+    narxTop(narxlar, '  aziya   steel ', 'ХОПЁР', 0.5).narx);
 }
 
 // Rang → tur

@@ -27,7 +27,7 @@ import {
 import { Card, SectionTitle } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn } from '../../lib/helpers.js';
 import { turTaxmin, son } from '../../lib/omborHisob.js';
-import { seedToplam, ZAVODLAR, TURLAR } from '../../lib/omborSeed.js';
+import { ZAVODLAR, TURLAR } from '../../lib/omborSeed.js';
 
 // ----- Kichik yordamchilar -----
 
@@ -232,7 +232,7 @@ export function OmborSozlama({
 }) {
   const [ochiq, setOchiq] = useState(false);            // standart holat — YOPIQ
   const [sinov, setSinov] = useState('');               // rang → tur jonli sinovi
-  const [seedIsh, setSeedIsh] = useState('');           // qaysi seed tugmasi ishlayapti
+  const [seedIsh, setSeedIsh] = useState('');           // sozlama tiklash ishlayaptimi
   const [seedNatija, setSeedNatija] = useState('');
   const [seedXato, setSeedXato] = useState('');
 
@@ -405,55 +405,29 @@ export function OmborSozlama({
     setTashqiYangi(false);
   }
 
-  // ----- Boshlang'ich ma'lumot (seed) -----
-  // Seed to'plami faqat NECHTA hujjat yozilishini ko'rsatish uchun o'qiladi —
-  // undagi raqamlar hisob-kitobda ishlatilmaydi.
-  const toplam = useMemo(() => seedToplam(), []);
-  const xujjatSoni = useMemo(() => ({
-    'ombor-narxlar': Object.keys(toplam['ombor-narxlar'] || {}).length,
-    'ombor-rulonlar': Object.keys(toplam['ombor-rulonlar'] || {}).length,
-  }), [toplam]);
-
-  // Bu ikki hujjat MERGE emas, TO'LIQ almashtirib yoziladi (App.jsx: storage.save).
-  // Narx/rulon ro'yxatlari esa id bo'yicha merge (storage.saveField).
-  const TOLIQ_ALMASH = ['ombor-sozlama', 'ombor-rang-tur'];
-  const toliqmi = (k) => TOLIQ_ALMASH.includes(k);
-
-  const SEED_TUGMALAR = [
-    { k: 'hammasi', label: 'Hammasi', kalitlar: ['ombor-sozlama', 'ombor-rang-tur', 'ombor-narxlar', 'ombor-rulonlar'] },
-    { k: 'narxlar', label: "Narx ro'yxati", kalitlar: ['ombor-narxlar'] },
-    { k: 'rulonlar', label: 'Rulonlar', kalitlar: ['ombor-rulonlar'] },
-    { k: 'sozlama', label: 'Sozlama', kalitlar: ['ombor-sozlama', 'ombor-rang-tur'] },
-  ];
-
-  async function seedBos(t) {
+  // ----- Sozlamani boshlang'ich holatga tiklash -----
+  //  DIQQAT: bu FAQAT sozlama va rang → tur qoidalarini yozadi.
+  //  Narx ro'yxati va rulonlarga TEGMAYDI — ularni foydalanuvchi o'zi kiritadi.
+  async function tiklaBos() {
     if (!canEdit || !onSeed || seedIsh) return;
-    const royxat = t.kalitlar
-      .map((k) => `  • ${k} — ${toliqmi(k) ? "TO'LIQ ALMASHTIRILADI" : `${xujjatSoni[k] || 0} ta yozuv (id ustiga)`}`)
-      .join('\n');
-    const ogohlar = [];
-    if (t.kalitlar.some(toliqmi)) {
-      ogohlar.push("Sozlama va rang → tur qoidalari TO'LIQ almashtiriladi — qo'shgan"
-        + " qalinliklaringiz, qoidalaringiz va joriy kurs butunlay o'chadi.");
-    }
-    if (t.kalitlar.some((k) => !toliqmi(k))) {
-      ogohlar.push('Bir xil id li mavjud narx / rulon yozuvlari ustiga yoziladi'
-        + " (qo'lda kiritilgan boshqa yozuvlarga tegilmaydi).");
-    }
-    const savol = `Boshlang'ich ma'lumot yoziladi:\n${royxat}\n\nDIQQAT:\n`
-      + `${ogohlar.map((s) => `  • ${s}`).join('\n')}\n\nDavom etamizmi?`;
+    const savol = "Sozlama boshlang'ich holatga qaytariladi:\n"
+      + "  • kurs, ustama, bo'luvchilar, ustun nomlari\n"
+      + "  • kg/m jadvali va koeffitsientlar\n"
+      + "  • rang → tur qoidalari\n\n"
+      + "DIQQAT: bular TO'LIQ ALMASHTIRILADI — qo'shgan qalinliklaringiz,\n"
+      + "qoidalaringiz va joriy kurs o'chadi.\n\n"
+      + "Narx ro'yxati va rulonlarga TEGILMAYDI.\n\nDavom etamizmi?";
     if (!window.confirm(savol)) return;
-    setSeedIsh(t.k); setSeedNatija(''); setSeedXato('');
+    setSeedIsh('tikla'); setSeedNatija(''); setSeedXato('');
     try {
-      const natija = await onSeed(t.k);
+      const natija = await onSeed();
       const qatorlar = Object.entries(natija || {}).map(([k, v]) => `${k} ${v} ta`);
-      const matn = qatorlar.length ? `Yozildi: ${qatorlar.join(', ')}` : 'Yozildi';
-      // Prompt talabi: konsolda nechta hujjat yozilgani ko'rinsin
-      console.log(`[ombor seed] ${t.k} → ${matn}`, natija);
+      const matn = qatorlar.length ? `Tiklandi: ${qatorlar.join(', ')}` : 'Tiklandi';
+      console.log(`[ombor sozlama] ${matn}`, natija);
       setSeedNatija(matn);
-      if (showToast) showToast(matn);
+      if (showToast) showToast('Sozlama tiklandi');
     } catch (e) {
-      console.error('[ombor seed] xato:', e);
+      console.error('[ombor sozlama] xato:', e);
       setSeedXato(`Xato: ${(e && e.message) || e}`);
     } finally {
       setSeedIsh('');
@@ -687,30 +661,27 @@ export function OmborSozlama({
             </div>
           )}
 
-          {/* ----- 5) Boshlang'ich ma'lumot (seed) ----- */}
+          {/* ----- 5) Sozlamani tiklash ----- */}
           {canEdit && (
             <div className="pt-2 border-t border-slate-100">
-              <SectionTitle icon={Database}>Boshlang'ich ma'lumot</SectionTitle>
+              <SectionTitle icon={Database}>Sozlamani tiklash</SectionTitle>
               <p className="text-[11px] text-slate-500 -mt-2 mb-2">
-                Tayyor ro'yxatlarni Firestore'ga yozadi. <b>Narx ro'yxati</b> va <b>rulonlar</b> —
-                bir xil id li yozuvlar ustiga yoziladi, qo'lda kiritilgan boshqa yozuvlarga tegmaydi.
+                Yuqoridagi sozlamalarni boshlang'ich holatga qaytaradi.
+                <b> Narx ro'yxati</b> va <b>rulonlar</b>ga tegmaydi — ular faqat
+                siz kiritgan ma'lumotdan iborat.
               </p>
               <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-2">
-                <b>Sozlama</b> va <b>rang → tur qoidalari</b> esa TO'LIQ ALMASHTIRILADI —
+                Sozlama va rang → tur qoidalari <b>TO'LIQ ALMASHTIRILADI</b> —
                 qo'shgan qalinliklaringiz, qoidalaringiz va joriy kurs o'chadi.
               </p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {SEED_TUGMALAR.map((t) => (
-                  <button key={t.k} type="button" onClick={() => seedBos(t)} disabled={!!seedIsh || !onSeed}
-                    className="py-2 px-2 rounded-lg border-2 border-slate-200 bg-white text-slate-700 font-medium text-xs flex items-center justify-center gap-1.5 disabled:opacity-40">
-                    {seedIsh === t.k
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <Database className="w-3.5 h-3.5 text-slate-400" />}
-                    <span className="truncate">{t.label}</span>
-                  </button>
-                ))}
-              </div>
+              <button type="button" onClick={tiklaBos} disabled={!!seedIsh || !onSeed}
+                className="py-2 px-3 rounded-lg border-2 border-slate-200 bg-white text-slate-700 font-medium text-xs inline-flex items-center justify-center gap-1.5 disabled:opacity-40">
+                {seedIsh
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <RotateCcw className="w-3.5 h-3.5 text-slate-400" />}
+                <span>Boshlang'ich sozlamaga qaytarish</span>
+              </button>
 
               {seedNatija && (
                 <div className="mt-2 flex items-start gap-1.5 text-[11px] bg-emerald-50 border border-emerald-300 text-emerald-800 rounded p-2 tabular-nums">
