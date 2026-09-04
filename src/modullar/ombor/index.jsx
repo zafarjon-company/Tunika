@@ -40,7 +40,7 @@ export function OmborModule({
   ranglar = [], currentUser, canEdit = true, showToast,
   // ----- Rulonlar qismi -----
   omborRulonlar = {}, omborNarxlar = {}, omborSozlama = {}, omborRangTur = {},
-  setRulon, setNarx, updateOmborSozlama, updateOmborRangTur, seedOmbor,
+  setRulon, setNarx, updateOmborSozlama, updateOmborRangTur, seedOmbor, omborQaytaNomla,
 }) {
   const [sub, setSub] = useState('materiallar');
 
@@ -116,7 +116,8 @@ export function OmborModule({
             sozlama={omborSozlama} updateSozlama={updateOmborSozlama}
             rangTur={omborRangTur} updateRangTur={updateOmborRangTur}
             rulonlar={omborRulonlar} narxlar={omborNarxlar}
-            canEdit={canEdit} showToast={showToast} onSeed={seedOmbor} />
+            canEdit={canEdit} showToast={showToast} onSeed={seedOmbor}
+            onQaytaNomla={omborQaytaNomla} />
           <Rulonlar
             rulonlar={omborRulonlar} narxlar={omborNarxlar}
             sozlama={omborSozlama} rangTur={omborRangTur}

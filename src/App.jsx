@@ -58,6 +58,7 @@ import {
 } from './lib/helpers.js';
 import { zakasChiqimlari, kazirokChiqimlari, kamQoldiqlar } from './lib/ombor.js';
 import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, seedToplam } from './lib/omborSeed.js';
+import { norm as omborNorm } from './lib/omborHisob.js';
 import {
   AVTO_ISH_BLANK, normAvtoIsh, kunlikHisobotMatni, zaxiraFayli, bugunKerakmi,
 } from './lib/avtoIsh.js';
@@ -984,6 +985,39 @@ export default function App() {
   const setRulon = (id, rulon) => xaritaYoz('ombor-rulonlar', setOmborRulonlar, rulonlarRef, id, rulon);
   const setNarx  = (id, narx)  => xaritaYoz('ombor-narxlar',  setOmborNarxlar,  narxlarRef,  id, narx);
 
+  // Tanlov ro'yxatidagi nom o'zgarganda uni BARCHA yozuvlarda ham almashtiradi
+  // (masalan "SMZ" → "SMZ zavodi": rulonlarda ham, narx ro'yxatida ham).
+  // Har kalitga BITTA merge yozuv yuboriladi — 100 ta yozuv uchun 100 ta
+  // alohida so'rov emas. Natija: { rulonlar: n, narxlar: n }.
+  async function omborQaytaNomla(maydon, eski, yangi) {
+    const e = omborNorm(eski);
+    const y = String(yangi == null ? '' : yangi).trim();
+    const natija = { rulonlar: 0, narxlar: 0 };
+    if (!e || !y) return natija;
+
+    async function ishla(kalit, joriy, setState) {
+      const patch = {};
+      for (const id in joriy) {
+        const rec = joriy[id];
+        if (!rec || rec.ochirilgan) continue;
+        if (omborNorm(rec[maydon]) !== e) continue;
+        patch[id] = tozala({ ...rec, [maydon]: y });
+      }
+      const soni = Object.keys(patch).length;
+      if (!soni) return 0;
+      setState((prev) => ({ ...prev, ...patch }));   // optimistik
+      await storage.saveField(kalit, patch);
+      return soni;
+    }
+
+    natija.rulonlar = await ishla('ombor-rulonlar', rulonlarRef.current, setOmborRulonlar);
+    // Rang faqat rulonda bor — narx yozuvida rang maydoni yo'q
+    if (maydon !== 'rang') {
+      natija.narxlar = await ishla('ombor-narxlar', narxlarRef.current, setOmborNarxlar);
+    }
+    return natija;
+  }
+
   function updateOmborSozlama(v) { setOmborSozlama(v); persist('ombor-sozlama', v); }
   function updateOmborRangTur(v) { setOmborRangTur(v); persist('ombor-rang-tur', v); }
 
@@ -1707,7 +1741,7 @@ export default function App() {
             omborSozlama={omborSozlama} omborRangTur={omborRangTur}
             setRulon={setRulon} setNarx={setNarx}
             updateOmborSozlama={updateOmborSozlama} updateOmborRangTur={updateOmborRangTur}
-            seedOmbor={seedOmbor}
+            seedOmbor={seedOmbor} omborQaytaNomla={omborQaytaNomla}
           />
         )}
         {tab === 'jurnal' && (

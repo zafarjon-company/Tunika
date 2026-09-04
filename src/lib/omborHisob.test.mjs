@@ -3,7 +3,7 @@
 //  Ishga tushirish:  node src/lib/omborHisob.test.mjs
 //  React kerak emas — sof funksiyalar sinaladi.
 // ============================================================
-import { rulonHisob, kgPerMetr, narxTop, jamiHisob, turTaxmin, zavodGuruh, OGOH } from './omborHisob.js';
+import { rulonHisob, kgPerMetr, narxTop, jamiHisob, turTaxmin, zavodGuruh, norm, OGOH } from './omborHisob.js';
 import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, sozlamaRoyxat } from './omborSeed.js';
 
 const R = (n) => Math.round(n);
@@ -200,6 +200,85 @@ console.log("\n10) Tanlov ro'yxatlari (zavod / tur / rang)");
   tekshir('massiv emas → boshlang\'ich', true,
     teng(sozlamaRoyxat({ ranglar: 'xato' }, 'ranglar'), SOZLAMA_BOSHLANGICH.ranglar));
   tekshir("rang ro'yxati bo'sh emas", true, SOZLAMA_BOSHLANGICH.ranglar.length > 0);
+}
+
+// Nom o'zgarganda uni barcha yozuvlarda almashtirish (App.jsx: omborQaytaNomla)
+// va o'zgarishni aniqlash (OmborSozlama: qaytaNomlar) mantig'i.
+console.log("\n11) Nomni hamma yozuvda qayta nomlash");
+{
+  // --- App.jsx dagi ishla() bilan bir xil algoritm ---
+  function qaytaNomla(maydon, eski, yangi, rulonlar, narxlar) {
+    const e = norm(eski);
+    const y = String(yangi == null ? '' : yangi).trim();
+    const natija = { rulonlar: 0, narxlar: 0 };
+    if (!e || !y) return natija;
+    const ishla = (joriy) => {
+      const patch = {};
+      for (const id in joriy) {
+        const rec = joriy[id];
+        if (!rec || rec.ochirilgan) continue;
+        if (norm(rec[maydon]) !== e) continue;
+        patch[id] = { ...rec, [maydon]: y };
+      }
+      Object.assign(joriy, patch);
+      return Object.keys(patch).length;
+    };
+    natija.rulonlar = ishla(rulonlar);
+    if (maydon !== 'rang') natija.narxlar = ishla(narxlar);
+    return natija;
+  }
+
+  const rulonlar = {
+    a: { id: 'a', zavod: 'SMZ', tur: 'полимерка', rang: 'Oq' },
+    b: { id: 'b', zavod: 'smz', tur: 'хопёр', rang: 'Oq' },      // registr boshqacha
+    c: { id: 'c', zavod: 'TMZ', tur: 'полимерка', rang: 'Qora' },
+    d: { id: 'd', zavod: 'SMZ', tur: 'полимерка', ochirilgan: true }, // o'chirilgan
+  };
+  const narxlar = {
+    n1: { id: 'n1', zavod: 'SMZ', tur: 'полимерка', narx: 1240 },
+    n2: { id: 'n2', zavod: 'Aziya Steel', tur: 'хопёр', narx: 1180 },
+  };
+
+  const r1 = qaytaNomla('zavod', 'SMZ', 'SMZ zavodi', rulonlar, narxlar);
+  tekshir('rulonlarda almashdi (registr farqisiz)', 2, r1.rulonlar);
+  tekshir('narx yozuvida ham almashdi', 1, r1.narxlar);
+  tekshir('a → yangi nom', 'SMZ zavodi', rulonlar.a.zavod);
+  tekshir('b (kichik harf) ham almashdi', 'SMZ zavodi', rulonlar.b.zavod);
+  tekshir("c (boshqa zavod) tegilmadi", 'TMZ', rulonlar.c.zavod);
+  tekshir("o'chirilgan yozuv tegilmadi", 'SMZ', rulonlar.d.zavod);
+  tekshir('narx yozuvi yangilandi', 'SMZ zavodi', narxlar.n1.zavod);
+  tekshir("boshqa narx yozuvi tegilmadi", 'Aziya Steel', narxlar.n2.zavod);
+
+  // Rang faqat rulonda bo'ladi — narx yozuviga tegmasligi kerak
+  const r2 = qaytaNomla('rang', 'Oq', 'Oq (yaltiroq)', rulonlar, narxlar);
+  tekshir('rang: rulonlarda almashdi', 2, r2.rulonlar);
+  tekshir('rang: narx yozuviga tegilmadi', 0, r2.narxlar);
+
+  // Bo'sh nom bilan chaqirilsa hech narsa qilmaydi
+  const r3 = qaytaNomla('zavod', '', 'X', rulonlar, narxlar);
+  tekshir("bo'sh eski nom → o'zgarish yo'q", 0, r3.rulonlar + r3.narxlar);
+  const r4 = qaytaNomla('zavod', 'TMZ', '   ', rulonlar, narxlar);
+  tekshir("bo'sh yangi nom → o'zgarish yo'q", 0, r4.rulonlar + r4.narxlar);
+
+  // --- Qayta nomlashni ANIQLASH (OmborSozlama: qaytaNomlar) ---
+  const sanoq = new Map([['smz', 3], ['tmz', 1]]);
+  const aniqla = (qatorlar) => qatorlar.filter((r) => {
+    const eski = String(r.asl || '').trim();
+    const yng = String(r.v || '').trim();
+    if (!eski || !yng || norm(eski) === norm(yng)) return false;
+    return (sanoq.get(norm(eski)) || 0) > 0;
+  }).map((r) => r.asl + '→' + r.v);
+
+  tekshir('nom o\'zgargan va ishlatilgan → aniqlanadi', 'SMZ→SMZ zavodi',
+    aniqla([{ asl: 'SMZ', v: 'SMZ zavodi' }]).join(','));
+  tekshir("yangi qator (asl bo'sh) qayta nomlash emas", '',
+    aniqla([{ asl: '', v: 'Yangi zavod' }]).join(','));
+  tekshir('faqat registr o\'zgardi → qayta nomlash emas', '',
+    aniqla([{ asl: 'SMZ', v: 'smz' }]).join(','));
+  tekshir("ishlatilmagan nom → yozuvga tegilmaydi", '',
+    aniqla([{ asl: 'Demir', v: 'Demir Master' }]).join(','));
+  tekshir("nom o'chirildi (v bo'sh) → qayta nomlash emas", '',
+    aniqla([{ asl: 'TMZ', v: '' }]).join(','));
 }
 
 console.log(`\n${'='.repeat(46)}`);

@@ -64,7 +64,12 @@ function kgQatorlar(jadval) {
 //  Tahrirlash paytida matn o'zgargani uchun har qatorga barqaror id kerak
 //  (indeks key ishlatilsa, qator o'chirilganda inputlar aralashib ketadi).
 function royxatQatorlar(arr) {
-  return (arr || []).map((v) => ({ id: genId(), v: String(v == null ? '' : v) }));
+  // `asl` — bazada saqlangan nom. Saqlashda `v` bilan solishtirib, nom
+  // o'zgarganini (va uni yozuvlarda ham almashtirish kerakligini) bilamiz.
+  return (arr || []).map((v) => {
+    const t = String(v == null ? '' : v);
+    return { id: genId(), v: t, asl: t };
+  });
 }
 //  Saqlashda: bo'sh qatorlar tashlanadi, takrorlar (registr farqisiz) olib
 //  tashlanadi, tartib esa foydalanuvchi qo'ygan holicha qoladi.
@@ -318,11 +323,12 @@ function RoyxatTahrir({ sarlavha, izoh, qatorlar, sanoq, canEdit, onSet, onQosh,
 export function OmborSozlama({
   sozlama = {}, updateSozlama, rangTur = {}, updateRangTur,
   rulonlar = {}, narxlar = {},
-  canEdit = true, showToast, onSeed,
+  canEdit = true, showToast, onSeed, onQaytaNomla,
 }) {
   const [ochiq, setOchiq] = useState(false);            // standart holat — YOPIQ
   const [sinov, setSinov] = useState('');               // rang → tur jonli sinovi
   const [seedIsh, setSeedIsh] = useState('');           // sozlama tiklash ishlayaptimi
+  const [saqlanmoqda, setSaqlanmoqda] = useState(false); // qayta nomlash + saqlash davom etyapti
   const [seedNatija, setSeedNatija] = useState('');
   const [seedXato, setSeedXato] = useState('');
 
@@ -381,7 +387,7 @@ export function OmborSozlama({
     ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].map((r) => (r.id === id ? { ...r, v } : r)) },
   }));
   const royxatQosh = (nom) => setForma((f) => ({
-    ...f, royxat: { ...f.royxat, [nom]: [...f.royxat[nom], { id: genId(), v: '' }] },
+    ...f, royxat: { ...f.royxat, [nom]: [...f.royxat[nom], { id: genId(), v: '', asl: '' }] },
   }));
   const royxatKochir = (nom, id, yon) => setForma((f) => {
     const arr = [...f.royxat[nom]];
@@ -502,8 +508,41 @@ export function OmborSozlama({
   const kursOzgardi = kurs !== son(sozlama.kurs);
 
   // ----- Saqlash / bekor qilish -----
-  function saqla() {
-    if (!canEdit || xatoBor || !ozgargan) return;
+  // Nomi o'zgargan VA yozuvlarda ishlatilayotgan qatorlar — ularni
+  // yozuvlarda ham almashtirish kerak (aks holda narx topilmay qoladi:
+  // narx ro'yxatida "SMZ", rulonda "SMZ zavodi" bo'lib ketardi).
+  const qaytaNomlar = useMemo(() => {
+    const out = [];
+    for (const [nom, maydon] of [['zavodlar', 'zavod'], ['turlar', 'tur'], ['ranglar', 'rang']]) {
+      for (const r of forma.royxat[nom]) {
+        const eski = String(r.asl || '').trim();
+        const yangi = String(r.v || '').trim();
+        if (!eski || !yangi || norm(eski) === norm(yangi)) continue;
+        const soni = sanoq[nom].get(norm(eski)) || 0;
+        if (soni > 0) out.push({ nom, maydon, eski, yangi, soni });
+      }
+    }
+    return out;
+  }, [forma.royxat, sanoq]);
+
+  async function saqla() {
+    if (!canEdit || xatoBor || !ozgargan || saqlanmoqda) return;
+
+    // Nom o'zgargan bo'lsa — nima bo'lishini aniq ko'rsatib tasdiq so'raymiz.
+    // Bekor qilinsa HECH NARSA saqlanmaydi (yarim holat qolmasin).
+    if (qaytaNomlar.length && onQaytaNomla) {
+      const royxat = qaytaNomlar
+        .map((x) => `  • "${x.eski}" → "${x.yangi}"   (${x.soni} ta yozuv)`)
+        .join('\n');
+      const ok = window.confirm(
+        `Nom o'zgardi:\n${royxat}\n\n`
+        + "Mavjud yozuvlarda ham almashtirilsinmi?\n\n"
+        + "OK — hamma joyda yangi nom bo'ladi.\n"
+        + "Bekor — hech narsa saqlanmaydi (nomni qaytarib qo'ying).",
+      );
+      if (!ok) return;
+    }
+
     const yangi = {
       ...sozlama, // notanish maydonlar yo'qolmasin
       kurs: kurs ?? 0,
@@ -526,6 +565,32 @@ export function OmborSozlama({
         .filter((q) => q.naqsh),
       standart: rt.standart || '',
     };
+    // AVVAL yozuvlarni qayta nomlaymiz — xato bo'lsa sozlama ham yozilmaydi,
+    // shunda ro'yxat yangi nomda, yozuvlar eski nomda qolib ketmaydi.
+    let qnMatn = '';
+    if (qaytaNomlar.length && onQaytaNomla) {
+      setSaqlanmoqda(true);
+      try {
+        let rul = 0;
+        let nrx = 0;
+        for (const x of qaytaNomlar) {
+          const n = await onQaytaNomla(x.maydon, x.eski, x.yangi);
+          rul += (n && n.rulonlar) || 0;
+          nrx += (n && n.narxlar) || 0;
+        }
+        const qismlar = [];
+        if (rul) qismlar.push(`${rul} ta rulon`);
+        if (nrx) qismlar.push(`${nrx} ta narx`);
+        qnMatn = qismlar.length ? ` · ${qismlar.join(', ')} yangilandi` : '';
+      } catch (e) {
+        console.error('[ombor qayta nomlash] xato:', e);
+        setSaqlanmoqda(false);
+        if (showToast) showToast('Qayta nomlashda xatolik — hech narsa saqlanmadi');
+        return;
+      }
+      setSaqlanmoqda(false);
+    }
+
     if (updateSozlama) updateSozlama(yangi);
     if (updateRangTur) updateRangTur(yangiRT);
 
@@ -542,7 +607,7 @@ export function OmborSozlama({
     // kursor/fokus sakramasin.
     if (yMatn !== joriyMatn) { setForma(yAsl); setRt(yRT); }
     setTashqiYangi(false);
-    if (showToast) showToast('Sozlama saqlandi');
+    if (showToast) showToast(`Sozlama saqlandi${qnMatn}`);
   }
 
   // Bekor qilish = eng so'nggi saqlangan (proplardagi) holatga qaytish.
@@ -725,8 +790,10 @@ export function OmborSozlama({
             <p className="text-[11px] text-slate-500 -mt-2 mb-3">
               Rulonlar va Narx ro'yxati jadvallaridagi <b>Zavod</b>, <b>Tur</b> va <b>Rang</b>
               {' '}tanlovlarida shu nomlar chiqadi. O'ng tomondagi son — nom nechta yozuvda
-              ishlatilayotgani. Nomni <b>o'zgartirsangiz eski yozuvlar o'zgarmaydi</b> —
-              ular eski nomi bilan qolib, tanlovda ham ko'rinib turadi.
+              ishlatilayotgani. Nomni <b>o'zgartirsangiz</b> — saqlashda u
+              <b> mavjud yozuvlarda ham almashtiriladi</b> (tasdiq so'raladi).
+              O'chirsangiz esa yozuvlar o'zgarmaydi: eski nom ularda qolib,
+              tanlovda ham ko'rinib turaveradi.
             </p>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -846,9 +913,11 @@ export function OmborSozlama({
                 className="px-3 py-2 border-2 border-slate-200 text-slate-700 rounded-lg bg-white font-medium text-sm flex items-center gap-1.5 disabled:opacity-40">
                 <RotateCcw className="w-4 h-4" /> Bekor qilish
               </button>
-              <button type="button" onClick={saqla} disabled={!ozgargan || xatoBor}
+              <button type="button" onClick={saqla} disabled={!ozgargan || xatoBor || saqlanmoqda}
                 className="bg-slate-900 text-white rounded-lg px-3 py-2 font-medium text-sm flex items-center gap-1.5 disabled:opacity-40">
-                <Save className="w-4 h-4" /> Saqlash
+                {saqlanmoqda
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Yangilanmoqda…</>
+                  : <><Save className="w-4 h-4" /> Saqlash</>}
               </button>
             </div>
           )}
