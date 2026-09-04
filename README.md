@@ -98,9 +98,9 @@ npm run preview    # build'ni lokal sinash
 
 ## Ombor → Rulonlar: hisob zanjiri
 
-Jadval ustunlari daftardagi tartibda. **Oq** kataklar — foydalanuvchi
-kiritadi, **kulrang** ustunlar o'zi hisoblanadi (`src/lib/omborHisob.js`,
-sof funksiya — React'siz):
+Kiritish formasi va Excel eksporti daftardagi ustunlar tartibida. Yulduzchali
+maydonlar foydalanuvchi kiritadi, qolgani o'zi hisoblanadi
+(`src/lib/omborHisob.js`, sof funksiya — React'siz):
 
 | Ustun | Kim to'ldiradi | Hisob |
 |---|---|---|
@@ -132,9 +132,13 @@ Firestore kalitlari: `ombor-sozlama`, `ombor-rulonlar`, `ombor-rang-tur`
 (hammasi `shop/<kalit>` modelida).
 
 **Rulonlar kodda YO'Q** — ular bo'sh boshlanadi va butunlay interfeysdan
-to'ldiriladi: *Ombor → Rulonlar* — **`+ Rulon`** tugmasi bilan rulon
-qo'shish, keyin kataklarni bosib joyida to'ldirish. Sana va kurs avtomatik
-to'ldiriladi, qolganini foydalanuvchi yozadi.
+to'ldiriladi: *Ombor → Rulonlar* — **«Rulon qo'shish»** tugmasi alohida
+forma ochadi; har bir rulon shu formada kiritiladi (hisob natijasi yozayotganda
+jonli ko'rinib turadi) va **«Saqlash»** bosilgandan keyingina ro'yxatga
+tushadi. Sana va kurs avtomatik to'ldiriladi, qolganini foydalanuvchi yozadi.
+Ro'yxatda avval asosiy ma'lumot (kimdan, tur, rang, qalinlik) va **sotuv
+narxlari (5 % / 10 %)** ko'rinadi, keyin xarid tafsilotlari; qatorni bosib
+tahrirlash oynasi ochiladi.
 
 Kodda faqat *sozlama* boshlang'ich qiymatlari bor (standart kurs, standart
 yo'lkira, bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari, rang→tur
