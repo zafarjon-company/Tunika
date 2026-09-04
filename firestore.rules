@@ -86,7 +86,13 @@ service cloud.firestore {
         'telegram-bot-token', 'telegram-chat-id', 'telegram-dxf-chats',
         'telegram-settings', 'telegram-links', 'telegram_config', 'telegram_links',
         // Kamera bog'lamalari
-        'camera-links', 'camera-unlinked'
+        'camera-links', 'camera-unlinked',
+        // Ombor → Rulonlar: narx ro'yxati, kurs/ustama sozlamasi va rulonlar.
+        // Bu bo'limni faqat founder/admin ko'radi (ruxsat.js: tabKoradi 'ombor'),
+        // shuning uchun ishchi sessiyasidan yozishga umuman ehtiyoj yo'q.
+        // 'ombor' va 'ombor-harakat' dan farqli — zakas saqlanganda ularga
+        // AVTOMATIK yozilmaydi, shuning uchun yopish hech qaysi oqimni buzmaydi.
+        'ombor-narxlar', 'ombor-sozlama', 'ombor-rang-tur', 'ombor-rulonlar'
       ];
     }
 
