@@ -4,7 +4,7 @@
 //  React kerak emas — sof funksiyalar sinaladi.
 // ============================================================
 import { rulonHisob, kgPerMetr, narxTop, jamiHisob, turTaxmin, zavodGuruh, OGOH } from './omborHisob.js';
-import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH } from './omborSeed.js';
+import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, sozlamaRoyxat } from './omborSeed.js';
 
 const R = (n) => Math.round(n);
 let xato = 0;
@@ -181,6 +181,25 @@ console.log('\n9) Jami qatori');
   tekshir("umumiy og'irlik (kg)", 8762, R(j.ogirlik));
   tekshir('umumiy qoldiq (m)', 2202, R(j.qoldiq));
   tekshir("ombor qiymati (so'm)", R(qatorlar[0].h.qoldiqQiymat + qatorlar[1].h.qoldiqQiymat), R(j.qiymat));
+}
+
+// Tanlov ro'yxatlari sozlamadan o'qiladi (Sozlama panelida tahrirlanadi)
+console.log("\n10) Tanlov ro'yxatlari (zavod / tur / rang)");
+{
+  const teng = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // Eski sozlama hujjatida bu maydonlar yo'q — boshlang'ich ro'yxat ishlatiladi
+  tekshir("maydon yo'q → boshlang'ich ro'yxat", true,
+    teng(sozlamaRoyxat({}, 'zavodlar'), SOZLAMA_BOSHLANGICH.zavodlar));
+  tekshir("sozlama null → boshlang'ich", true,
+    teng(sozlamaRoyxat(null, 'turlar'), SOZLAMA_BOSHLANGICH.turlar));
+  // Foydalanuvchi ro'yxatni ataylab tozalasa — standart nomlar QAYTIB KELMASLIGI kerak
+  tekshir("bo'sh massiv bo'sh qoladi", 0, sozlamaRoyxat({ zavodlar: [] }, 'zavodlar').length);
+  tekshir('kiritilgan ro\'yxat o\'zi qaytadi', true,
+    teng(sozlamaRoyxat({ zavodlar: ['A', 'B'] }, 'zavodlar'), ['A', 'B']));
+  // Buzuq qiymat (masalan qo'lda noto'g'ri yozilgan) — yiqilmaydi
+  tekshir('massiv emas → boshlang\'ich', true,
+    teng(sozlamaRoyxat({ ranglar: 'xato' }, 'ranglar'), SOZLAMA_BOSHLANGICH.ranglar));
+  tekshir("rang ro'yxati bo'sh emas", true, SOZLAMA_BOSHLANGICH.ranglar.length > 0);
 }
 
 console.log(`\n${'='.repeat(46)}`);

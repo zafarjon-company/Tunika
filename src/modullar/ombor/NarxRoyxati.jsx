@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Card, SectionTitle, StatBox, SmallModal, SegmentedControl } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn, sonQiymat, toDateInput, formatDay } from '../../lib/helpers.js';
-import { ZAVODLAR, TURLAR } from '../../lib/omborSeed.js';
+import { sozlamaRoyxat } from '../../lib/omborSeed.js';
 import { son, norm, narxRoyxat } from '../../lib/omborHisob.js';
 
 // ----- Kichik yordamchilar -----
@@ -352,7 +352,7 @@ function YangiRoyxatModal({ royxat, zavodlar, turlar, band, onClose, onSaqla }) 
 // ============================================================
 //  ASOSIY KOMPONENT
 // ============================================================
-export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }) {
+export function NarxRoyxati({ narxlar = {}, sozlama = {}, setNarx, canEdit = true, showToast }) {
   const toast = (t) => { if (showToast) showToast(t); };
 
   // ----- Holat -----
@@ -374,8 +374,10 @@ export function NarxRoyxati({ narxlar = {}, setNarx, canEdit = true, showToast }
   // ----- Xom ro'yxat (obyekt-xarita → massiv) -----
   const royxat = useMemo(() => narxRoyxat(narxlar), [narxlar]);
 
-  const zavodlar = useMemo(() => birlashtir(ZAVODLAR, royxat, 'zavod'), [royxat]);
-  const turlar = useMemo(() => birlashtir(TURLAR, royxat, 'tur'), [royxat]);
+  // Ro'yxatlar sozlamadan (Sozlama panelida tahrirlanadi) + mavjud yozuvlardagi
+  // noyob qiymatlar — ro'yxatdan o'chirilgani eski yozuvda ko'rinib turaveradi.
+  const zavodlar = useMemo(() => birlashtir(sozlamaRoyxat(sozlama, 'zavodlar'), royxat, 'zavod'), [sozlama, royxat]);
+  const turlar = useMemo(() => birlashtir(sozlamaRoyxat(sozlama, 'turlar'), royxat, 'tur'), [sozlama, royxat]);
 
   // ----- Jami (faol yozuvlar bo'yicha) -----
   const jami = useMemo(() => {

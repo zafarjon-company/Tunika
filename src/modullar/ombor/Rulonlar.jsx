@@ -23,7 +23,7 @@ import {
 import { Card, SectionTitle, StatBox, rangChipStyle } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn, sonQiymat } from '../../lib/helpers.js';
 import { hisobla, jamiHisob, turTaxmin, son, norm, OGOH } from '../../lib/omborHisob.js';
-import { ZAVODLAR, TURLAR, RANGLAR } from '../../lib/omborSeed.js';
+import { sozlamaRoyxat } from '../../lib/omborSeed.js';
 import { downloadXLSX } from '../../lib/xlsx.js';
 
 // ----- Kichik yordamchilar -----
@@ -477,9 +477,21 @@ export function Rulonlar({
   );
 
   // ----- Dropdown ro'yxatlari: standart + mavjud qiymatlar -----
-  const zavodlar = useMemo(() => birlashtir(ZAVODLAR, [rulonlar, narxlar], 'zavod'), [rulonlar, narxlar]);
-  const turlar = useMemo(() => birlashtir(TURLAR, [rulonlar, narxlar], 'tur'), [rulonlar, narxlar]);
-  const ranglar = useMemo(() => birlashtir(RANGLAR, [rulonlar], 'rang'), [rulonlar]);
+  // Ro'yxatlar SOZLAMADAN keladi (Sozlama panelida tahrirlanadi). Ustiga
+  // mavjud yozuvlardagi noyob qiymatlar qo'shiladi — shuning uchun ro'yxatdan
+  // o'chirilgan nom eski yozuvda ko'rinishda qolaveradi, katak bo'shab qolmaydi.
+  const zavodlar = useMemo(
+    () => birlashtir(sozlamaRoyxat(sozlama, 'zavodlar'), [rulonlar, narxlar], 'zavod'),
+    [sozlama, rulonlar, narxlar],
+  );
+  const turlar = useMemo(
+    () => birlashtir(sozlamaRoyxat(sozlama, 'turlar'), [rulonlar, narxlar], 'tur'),
+    [sozlama, rulonlar, narxlar],
+  );
+  const ranglar = useMemo(
+    () => birlashtir(sozlamaRoyxat(sozlama, 'ranglar'), [rulonlar], 'rang'),
+    [sozlama, rulonlar],
+  );
   const qalinliklar = useMemo(() => qalinlikRoyxat([rulonlar, narxlar]), [rulonlar, narxlar]);
 
   // ----- Filtr + saralash -----

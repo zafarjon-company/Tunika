@@ -18,15 +18,13 @@
 //    'ombor-rulonlar'  → { [id]: { id, nomer, rang, zavod, tur, qalinlik, ... } }  ← bo'sh boshlanadi
 // ============================================================
 
-// ----- Dropdown ro'yxatlari -----
-//  Bular faqat TANLASH QULAY bo'lishi uchun. Ro'yxatda yo'q zavod yoki
-//  turni kiritsangiz, u ham dropdownga qo'shilib qoladi (komponentlar
-//  mavjud yozuvlardagi noyob qiymatlarni shu ro'yxatga qo'shib beradi).
-export const ZAVODLAR = ['SMZ', 'Aziya Steel', 'Master Class (Xitoy)', 'TMZ', 'Demir Master Prime'];
-
-export const TURLAR = ['оцинковка', 'полимерка', 'хопёр', 'глянцевый', 'глянцевый (плёнка)', 'Мебел'];
-
-export const RANGLAR = ['Mokriy', 'Oq', 'Qaymoq', 'Shokolad', 'Bordo', 'Somon', 'Granit', 'Qora', 'Sariq'];
+// ----- Dropdown ro'yxatlari — BOSHLANG'ICH qiymat -----
+//  Bular faqat bo'sh bazada ko'rinadigan boshlang'ich ro'yxat. Haqiqiy
+//  ro'yxat `ombor-sozlama` ichida saqlanadi va Sozlama panelidan
+//  tahrirlanadi (qo'shish / o'zgartirish / o'chirish / tartib almashtirish).
+//  Bundan tashqari mavjud yozuvlardagi noyob qiymatlar ham dropdownga
+//  qo'shilib boradi — shuning uchun ro'yxatdan o'chirilgan nom eski
+//  yozuvlarda ko'rinishda qolaveradi (ma'lumot yo'qolmaydi).
 
 // ----- Boshlang'ich sozlama (Sozlama panelidan tahrirlanadi) -----
 //  Bularsiz hisob umuman ishlamaydi (kurs 0 bo'lsa hamma narx "—" chiqadi),
@@ -49,7 +47,26 @@ export const SOZLAMA_BOSHLANGICH = {
   koefSMZ: 9.35,
   koefBoshqa: 9.05,
   kursSana: '',       // kurs oxirgi marta qachon o'zgartirilgan
+  // Dropdown ro'yxatlari — Sozlama panelidan to'liq tahrirlanadi
+  zavodlar: ['SMZ', 'Aziya Steel', 'Master Class (Xitoy)', 'TMZ', 'Demir Master Prime'],
+  turlar: ['оцинковка', 'полимерка', 'хопёр', 'глянцевый', 'глянцевый (плёнка)', 'Мебел'],
+  ranglar: ['Mokriy', 'Oq', 'Qaymoq', 'Shokolad', 'Bordo', 'Somon', 'Granit', 'Qora', 'Sariq'],
 };
+
+// Eski kod (va rang→tur qoidalari tahriri) uchun qulay yorliqlar —
+// sozlamada ro'yxat bo'lmasa shular ishlatiladi.
+export const ZAVODLAR = SOZLAMA_BOSHLANGICH.zavodlar;
+export const TURLAR = SOZLAMA_BOSHLANGICH.turlar;
+export const RANGLAR = SOZLAMA_BOSHLANGICH.ranglar;
+
+// Sozlamadagi ro'yxatni xavfsiz o'qish.
+//  Maydon YO'Q bo'lsa (eski sozlama hujjati) — boshlang'ich ro'yxat.
+//  Maydon BOR, lekin bo'sh massiv bo'lsa — bo'sh qoladi: foydalanuvchi
+//  ro'yxatni ataylab tozalagan bo'lsa, standart nomlar qaytib kelmasin.
+export function sozlamaRoyxat(sozlama, nom) {
+  const v = sozlama && sozlama[nom];
+  return Array.isArray(v) ? v : (SOZLAMA_BOSHLANGICH[nom] || []);
+}
 
 // ----- Rang → tur taxmini -----
 //  Rulon qo'shganda rang tanlansa, tur BO'SH bo'lsa shu qoidalar bo'yicha

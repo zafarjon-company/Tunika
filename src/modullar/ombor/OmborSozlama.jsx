@@ -22,12 +22,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Settings, ChevronDown, ChevronUp, Plus, Trash2, Save, RotateCcw,
-  Database, Loader2, AlertTriangle, Check,
+  Database, Loader2, AlertTriangle, Check, List,
 } from 'lucide-react';
 import { Card, SectionTitle } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn } from '../../lib/helpers.js';
-import { turTaxmin, son } from '../../lib/omborHisob.js';
-import { ZAVODLAR, TURLAR } from '../../lib/omborSeed.js';
+import { turTaxmin, son, norm } from '../../lib/omborHisob.js';
+import { sozlamaRoyxat } from '../../lib/omborSeed.js';
 
 // ----- Kichik yordamchilar -----
 
@@ -60,6 +60,28 @@ function kgQatorlar(jadval) {
 }
 
 // Qatorlar → kg/m jadvali (bo'sh va yaroqsiz qatorlar tushib qoladi)
+// ----- Tanlov ro'yxatlari (zavod / tur / rang) -----
+//  Tahrirlash paytida matn o'zgargani uchun har qatorga barqaror id kerak
+//  (indeks key ishlatilsa, qator o'chirilganda inputlar aralashib ketadi).
+function royxatQatorlar(arr) {
+  return (arr || []).map((v) => ({ id: genId(), v: String(v == null ? '' : v) }));
+}
+//  Saqlashda: bo'sh qatorlar tashlanadi, takrorlar (registr farqisiz) olib
+//  tashlanadi, tartib esa foydalanuvchi qo'ygan holicha qoladi.
+function royxatMassiv(qatorlar) {
+  const out = [];
+  const korilgan = new Set();
+  for (const r of (qatorlar || [])) {
+    const v = String(r.v == null ? '' : r.v).trim();
+    if (!v) continue;
+    const k = norm(v);
+    if (korilgan.has(k)) continue;
+    korilgan.add(k);
+    out.push(v);
+  }
+  return out;
+}
+
 function kgObyekt(qatorlar) {
   const out = {};
   for (const r of qatorlar) {
@@ -119,6 +141,11 @@ function formaYasa(s) {
     koefSMZ: xom(o.koefSMZ),
     koefBoshqa: xom(o.koefBoshqa),
     kg: { SMZ: kgQatorlar(kg.SMZ), BOSHQA: kgQatorlar(kg.BOSHQA) },
+    royxat: {
+      zavodlar: royxatQatorlar(sozlamaRoyxat(o, 'zavodlar')),
+      turlar: royxatQatorlar(sozlamaRoyxat(o, 'turlar')),
+      ranglar: royxatQatorlar(sozlamaRoyxat(o, 'ranglar')),
+    },
   };
 }
 
@@ -138,6 +165,11 @@ function solish(f, r) {
     kurs: f.kurs, ustama: f.ustama, b1: f.bolizvchi1, b2: f.bolizvchi2,
     n1: f.nom1, n2: f.nom2, kS: f.koefSMZ, kB: f.koefBoshqa,
     kg: { SMZ: f.kg.SMZ.map((x) => [x.q, x.v]), BOSHQA: f.kg.BOSHQA.map((x) => [x.q, x.v]) },
+    ry: {
+      z: f.royxat.zavodlar.map((x) => x.v),
+      t: f.royxat.turlar.map((x) => x.v),
+      c: f.royxat.ranglar.map((x) => x.v),
+    },
     q: r.qoidalar.map((x) => [x.naqsh, x.tur]),
     st: r.standart,
   });
@@ -226,8 +258,66 @@ function KgGuruh({ nom, izoh, qatorlar, dubl, notoliq, canEdit, onQator, onQosh,
 // ============================================================
 //  ASOSIY KOMPONENT
 // ============================================================
+// ----- Bitta tanlov ro'yxatini tahrirlash bloki -----
+//  sanoq — Map(norm(nom) → nechta yozuvda ishlatilgan). O'chirishdan oldin
+//  foydalanuvchi nimaga tegayotganini ko'rib tursin.
+function RoyxatTahrir({ sarlavha, izoh, qatorlar, sanoq, canEdit, onSet, onQosh, onOchir, onKochir }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-xs font-semibold text-slate-600">{sarlavha}</span>
+        {canEdit && (
+          <button type="button" onClick={onQosh}
+            className="px-2 py-1 rounded border border-slate-300 bg-white text-slate-600 text-[11px] inline-flex items-center gap-1 hover:bg-slate-50">
+            <Plus className="w-3 h-3" /> Qo'shish
+          </button>
+        )}
+      </div>
+      {izoh && <p className="text-[11px] text-slate-400 mb-1.5">{izoh}</p>}
+      <div className="space-y-1">
+        {qatorlar.length === 0 && (
+          <p className="text-[11px] text-slate-400 py-1">Ro'yxat bo'sh — «Qo'shish» bilan boshlang.</p>
+        )}
+        {qatorlar.map((r, i) => {
+          const ishlatilgan = sanoq.get(norm(r.v)) || 0;
+          return (
+            <div key={r.id} className="flex items-center gap-1">
+              <input value={r.v} disabled={!canEdit}
+                onChange={(e) => onSet(r.id, e.target.value)}
+                placeholder="nomi"
+                className="flex-1 min-w-0 px-2 py-1.5 border border-slate-300 rounded bg-white disabled:bg-slate-100" />
+              <span className={`text-[10px] tabular-nums w-14 text-right flex-shrink-0 ${
+                ishlatilgan > 0 ? 'text-slate-500' : 'text-slate-300'}`}
+                title={ishlatilgan > 0 ? `${ishlatilgan} ta yozuvda ishlatilyapti` : 'Hech qayerda ishlatilmagan'}>
+                {ishlatilgan > 0 ? `${ishlatilgan} ta` : '—'}
+              </span>
+              {canEdit && (
+                <>
+                  <button type="button" onClick={() => onKochir(r.id, -1)} disabled={i === 0}
+                    title="Yuqoriga" className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25">
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => onKochir(r.id, 1)} disabled={i === qatorlar.length - 1}
+                    title="Pastga" className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25">
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => onOchir(r)}
+                    title="O'chirish" className="p-1 text-slate-400 hover:text-red-600">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function OmborSozlama({
   sozlama = {}, updateSozlama, rangTur = {}, updateRangTur,
+  rulonlar = {}, narxlar = {},
   canEdit = true, showToast, onSeed,
 }) {
   const [ochiq, setOchiq] = useState(false);            // standart holat — YOPIQ
@@ -286,12 +376,67 @@ export function OmborSozlama({
     ...f, kg: { ...f.kg, [guruh]: f.kg[guruh].filter((r) => r.id !== id) },
   }));
 
+  // ----- Tanlov ro'yxatlari (zavod / tur / rang) -----
+  const royxatSet = (nom, id, v) => setForma((f) => ({
+    ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].map((r) => (r.id === id ? { ...r, v } : r)) },
+  }));
+  const royxatQosh = (nom) => setForma((f) => ({
+    ...f, royxat: { ...f.royxat, [nom]: [...f.royxat[nom], { id: genId(), v: '' }] },
+  }));
+  const royxatKochir = (nom, id, yon) => setForma((f) => {
+    const arr = [...f.royxat[nom]];
+    const i2 = arr.findIndex((r) => r.id === id);
+    const j = i2 + yon;
+    if (i2 < 0 || j < 0 || j >= arr.length) return f;
+    [arr[i2], arr[j]] = [arr[j], arr[i2]];
+    return { ...f, royxat: { ...f.royxat, [nom]: arr } };
+  });
+
+  // Har bir nom nechta yozuvda ishlatilgan — o'chirishdan oldin ogohlantirish
+  // uchun. Zavod va tur rulon ham, narx yozuvida ham uchraydi; rang faqat rulonda.
+  const sanoq = useMemo(() => {
+    const rul = Object.values(rulonlar || {}).filter((x) => x && !x.ochirilgan);
+    const nrx = Object.values(narxlar || {}).filter((x) => x && !x.ochirilgan);
+    const hisobla = (manbalar, maydon) => {
+      const m = new Map();
+      for (const src of manbalar) {
+        for (const x of src) {
+          const k = norm(x[maydon]);
+          if (k) m.set(k, (m.get(k) || 0) + 1);
+        }
+      }
+      return m;
+    };
+    return {
+      zavodlar: hisobla([rul, nrx], 'zavod'),
+      turlar: hisobla([rul, nrx], 'tur'),
+      ranglar: hisobla([rul], 'rang'),
+    };
+  }, [rulonlar, narxlar]);
+
+  // O'chirish: ishlatilayotgan nom bo'lsa nima bo'lishini aniq aytamiz.
+  // Eski yozuvlar O'ZGARMAYDI — ro'yxat faqat tanlov variantlari ro'yxati.
+  function royxatOchir(nom, r) {
+    const n = sanoq[nom].get(norm(r.v)) || 0;
+    if (n > 0) {
+      const ok = window.confirm(
+        `"${r.v}" hozir ${n} ta yozuvda ishlatilyapti.\n\n`
+        + "Ro'yxatdan o'chirsangiz o'sha yozuvlar O'ZGARMAYDI va bu nom ularda\n"
+        + "ko'rinib turaveradi — faqat tanlov ro'yxatidan chiqadi.\n\nO'chirilsinmi?",
+      );
+      if (!ok) return;
+    }
+    setForma((f) => ({
+      ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].filter((x) => x.id !== r.id) },
+    }));
+  }
+
   // ----- Rang → tur qoidalari -----
   const qoidaTahrir = (id, patch) => setRt((r) => ({
     ...r, qoidalar: r.qoidalar.map((q) => (q.id === id ? { ...q, ...patch } : q)),
   }));
   const qoidaQosh = () => setRt((r) => ({
-    ...r, qoidalar: [...r.qoidalar, { id: genId(), naqsh: '', tur: r.standart || TURLAR[0] || '' }],
+    ...r, qoidalar: [...r.qoidalar, { id: genId(), naqsh: '', tur: r.standart || '' }],
   }));
   const qoidaOchir = (id) => setRt((r) => ({ ...r, qoidalar: r.qoidalar.filter((q) => q.id !== id) }));
   const qoidaKochir = (index, yonalish) => setRt((r) => {
@@ -311,11 +456,12 @@ export function OmborSozlama({
       if (!s || korilgan.has(s.toLowerCase())) return;
       korilgan.add(s.toLowerCase()); out.push(s);
     };
-    TURLAR.forEach(qosh);
+    // Foydalanuvchi tahrirlayotgan tur ro'yxati (hali saqlanmagan bo'lsa ham)
+    forma.royxat.turlar.forEach((r) => qosh(r.v));
     rt.qoidalar.forEach((q) => qosh(q.tur));
     qosh(rt.standart);
     return out;
-  }, [rt]);
+  }, [rt, forma.royxat.turlar]);
 
   // ----- Tekshiruvlar -----
   //  Bu qiymatlar butun rulonlar jadvalini boshqaradi: kurs 0 bo'lsa rulon
@@ -369,6 +515,9 @@ export function OmborSozlama({
       koefSMZ: kSMZ ?? 0,
       koefBoshqa: kBoshqa ?? 0,
       kgPerM: { SMZ: kgObyekt(forma.kg.SMZ), BOSHQA: kgObyekt(forma.kg.BOSHQA) },
+      zavodlar: royxatMassiv(forma.royxat.zavodlar),
+      turlar: royxatMassiv(forma.royxat.turlar),
+      ranglar: royxatMassiv(forma.royxat.ranglar),
       kursSana: kursOzgardi ? bugun() : (sozlama.kursSana || ''),
     };
     const yangiRT = {
@@ -435,7 +584,8 @@ export function OmborSozlama({
   }
 
   // BOSHQA guruhga kiradigan zavodlar (SMZ dan qolganlari) — eslatma uchun
-  const boshqaZavodlar = ZAVODLAR.filter((z) => !/smz/i.test(z)).join(', ');
+  const boshqaZavodlar = forma.royxat.zavodlar.map((r) => r.v)
+    .filter((z) => z && !/smz/i.test(z)).join(', ');
 
   // Yopiq holatdagi qisqacha ma'lumot
   const qisqacha = `Kurs ${fmt(sozlama.kurs)} so'm · Ustama ${olchovKor(sozlama.ustama, 2)} $/t`
@@ -567,6 +717,48 @@ export function OmborSozlama({
                 </span>
               </div>
             )}
+          </div>
+
+          {/* ----- 2b) Tanlov ro'yxatlari (zavod / tur / rang) ----- */}
+          <div className="pt-2 border-t border-slate-100">
+            <SectionTitle icon={List}>Tanlov ro'yxatlari</SectionTitle>
+            <p className="text-[11px] text-slate-500 -mt-2 mb-3">
+              Rulonlar va Narx ro'yxati jadvallaridagi <b>Zavod</b>, <b>Tur</b> va <b>Rang</b>
+              {' '}tanlovlarida shu nomlar chiqadi. O'ng tomondagi son — nom nechta yozuvda
+              ishlatilayotgani. Nomni <b>o'zgartirsangiz eski yozuvlar o'zgarmaydi</b> —
+              ular eski nomi bilan qolib, tanlovda ham ko'rinib turadi.
+            </p>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <RoyxatTahrir
+                sarlavha="Zavodlar" izoh="Narx ro'yxati shu zavodlar bo'yicha yuritiladi."
+                qatorlar={forma.royxat.zavodlar} sanoq={sanoq.zavodlar} canEdit={canEdit}
+                onSet={(id, v) => royxatSet('zavodlar', id, v)}
+                onQosh={() => royxatQosh('zavodlar')}
+                onOchir={(r) => royxatOchir('zavodlar', r)}
+                onKochir={(id, yon) => royxatKochir('zavodlar', id, yon)} />
+
+              <RoyxatTahrir
+                sarlavha="Turlar" izoh="Qoplama turi — narx aynan shu bo'yicha topiladi."
+                qatorlar={forma.royxat.turlar} sanoq={sanoq.turlar} canEdit={canEdit}
+                onSet={(id, v) => royxatSet('turlar', id, v)}
+                onQosh={() => royxatQosh('turlar')}
+                onOchir={(r) => royxatOchir('turlar', r)}
+                onKochir={(id, yon) => royxatKochir('turlar', id, yon)} />
+
+              <RoyxatTahrir
+                sarlavha="Ranglar" izoh="Narxga ta'sir qilmaydi — faqat rulonni tanib olish uchun."
+                qatorlar={forma.royxat.ranglar} sanoq={sanoq.ranglar} canEdit={canEdit}
+                onSet={(id, v) => royxatSet('ranglar', id, v)}
+                onQosh={() => royxatQosh('ranglar')}
+                onOchir={(r) => royxatOchir('ranglar', r)}
+                onKochir={(id, yon) => royxatKochir('ranglar', id, yon)} />
+            </div>
+
+            <p className="text-[11px] text-slate-400 mt-2">
+              Bo'sh qatorlar va takror nomlar saqlashda o'zi tashlab yuboriladi.
+              Qalinlik alohida ro'yxat emas — u har qatorda qo'lda yoziladi.
+            </p>
           </div>
 
           {/* ----- 3) Rang → tur qoidalari ----- */}

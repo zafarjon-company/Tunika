@@ -115,6 +115,7 @@ export function OmborModule({
           <OmborSozlama
             sozlama={omborSozlama} updateSozlama={updateOmborSozlama}
             rangTur={omborRangTur} updateRangTur={updateOmborRangTur}
+            rulonlar={omborRulonlar} narxlar={omborNarxlar}
             canEdit={canEdit} showToast={showToast} onSeed={seedOmbor} />
           <Rulonlar
             rulonlar={omborRulonlar} narxlar={omborNarxlar}
@@ -125,7 +126,7 @@ export function OmborModule({
 
       {sub === 'narxlar' && (
         <NarxRoyxati
-          narxlar={omborNarxlar} setNarx={setNarx}
+          narxlar={omborNarxlar} sozlama={omborSozlama} setNarx={setNarx}
           canEdit={canEdit} showToast={showToast} />
       )}
     </div>
