@@ -1,6 +1,6 @@
 // ============================================================
 //  OMBOR (SKLAD) MODULI — sub-tab boshqaruvi
-//  Materiallar / Harakat / Rulonlar / Narx ro'yxati
+//  Materiallar / Harakat / Rulonlar
 // ------------------------------------------------------------
 //  MATERIALLAR (eski qism): ombor = { [id]: Material },
 //  omborHarakat = { [id]: Harakat }. Yozish props orqali:
@@ -8,30 +8,28 @@
 //    setHarakat(id, harakat)          — bitta harakat yozuvi
 //
 //  RULONLAR (yangi qism): ombordagi rulonlar va ularning 1 metr uchun
-//  tannarxi/sotuv narxi. Barcha kirish qiymatlari (narx ro'yxati, kurs,
-//  ustama, koeffitsientlar) FIRESTORE'dan keladi — kodda narx yo'q.
+//  tannarxi/sotuv narxi — daftar jadvali tartibida. Har rulon o'z narxi
+//  ($/t), kursi va yo'lkirasi bilan yoziladi; standart qiymatlar
+//  (kurs, yo'lkira, bo'luvchilar, kg/m) FIRESTORE'dan keladi — kodda narx yo'q.
 //    omborRulonlar = { [id]: Rulon },  setRulon(id, rulon|null)
-//    omborNarxlar  = { [id]: Narx },   setNarx(id, narx|null)
-//    omborSozlama  = { kurs, ustama, bolizvchi1, bolizvchi2, nom1, nom2,
-//                      kgPerM, koefSMZ, koefBoshqa, kursSana }
+//    omborSozlama  = { kurs, yolkiraTonna, bolizvchi1, bolizvchi2, nom1, nom2,
+//                      kgPerM, koefSMZ, koefBoshqa, kursSana, zavodlar, turlar, ranglar }
 //    omborRangTur  = { qoidalar: [{ naqsh, tur }], standart }
 // ============================================================
 import React, { useState, useMemo } from 'react';
-import { Boxes, History, Layers, Tags, AlertTriangle } from 'lucide-react';
+import { Boxes, History, Layers, AlertTriangle } from 'lucide-react';
 import { StatBox } from '../../components/ui.jsx';
 import { fmt } from '../../lib/helpers.js';
 import { omborRoyxat, kamQoldiqlar, birlikBelgisi } from '../../lib/ombor.js';
 import { Materiallar } from './Materiallar.jsx';
 import { Harakat } from './Harakat.jsx';
 import { Rulonlar } from './Rulonlar.jsx';
-import { NarxRoyxati } from './NarxRoyxati.jsx';
 import { OmborSozlama } from './OmborSozlama.jsx';
 
 const SUB_TABLAR = [
   { k: 'materiallar', label: 'Materiallar',    icon: Boxes },
   { k: 'harakat',     label: 'Harakat',        icon: History },
   { k: 'rulonlar',    label: 'Rulonlar',       icon: Layers },
-  { k: 'narxlar',     label: "Narx ro'yxati",  icon: Tags },
 ];
 
 export function OmborModule({
@@ -39,8 +37,8 @@ export function OmborModule({
   tunikaBaza = [], metrlilar = [], aksessuarlar = [], kaziroklar = [],
   ranglar = [], currentUser, canEdit = true, showToast,
   // ----- Rulonlar qismi -----
-  omborRulonlar = {}, omborNarxlar = {}, omborSozlama = {}, omborRangTur = {},
-  setRulon, setNarx, updateOmborSozlama, updateOmborRangTur, seedOmbor, omborQaytaNomla,
+  omborRulonlar = {}, omborSozlama = {}, omborRangTur = {},
+  setRulon, updateOmborSozlama, updateOmborRangTur, seedOmbor, omborQaytaNomla,
 }) {
   const [sub, setSub] = useState('materiallar');
 
@@ -115,21 +113,16 @@ export function OmborModule({
           <OmborSozlama
             sozlama={omborSozlama} updateSozlama={updateOmborSozlama}
             rangTur={omborRangTur} updateRangTur={updateOmborRangTur}
-            rulonlar={omborRulonlar} narxlar={omborNarxlar}
+            rulonlar={omborRulonlar}
             canEdit={canEdit} showToast={showToast} onSeed={seedOmbor}
             onQaytaNomla={omborQaytaNomla} />
           <Rulonlar
-            rulonlar={omborRulonlar} narxlar={omborNarxlar}
+            rulonlar={omborRulonlar}
             sozlama={omborSozlama} rangTur={omborRangTur}
             setRulon={setRulon} canEdit={canEdit} showToast={showToast} />
         </>
       )}
 
-      {sub === 'narxlar' && (
-        <NarxRoyxati
-          narxlar={omborNarxlar} sozlama={omborSozlama} setNarx={setNarx}
-          canEdit={canEdit} showToast={showToast} />
-      )}
     </div>
   );
 }

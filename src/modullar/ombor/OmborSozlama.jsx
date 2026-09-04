@@ -2,7 +2,7 @@
 //  OMBOR → SOZLAMA (3.2-bo'lim)
 // ------------------------------------------------------------
 //  Rulonlar hisobiga kiradigan BARCHA kirish qiymatlari shu
-//  panelda tahrirlanadi: kurs, ustama, sotuv bo'luvchilari,
+//  panelda tahrirlanadi: standart kurs, standart yo'lkira, sotuv bo'luvchilari,
 //  qalinlik → kg/m jadvali, koeffitsientlar va rang → tur
 //  qoidalari. Bu faylda birorta narx / kurs / koeffitsient
 //  QATTIQ YOZILMAGAN — hammasi proplardan keladi va yana
@@ -14,10 +14,14 @@
 //  faqat lokal tahrir bo'lmasa. Tahrir bor bo'lsa forma tegilmaydi
 //  va sariq ogoh + "Yangilash" tugmasi ko'rsatiladi.
 //
-//  Panel tagida BOSHLANG'ICH MA'LUMOT (seed) bloki: seed
-//  to'plamini Firestore'ga yozadi. DIQQAT: narx/rulon ro'yxatlari
-//  merge bilan (id lar ustiga), sozlama va rang→tur hujjatlari esa
-//  TO'LIQ almashtiriladi — bu foydalanuvchiga ochiq aytiladi.
+//  Panel tagida "boshlang'ich sozlamaga qaytarish" bloki: sozlama va
+//  rang→tur hujjatlarini TO'LIQ almashtiradi (rulonlarga tegmaydi) —
+//  bu foydalanuvchiga ochiq aytiladi.
+//
+//  DIQQAT: kurs va yo'lkira bu yerda faqat STANDART qiymat — har bir
+//  rulon o'z kursi va yo'lkirasi bilan yoziladi (daftardagidek). Bu
+//  yerdagi kurs yangi rulon qo'shilganda avtomatik to'ldiriladi,
+//  yo'lkira esa rulonda alohida yozilmagan bo'lsa ishlatiladi.
 // ============================================================
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
@@ -138,7 +142,7 @@ function formaYasa(s) {
   const kg = (o.kgPerM && typeof o.kgPerM === 'object') ? o.kgPerM : {};
   return {
     kurs: xom(o.kurs),
-    ustama: xom(o.ustama),
+    yolkiraTonna: xom(o.yolkiraTonna),
     bolizvchi1: xom(o.bolizvchi1),
     bolizvchi2: xom(o.bolizvchi2),
     nom1: o.nom1 || '',
@@ -167,7 +171,7 @@ function rtYasa(rt) {
 // Ikki formani solishtirish uchun kanonik matn (id lar hisobga olinmaydi)
 function solish(f, r) {
   return JSON.stringify({
-    kurs: f.kurs, ustama: f.ustama, b1: f.bolizvchi1, b2: f.bolizvchi2,
+    kurs: f.kurs, yk: f.yolkiraTonna, b1: f.bolizvchi1, b2: f.bolizvchi2,
     n1: f.nom1, n2: f.nom2, kS: f.koefSMZ, kB: f.koefBoshqa,
     kg: { SMZ: f.kg.SMZ.map((x) => [x.q, x.v]), BOSHQA: f.kg.BOSHQA.map((x) => [x.q, x.v]) },
     ry: {
@@ -322,7 +326,7 @@ function RoyxatTahrir({ sarlavha, izoh, qatorlar, sanoq, canEdit, onSet, onQosh,
 
 export function OmborSozlama({
   sozlama = {}, updateSozlama, rangTur = {}, updateRangTur,
-  rulonlar = {}, narxlar = {},
+  rulonlar = {},
   canEdit = true, showToast, onSeed, onQaytaNomla,
 }) {
   const [ochiq, setOchiq] = useState(false);            // standart holat — YOPIQ
@@ -398,27 +402,24 @@ export function OmborSozlama({
     return { ...f, royxat: { ...f.royxat, [nom]: arr } };
   });
 
-  // Har bir nom nechta yozuvda ishlatilgan — o'chirishdan oldin ogohlantirish
-  // uchun. Zavod va tur rulon ham, narx yozuvida ham uchraydi; rang faqat rulonda.
+  // Har bir nom nechta rulonda ishlatilgan — o'chirish / qayta nomlashdan
+  // oldin ogohlantirish uchun.
   const sanoq = useMemo(() => {
     const rul = Object.values(rulonlar || {}).filter((x) => x && !x.ochirilgan);
-    const nrx = Object.values(narxlar || {}).filter((x) => x && !x.ochirilgan);
-    const hisobla = (manbalar, maydon) => {
+    const hisobla = (maydon) => {
       const m = new Map();
-      for (const src of manbalar) {
-        for (const x of src) {
-          const k = norm(x[maydon]);
-          if (k) m.set(k, (m.get(k) || 0) + 1);
-        }
+      for (const x of rul) {
+        const k = norm(x[maydon]);
+        if (k) m.set(k, (m.get(k) || 0) + 1);
       }
       return m;
     };
     return {
-      zavodlar: hisobla([rul, nrx], 'zavod'),
-      turlar: hisobla([rul, nrx], 'tur'),
-      ranglar: hisobla([rul], 'rang'),
+      zavodlar: hisobla('zavod'),
+      turlar: hisobla('tur'),
+      ranglar: hisobla('rang'),
     };
-  }, [rulonlar, narxlar]);
+  }, [rulonlar]);
 
   // O'chirish: ishlatilayotgan nom bo'lsa nima bo'lishini aniq aytamiz.
   // Eski yozuvlar O'ZGARMAYDI — ro'yxat faqat tanlov variantlari ro'yxati.
@@ -476,19 +477,21 @@ export function OmborSozlama({
   //  uchun bo'sh / nol qiymat bilan SAQLASHGA yo'l qo'ymaymiz.
   const musbatXato = (n) => (!(n != null && n > 0) ? "0 dan katta bo'lishi kerak" : '');
   const kurs = son(forma.kurs);
-  const ustama = son(forma.ustama);
+  const yolkira = son(forma.yolkiraTonna);
   const b1 = son(forma.bolizvchi1);
   const b2 = son(forma.bolizvchi2);
   const kSMZ = son(forma.koefSMZ);
   const kBoshqa = son(forma.koefBoshqa);
   const kursXato = musbatXato(kurs);
-  // Ustama 0 bo'lishi mumkin (ustamasiz), lekin BO'SH qolishi mumkin emas
-  const ustamaXato = ustama == null ? "Bo'sh qoldirib bo'lmaydi (ustama yo'q bo'lsa 0 yozing)" : '';
+  // Yo'lkira 0 bo'lishi mumkin (yo'lkirasiz), lekin BO'SH yoki MANFIY bo'lmasin
+  const yolkiraXato = yolkira == null
+    ? "Bo'sh qoldirib bo'lmaydi (yo'lkira yo'q bo'lsa 0 yozing)"
+    : (yolkira < 0 ? "Manfiy bo'lmasin" : '');
   const b1Xato = musbatXato(b1);
   const b2Xato = musbatXato(b2);
   const kSMZXato = musbatXato(kSMZ);
   const kBoshqaXato = musbatXato(kBoshqa);
-  const maydonXato = !!(kursXato || ustamaXato || b1Xato || b2Xato || kSMZXato || kBoshqaXato);
+  const maydonXato = !!(kursXato || yolkiraXato || b1Xato || b2Xato || kSMZXato || kBoshqaXato);
 
   const dublSMZ = useMemo(() => dublikatlar(forma.kg.SMZ), [forma.kg.SMZ]);
   const dublBoshqa = useMemo(() => dublikatlar(forma.kg.BOSHQA), [forma.kg.BOSHQA]);
@@ -508,9 +511,9 @@ export function OmborSozlama({
   const kursOzgardi = kurs !== son(sozlama.kurs);
 
   // ----- Saqlash / bekor qilish -----
-  // Nomi o'zgargan VA yozuvlarda ishlatilayotgan qatorlar — ularni
-  // yozuvlarda ham almashtirish kerak (aks holda narx topilmay qoladi:
-  // narx ro'yxatida "SMZ", rulonda "SMZ zavodi" bo'lib ketardi).
+  // Nomi o'zgargan VA rulonlarda ishlatilayotgan qatorlar — ularni
+  // rulonlarda ham almashtirish kerak (aks holda filtr va guruhlash
+  // buziladi: ro'yxatda "SMZ", rulonda "SMZ zavodi" bo'lib qoladi).
   const qaytaNomlar = useMemo(() => {
     const out = [];
     for (const [nom, maydon] of [['zavodlar', 'zavod'], ['turlar', 'tur'], ['ranglar', 'rang']]) {
@@ -546,7 +549,7 @@ export function OmborSozlama({
     const yangi = {
       ...sozlama, // notanish maydonlar yo'qolmasin
       kurs: kurs ?? 0,
-      ustama: ustama ?? 0,
+      yolkiraTonna: yolkira ?? 0,
       bolizvchi1: b1,
       bolizvchi2: b2,
       nom1: forma.nom1.trim(),
@@ -572,16 +575,11 @@ export function OmborSozlama({
       setSaqlanmoqda(true);
       try {
         let rul = 0;
-        let nrx = 0;
         for (const x of qaytaNomlar) {
           const n = await onQaytaNomla(x.maydon, x.eski, x.yangi);
           rul += (n && n.rulonlar) || 0;
-          nrx += (n && n.narxlar) || 0;
         }
-        const qismlar = [];
-        if (rul) qismlar.push(`${rul} ta rulon`);
-        if (nrx) qismlar.push(`${nrx} ta narx`);
-        qnMatn = qismlar.length ? ` · ${qismlar.join(', ')} yangilandi` : '';
+        qnMatn = rul ? ` · ${rul} ta rulon yangilandi` : '';
       } catch (e) {
         console.error('[ombor qayta nomlash] xato:', e);
         setSaqlanmoqda(false);
@@ -621,16 +619,16 @@ export function OmborSozlama({
 
   // ----- Sozlamani boshlang'ich holatga tiklash -----
   //  DIQQAT: bu FAQAT sozlama va rang → tur qoidalarini yozadi.
-  //  Narx ro'yxati va rulonlarga TEGMAYDI — ularni foydalanuvchi o'zi kiritadi.
+  //  Rulonlarga TEGMAYDI — ularni foydalanuvchi o'zi kiritadi.
   async function tiklaBos() {
     if (!canEdit || !onSeed || seedIsh) return;
     const savol = "Sozlama boshlang'ich holatga qaytariladi:\n"
-      + "  • kurs, ustama, bo'luvchilar, ustun nomlari\n"
+      + "  • standart kurs, standart yo'lkira, bo'luvchilar, ustun nomlari\n"
       + "  • kg/m jadvali va koeffitsientlar\n"
       + "  • rang → tur qoidalari\n\n"
       + "DIQQAT: bular TO'LIQ ALMASHTIRILADI — qo'shgan qalinliklaringiz,\n"
       + "qoidalaringiz va joriy kurs o'chadi.\n\n"
-      + "Narx ro'yxati va rulonlarga TEGILMAYDI.\n\nDavom etamizmi?";
+      + "Rulonlarga TEGILMAYDI.\n\nDavom etamizmi?";
     if (!window.confirm(savol)) return;
     setSeedIsh('tikla'); setSeedNatija(''); setSeedXato('');
     try {
@@ -653,7 +651,7 @@ export function OmborSozlama({
     .filter((z) => z && !/smz/i.test(z)).join(', ');
 
   // Yopiq holatdagi qisqacha ma'lumot
-  const qisqacha = `Kurs ${fmt(sozlama.kurs)} so'm · Ustama ${olchovKor(sozlama.ustama, 2)} $/t`
+  const qisqacha = `Standart kurs ${fmt(sozlama.kurs)} so'm · Yo'lkira ${olchovKor(sozlama.yolkiraTonna, 2)} $/t`
     + ` · ${sozlama.nom1 || '—'} / ${sozlama.nom2 || '—'}`;
 
   const sinovNatija = turTaxmin({ qoidalar: rt.qoidalar, standart: rt.standart }, sinov);
@@ -702,14 +700,14 @@ export function OmborSozlama({
           {/* ----- 1) Asosiy qiymatlar ----- */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SonMaydon
-              label="Dollar kursi (so'm)" value={forma.kurs} disabled={!canEdit}
+              label="Standart dollar kursi (so'm)" value={forma.kurs} disabled={!canEdit}
               onChange={(v) => tahrir({ kurs: v })} xato={kursXato}
-              hint={`Oxirgi o'zgartirilgan: ${sozlama.kursSana || '—'}${kursOzgardi ? ` → ${bugun()}` : ''}`} />
+              hint={`Yangi rulon qo'shilganda avtomatik to'ldiriladi (rulonda o'zgartirsa bo'ladi). Oxirgi o'zgartirilgan: ${sozlama.kursSana || '—'}${kursOzgardi ? ` → ${bugun()}` : ''}`} />
 
             <SonMaydon
-              label="Ustama ($/tonna)" value={forma.ustama} disabled={!canEdit}
-              onChange={(v) => tahrir({ ustama: v })} xato={ustamaXato}
-              hint="Zavod ro'yxatidagi narxga qo'shiladi" />
+              label="Standart yo'lkira ($/tonna)" value={forma.yolkiraTonna} disabled={!canEdit}
+              onChange={(v) => tahrir({ yolkiraTonna: v })} xato={yolkiraXato}
+              hint="Rulonda yo'lkira yozilmagan bo'lsa shu ishlatiladi; har rulonda alohida o'zgartirsa bo'ladi" />
 
             <SonMaydon
               label="1-sotuv bo'luvchisi" value={forma.bolizvchi1} disabled={!canEdit}
@@ -788,8 +786,8 @@ export function OmborSozlama({
           <div className="pt-2 border-t border-slate-100">
             <SectionTitle icon={List}>Tanlov ro'yxatlari</SectionTitle>
             <p className="text-[11px] text-slate-500 -mt-2 mb-3">
-              Rulonlar va Narx ro'yxati jadvallaridagi <b>Zavod</b>, <b>Tur</b> va <b>Rang</b>
-              {' '}tanlovlarida shu nomlar chiqadi. O'ng tomondagi son — nom nechta yozuvda
+              Rulonlar jadvalidagi <b>Kimdan</b> (zavod), <b>Tur</b> va <b>Rang</b>
+              {' '}tanlovlarida shu nomlar chiqadi. O'ng tomondagi son — nom nechta rulonda
               ishlatilayotgani. Nomni <b>o'zgartirsangiz</b> — saqlashda u
               <b> mavjud yozuvlarda ham almashtiriladi</b> (tasdiq so'raladi).
               O'chirsangiz esa yozuvlar o'zgarmaydi: eski nom ularda qolib,
@@ -798,7 +796,7 @@ export function OmborSozlama({
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <RoyxatTahrir
-                sarlavha="Zavodlar" izoh="Narx ro'yxati shu zavodlar bo'yicha yuritiladi."
+                sarlavha="Zavodlar (kimdan)" izoh="Nomida SMZ bo'lganlar SMZ kg/m jadvalini oladi, qolganlari BOSHQA."
                 qatorlar={forma.royxat.zavodlar} sanoq={sanoq.zavodlar} canEdit={canEdit}
                 onSet={(id, v) => royxatSet('zavodlar', id, v)}
                 onQosh={() => royxatQosh('zavodlar')}
@@ -928,8 +926,7 @@ export function OmborSozlama({
               <SectionTitle icon={Database}>Sozlamani tiklash</SectionTitle>
               <p className="text-[11px] text-slate-500 -mt-2 mb-2">
                 Yuqoridagi sozlamalarni boshlang'ich holatga qaytaradi.
-                <b> Narx ro'yxati</b> va <b>rulonlar</b>ga tegmaydi — ular faqat
-                siz kiritgan ma'lumotdan iborat.
+                <b> Rulonlar</b>ga tegmaydi — ular faqat siz kiritgan ma'lumotdan iborat.
               </p>
               <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded p-2 mb-2">
                 Sozlama va rang → tur qoidalari <b>TO'LIQ ALMASHTIRILADI</b> —

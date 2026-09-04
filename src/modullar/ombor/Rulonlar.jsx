@@ -1,10 +1,16 @@
 // ============================================================
 //  OMBOR → RULONLAR
 // ------------------------------------------------------------
-//  Ombordagi rulonlarning ASOSIY jadvali. Barcha hisob-kitob
-//  src/lib/omborHisob.js dagi sof funksiyalarda — bu faylda
-//  birorta narx / kurs / ustama / koeffitsient QATTIQ YOZILMAGAN,
-//  hammasi `sozlama` va `narxlar` proplaridan keladi.
+//  Ombordagi rulonlarning ASOSIY jadvali — foydalanuvchining
+//  daftaridagi ustunlar tartibida. Barcha hisob-kitob
+//  src/lib/omborHisob.js dagi sof funksiyalarda; bu faylda
+//  birorta narx / kurs / koeffitsient QATTIQ YOZILMAGAN.
+//
+//  KIRITILADI (oq katak):
+//    sana, kimdan (zavod), tur, rang, qalinlik, og'irlik (kg),
+//    narx ($/t), kurs, uzunlik (m), yo'lkira ($/t), qoldiq, izoh
+//  HISOBLANADI (kulrang katak):
+//    rulon $, rulon so'm, yo'lkira $, 1 m tannarx, sotuv 1, sotuv 2
 //
 //  Tahrirlash INLINE: katakka bosilganda o'sha yerda tahrirlanadi,
 //  blur yoki Enter da darhol setRulon orqali yoziladi (optimistik),
@@ -12,7 +18,6 @@
 //
 //  Ma'lumot:
 //    rulonlar — { [id]: Rulon } obyekt-xarita
-//    narxlar  — { [id]: Narx } obyekt-xarita
 //    setRulon(id, rulon)  — bitta rulonni yozadi (null = o'chiradi)
 // ============================================================
 import React, { useState, useMemo, useRef } from 'react';
@@ -21,19 +26,12 @@ import {
   Search, X, FileSpreadsheet, Layers, Check,
 } from 'lucide-react';
 import { Card, SectionTitle, StatBox, rangChipStyle } from '../../components/ui.jsx';
-import { fmt, genId, sonMatn, sonQiymat } from '../../lib/helpers.js';
+import { fmt, genId, sonMatn, sonQiymat, toDateInput } from '../../lib/helpers.js';
 import { hisobla, jamiHisob, turTaxmin, son, norm, OGOH } from '../../lib/omborHisob.js';
 import { sozlamaRoyxat } from '../../lib/omborSeed.js';
 import { downloadXLSX } from '../../lib/xlsx.js';
 
 // ----- Kichik yordamchilar -----
-
-// Matnlarni solishtirish uchun normallashtirish: omborHisob.js dagi norm()
-// ISHLATILADI. Ilgari bu faylda o'z nusxasi (past) bor edi — u ketma-ket
-// bo'shliqlarni birlashtirmagani uchun "Aziya  Steel" hisob yadrosi uchun
-// "Aziya Steel" bilan bir xil, dropdown/filtr uchun esa BOSHQA qiymat bo'lib
-// qolardi (ro'yxatda ikkita bir xil ko'rinadigan variant, filtrda esa rulon
-// yo'qolib qolishi).
 
 // O'lchov (metr / tonna) — PUL emas, shuning uchun fmt emas: kasr xonasi qoladi.
 // Pul qiymatlari esa har doim fmt() bilan butunga yaxlitlanadi.
@@ -47,8 +45,14 @@ function olchovKor(n, kasr = 1) {
 // Xom (saqlangan) qiymatni katakda ko'rsatish uchun matn
 const xomKor = (v) => (v == null || v === '' ? '' : String(v));
 
-// Ro'yxatlarni birlashtirish: standart ro'yxat + mavjud yozuvlardagi noyob
-// qiymatlar (foydalanuvchi kiritgani ham dropdownda ko'rinsin).
+// 'YYYY-MM-DD' → 'DD.MM.YY' (jadvalda qisqa ko'rinsin); boshqa matn — o'zi
+function sanaKor(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+  return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : xomKor(s);
+}
+
+// Ro'yxatlarni birlashtirish: sozlamadagi ro'yxat + mavjud yozuvlardagi noyob
+// qiymatlar (ro'yxatdan o'chirilgan nom eski yozuvda ko'rinishda qolaveradi).
 function birlashtir(asos, manbalar, kalit) {
   const out = [];
   const korilgan = new Set();
@@ -92,19 +96,22 @@ const OGOH_USLUB = {
 };
 // Ogohlantirish kodi → qisqa sarlavha (yig'ma ro'yxatda)
 const OGOH_NOM = {
-  [OGOH.NARX_YOQ]: "Narx ro'yxatida yo'q",
-  [OGOH.ARZONLADI]: 'Yangi narx xarid narxidan past',
-  [OGOH.QALINLIK]: 'Qalinlik mos emas',
-  [OGOH.TASDIQSIZ]: 'Zavod / tur / qalinlik tasdiqlanmagan',
+  [OGOH.NARX_YOQ]: 'Narx yoki kurs kiritilmagan',
+  [OGOH.UZUNLIK_YOQ]: 'Uzunlik kiritilmagan',
+  [OGOH.QALINLIK]: 'Qalinlik / uzunlik mos emas',
+  [OGOH.TASDIQSIZ]: 'Tasdiqlanmagan',
 };
 const DARAJA_OGIRLIK = { qizil: 0, toq: 1, sariq: 2 };
 
-// Hisoblangan (tahrirlanmaydigan) ustunlar — saralashda h dan olinadi
+// Saralashda hisob natijasidan (h) olinadigan ustunlar. narxTonna / kurs /
+// yolkiraTonna ham shu yerda: h da eski maydon nomlari va standart qiymat
+// hisobga olingan "haqiqiy" qiymat turadi.
 const HISOB_USTUN = new Set([
-  'uzunlik', 'qoldiq', 'yangiNarx', 'rulonDollar', 'rulonSom',
+  'uzunlik', 'qoldiq', 'narxTonna', 'kurs', 'yolkiraTonna',
+  'rulonDollar', 'rulonSom', 'yolkiraDollar', 'yolkiraSom',
   'metrTannarx', 'sotuv1', 'sotuv2',
 ]);
-const MATN_USTUN = new Set(['rang', 'zavod', 'tur', 'izoh']);
+const MATN_USTUN = new Set(['sana', 'rang', 'zavod', 'tur', 'izoh']);
 
 // Saralash uchun katak qiymati
 function saraQiymat(q, k) {
@@ -130,12 +137,12 @@ function solish(a, b, yon) {
 // ------------------------------------------------------------
 //  value    — saqlangan XOM qiymat (matn yoki son)
 //  onSave   — (xomMatn) => void; blur yoki Enter da chaqiriladi
-//  tur      — 'matn' | 'son' | 'select'
+//  tur      — 'matn' | 'son' | 'select' | 'sana'
 //  korinish — tahrir qilinmayotgan paytdagi maxsus ko'rinish (ixtiyoriy)
 // ============================================================
 function TahrirKatak({
   value, onSave, canEdit = true, tur = 'matn', variantlar = [],
-  hizala = 'left', korinish = null, title = '', klass = '',
+  hizala = 'left', korinish = null, title = '', klass = '', placeholder = '',
 }) {
   const [tahrir, setTahrir] = useState(false);
   const [xom, setXom] = useState('');
@@ -158,9 +165,8 @@ function TahrirKatak({
   }
 
   // Tahrirni yakunlash: bekor qilinmagan va foydalanuvchi HAQIQATAN o'zgartirgan
-  // bo'lsa — yozamiz. Tegilmagan katak (xom === boshlang'ich qiymat) hech narsa
-  // yozmaydi: aks holda tahrir paytida boshqa qurilmada qilingan o'zgarish
-  // jimgina eski qiymat bilan bosib yozilardi.
+  // bo'lsa — yozamiz. Tegilmagan katak hech narsa yozmaydi: aks holda tahrir
+  // paytida boshqa qurilmada qilingan o'zgarish jimgina bosib yozilardi.
   function yakunla() {
     setTahrir(false);
     if (bekorRef.current) { bekorRef.current = false; return; }
@@ -172,16 +178,10 @@ function TahrirKatak({
     else if (e.key === 'Escape') { e.preventDefault(); bekorRef.current = true; e.currentTarget.blur(); }
   }
 
-  // ----- Ro'yxatli (select) katak — DOIM ochiq -----
-  //  Ilgari u ham "bosib tahrirlash" holatida edi: birinchi bosish faqat select
-  //  ni paydo qilardi, ro'yxat esa ochilmasdi — tanlash uchun yana bosish kerak
-  //  bo'lardi. Endi bir bosishda ro'yxat chiqadi. Tahrirlanmayotgan ko'rinishda
-  //  ramkasiz turadi, faqat fokus/hover da ajralib turadi.
+  // ----- Ro'yxatli (select) katak — DOIM ochiq (bir bosishda ro'yxat chiqadi) -----
   if (tur === 'select' && canEdit) {
-    // Saqlangan qiymat ro'yxatdagi variantdan faqat registr yoki bo'shliq bilan
-    // farq qilishi mumkin ("smz" ↔ "SMZ"), <select> esa AYNAN mos kelishni
-    // talab qiladi — mos kelmasa katak bo'sh ko'rinardi. Shuning uchun avval
-    // mos variantni topamiz; umuman topilmasa qiymatning o'zini variant qilamiz.
+    // Saqlangan qiymat ro'yxatdagi variantdan faqat registr/bo'shliq bilan farq
+    // qilishi mumkin ("smz" ↔ "SMZ"); <select> AYNAN mos kelishni talab qiladi.
     const mos = matn ? variantlar.find((v) => norm(v) === norm(matn)) : '';
     const qiymat = mos || matn;
     return (
@@ -200,12 +200,26 @@ function TahrirKatak({
     );
   }
 
+  // ----- Sana — brauzerning o'z sana tanlagichi -----
+  if (tur === 'sana' && canEdit) {
+    return (
+      <input
+        type="date" value={matn} title={title}
+        onChange={(e) => { if (e.target.value !== matn) onSave(e.target.value); }}
+        className={klass
+          ? `w-full px-2 py-1.5 rounded ${klass}`
+          : 'w-full px-2 py-1.5 rounded bg-transparent border border-transparent tabular-nums'
+            + ' hover:bg-slate-100 focus:bg-white focus:border-slate-300'}
+      />
+    );
+  }
+
   if (tahrir) {
     return (
       <input
         autoFocus
         inputMode={tur === 'son' ? 'decimal' : undefined}
-        value={xom}
+        value={xom} placeholder={placeholder}
         onChange={(e) => {
           if (tur === 'son') { const s = sonMatn(e.target.value); if (s !== null) setXom(s); }
           else setXom(e.target.value);
@@ -225,29 +239,31 @@ function TahrirKatak({
         canEdit ? 'cursor-text hover:bg-slate-100' : 'cursor-default'
       } ${klass}`}
     >
-      {korinish != null ? korinish : (matn || <span className="text-slate-300">—</span>)}
+      {korinish != null ? korinish : (matn || <span className="text-slate-300">{placeholder || '—'}</span>)}
     </div>
   );
 }
 
 // ----- Hisoblangan (tahrirlanmaydigan) katak -----
-//  narx=true bo'lsa qiymat yo'qligi "YO'Q" (qizil) bo'lib ko'rinadi.
-function HisobKatak({ qiymat, narx = false, matn = null }) {
+//  pul=true bo'lsa qiymat yo'qligi "—" o'rniga kulrang chiziqcha bilan chiqadi,
+//  qalin=true — 1 m tannarx kabi asosiy natija.
+function HisobKatak({ qiymat, matn = null, qalin = false, title = '' }) {
   return (
-    <td className="px-2 py-1.5 text-right tabular-nums bg-slate-50 cursor-default text-slate-700">
+    <td className={`px-2 py-1.5 text-right tabular-nums bg-slate-50 cursor-default ${qalin ? 'font-semibold text-slate-900' : 'text-slate-700'}`} title={title}>
       {qiymat == null
-        ? <span className={narx ? 'text-red-600 font-semibold' : 'text-slate-300'}>{narx ? "YO'Q" : '—'}</span>
+        ? <span className="text-slate-300">—</span>
         : (matn != null ? matn : fmt(qiymat))}
     </td>
   );
 }
 
 // ----- Jadval sarlavhasi (saralash tugmasi bilan) -----
-function Th({ k, nom, sort, onSort, hizala = 'left' }) {
+//  hisob=true — hisoblanadigan ustun (kulrang fon bilan ajratiladi)
+function Th({ k, nom, sort, onSort, hizala = 'left', hisob = false, title = '' }) {
   const faol = sort.ustun === k;
   const hiz = hizala === 'right' ? 'text-right' : hizala === 'center' ? 'text-center' : 'text-left';
   return (
-    <th className={`py-2 px-2 font-semibold whitespace-nowrap ${hiz}`}>
+    <th className={`py-2 px-2 font-semibold whitespace-nowrap ${hiz} ${hisob ? 'bg-slate-100/70' : ''}`} title={title}>
       <button type="button" onClick={() => onSort(k)}
         className={`inline-flex items-center gap-0.5 hover:text-slate-900 ${faol ? 'text-slate-900' : ''}`}>
         <span>{nom}</span>
@@ -283,6 +299,7 @@ function RangNamuna({ rang, size = 'w-4 h-4' }) {
 // ============================================================
 //  FILTR / QIDIRUV PANELI
 // ============================================================
+const FILTR_BOSH = { zavod: '', tur: '', qalinlik: '', q: '' };
 function FiltrPanel({ filtr, setFiltr, zavodlar, turlar, qalinliklar }) {
   const tozaBor = filtr.zavod || filtr.tur || filtr.qalinlik || filtr.q;
   const sel = 'px-2 py-1.5 border border-slate-300 rounded bg-white text-xs';
@@ -292,11 +309,11 @@ function FiltrPanel({ filtr, setFiltr, zavodlar, turlar, qalinliklar }) {
         <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           value={filtr.q} onChange={(e) => setFiltr({ ...filtr, q: e.target.value })}
-          placeholder="Rang yoki izoh bo'yicha qidirish"
+          placeholder="Rang, kimdan yoki izoh bo'yicha qidirish"
           className="w-full pl-7 pr-2 py-1.5 border border-slate-300 rounded bg-white text-xs" />
       </div>
       <select value={filtr.zavod} onChange={(e) => setFiltr({ ...filtr, zavod: e.target.value })} className={sel}>
-        <option value="">Barcha zavodlar</option>
+        <option value="">Hammasi (kimdan)</option>
         {zavodlar.map((z) => <option key={z} value={z}>{z}</option>)}
       </select>
       <select value={filtr.tur} onChange={(e) => setFiltr({ ...filtr, tur: e.target.value })} className={sel}>
@@ -308,7 +325,7 @@ function FiltrPanel({ filtr, setFiltr, zavodlar, turlar, qalinliklar }) {
         {qalinliklar.map((q) => <option key={q} value={q}>{q} mm</option>)}
       </select>
       {tozaBor && (
-        <button type="button" onClick={() => setFiltr({ zavod: '', tur: '', qalinlik: '', q: '' })}
+        <button type="button" onClick={() => setFiltr(FILTR_BOSH)}
           className="px-2.5 py-1.5 rounded border-2 border-slate-200 bg-white text-slate-600 text-xs flex items-center gap-1 hover:bg-slate-50">
           <X className="w-3.5 h-3.5" /> Tozalash
         </button>
@@ -321,14 +338,13 @@ function FiltrPanel({ filtr, setFiltr, zavodlar, turlar, qalinliklar }) {
 //  MOBIL KARTOCHKA (768px dan kichik ekranda)
 // ============================================================
 function RulonKarta({
-  q, canEdit, zavodlar, turlar, ranglar, nom1, nom2,
+  q, canEdit, zavodlar, turlar, ranglar, nom1, nom2, yolkiraStd,
   matnYoz, sonYoz, rangYoz, onOchir, onTasdiq,
 }) {
   const h = q.h;
   const fon = FON[h.daraja] || 'bg-white';
   const maydon = 'border border-slate-200 rounded bg-white';
 
-  // Uzunlik: hisoblangan bo'lsa "≈" bilan ko'rsatiladi
   const uzunlikKor = h.uzunlik == null
     ? <span className="text-slate-300">—</span>
     : (
@@ -339,18 +355,31 @@ function RulonKarta({
   const qoldiqKor = h.qoldiq == null
     ? <span className="text-slate-300">—</span>
     : <span className={`tabular-nums ${xomKor(q.qoldiq) ? '' : 'text-slate-400'}`}>{olchovKor(h.qoldiq)}</span>;
+  const yolkiraKor = (
+    <span className={`tabular-nums ${h.yolkiraStandart ? 'text-slate-400' : ''}`}
+      title={h.yolkiraStandart ? 'Sozlamadagi standart' : ''}>
+      {olchovKor(h.yolkiraTonna, 2)}{h.yolkiraStandart ? ' (std)' : ''}
+    </span>
+  );
 
-  const narxQuti = (nom, qiymat) => (
+  const narxQuti = (nom, qiymat, qalin = false) => (
     <div className="bg-slate-50 rounded-lg py-1.5 px-1 text-center">
       <div className="text-[10px] text-slate-500 truncate">{nom}</div>
-      <div className="text-sm font-bold tabular-nums text-slate-900">
-        {qiymat == null ? <span className="text-red-600">YO'Q</span> : fmt(qiymat)}
+      <div className={`text-sm tabular-nums ${qalin ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'}`}>
+        {qiymat == null ? <span className="text-slate-300">—</span> : fmt(qiymat)}
       </div>
+    </div>
+  );
+  const maydonQuti = (nom, el) => (
+    <div>
+      <div className="text-[10px] text-slate-500 mb-0.5">{nom}</div>
+      {el}
     </div>
   );
 
   return (
     <div className={`rounded-xl border border-slate-200 p-3 ${fon}`}>
+      {/* Sarlavha: rang · qalinlik · kimdan · tur */}
       <div className="flex items-center gap-2">
         <RangNamuna rang={q.rang} size="w-8 h-8" />
         <div className="flex-1 min-w-0">
@@ -362,7 +391,8 @@ function RulonKarta({
             <OgohBelgi h={h} />
           </div>
           <div className="text-[11px] text-slate-500 truncate">
-            {q.zavod || "zavod yo'q"} · {q.tur || "tur yo'q"}
+            {q.zavod || "kimdan — yo'q"} · {q.tur || "tur yo'q"}
+            {q.sana ? ` · ${sanaKor(q.sana)}` : ''}
           </div>
         </div>
         <span className="text-[11px] text-slate-400 tabular-nums flex-shrink-0">№{xomKor(q.nomer) || '—'}</span>
@@ -378,78 +408,50 @@ function RulonKarta({
         </div>
       )}
 
+      {/* Asosiy natija */}
       <div className="grid grid-cols-3 gap-1.5 mt-2">
-        {narxQuti('1 m tannarx', h.metrTannarx)}
+        {narxQuti('1 m tannarx', h.metrTannarx, true)}
         {narxQuti(nom1, h.sotuv1)}
         {narxQuti(nom2, h.sotuv2)}
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 mt-2 text-xs">
-        <div>
-          <div className="text-[10px] text-slate-500 mb-0.5">Og'irlik (kg)</div>
-          <TahrirKatak value={q.ogirlik} onSave={sonYoz(q, 'ogirlik')} canEdit={canEdit}
-            tur="son" hizala="right" klass={maydon} />
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 mb-0.5">Uzunlik (m)</div>
-          <TahrirKatak value={q.uzunlik} onSave={sonYoz(q, 'uzunlik')} canEdit={canEdit}
-            tur="son" hizala="right" korinish={uzunlikKor} klass={maydon} />
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 mb-0.5">Qoldiq (m)</div>
-          <TahrirKatak value={q.qoldiq} onSave={sonYoz(q, 'qoldiq')} canEdit={canEdit}
-            tur="son" hizala="right" korinish={qoldiqKor} klass={maydon} />
-        </div>
-      </div>
-
+      {/* Kiritiladigan maydonlar */}
       <div className="grid grid-cols-2 gap-1.5 mt-2 text-xs">
-        <div>
-          <div className="text-[10px] text-slate-500 mb-0.5">Rang</div>
-          <TahrirKatak value={q.rang} onSave={rangYoz(q)} canEdit={canEdit}
-            tur="select" variantlar={ranglar} klass={maydon} />
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 mb-0.5">Qalinlik (mm)</div>
-          <TahrirKatak value={q.qalinlik} onSave={sonYoz(q, 'qalinlik')} canEdit={canEdit}
-            tur="son" hizala="right" klass={maydon} />
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 mb-0.5">Zavod</div>
-          <TahrirKatak value={q.zavod} onSave={matnYoz(q, 'zavod')} canEdit={canEdit}
-            tur="select" variantlar={zavodlar} klass={maydon} />
-        </div>
-        <div>
-          <div className="text-[10px] text-slate-500 mb-0.5">Tur</div>
-          <TahrirKatak value={q.tur} onSave={matnYoz(q, 'tur')} canEdit={canEdit}
-            tur="select" variantlar={turlar} klass={maydon} />
-        </div>
+        {maydonQuti('Sana', <TahrirKatak value={q.sana} onSave={matnYoz(q, 'sana')} canEdit={canEdit} tur="sana" klass={maydon} />)}
+        {maydonQuti('Kimdan (zavod)', <TahrirKatak value={q.zavod} onSave={matnYoz(q, 'zavod')} canEdit={canEdit} tur="select" variantlar={zavodlar} klass={maydon} />)}
+        {maydonQuti('Tur', <TahrirKatak value={q.tur} onSave={matnYoz(q, 'tur')} canEdit={canEdit} tur="select" variantlar={turlar} klass={maydon} />)}
+        {maydonQuti('Rang', <TahrirKatak value={q.rang} onSave={rangYoz(q)} canEdit={canEdit} tur="select" variantlar={ranglar} klass={maydon} />)}
+        {maydonQuti('Qalinlik (mm)', <TahrirKatak value={q.qalinlik} onSave={sonYoz(q, 'qalinlik')} canEdit={canEdit} tur="son" hizala="right" klass={maydon} />)}
+        {maydonQuti("Og'irlik (kg)", <TahrirKatak value={q.ogirlik} onSave={sonYoz(q, 'ogirlik')} canEdit={canEdit} tur="son" hizala="right" klass={maydon} />)}
+        {maydonQuti('Narx ($/t)', <TahrirKatak value={q.narxTonna ?? q.xaridNarx} onSave={sonYoz(q, 'narxTonna')} canEdit={canEdit} tur="son" hizala="right" klass={maydon} />)}
+        {maydonQuti("Kurs (so'm/$)", <TahrirKatak value={q.kurs ?? q.xaridKurs} onSave={sonYoz(q, 'kurs')} canEdit={canEdit} tur="son" hizala="right" klass={maydon} />)}
+        {maydonQuti('Uzunlik (m)', <TahrirKatak value={q.uzunlik} onSave={sonYoz(q, 'uzunlik')} canEdit={canEdit} tur="son" hizala="right" korinish={uzunlikKor} klass={maydon} />)}
+        {maydonQuti(`Yo'lkira ($/t, std ${olchovKor(yolkiraStd, 2)})`, <TahrirKatak value={q.yolkiraTonna} onSave={sonYoz(q, 'yolkiraTonna')} canEdit={canEdit} tur="son" hizala="right" korinish={yolkiraKor} klass={maydon} />)}
+        {maydonQuti('Qoldiq (m)', <TahrirKatak value={q.qoldiq} onSave={sonYoz(q, 'qoldiq')} canEdit={canEdit} tur="son" hizala="right" korinish={qoldiqKor} klass={maydon} />)}
+        {maydonQuti('Izoh', <TahrirKatak value={q.izoh} onSave={matnYoz(q, 'izoh')} canEdit={canEdit} klass={maydon} />)}
       </div>
 
-      <div className="mt-2 text-xs">
-        <div className="text-[10px] text-slate-500 mb-0.5">Izoh</div>
-        <TahrirKatak value={q.izoh} onSave={matnYoz(q, 'izoh')} canEdit={canEdit} klass={maydon} />
+      {/* Hisoblangan pul qatorlari */}
+      <div className="mt-2 text-[11px] text-slate-600 tabular-nums space-y-0.5">
+        <div className="flex justify-between"><span>Rulon</span><span>{h.rulonDollar == null ? '—' : `${fmt(h.rulonDollar)} $ · ${fmt(h.rulonSom)} so'm`}</span></div>
+        <div className="flex justify-between"><span>Yo'lkira</span><span>{h.yolkiraDollar == null ? '—' : `${fmt(h.yolkiraDollar)} $ · ${fmt(h.yolkiraSom)} so'm`}</span></div>
+        <div className="flex justify-between font-semibold text-slate-800"><span>Jami</span><span>{h.jamiSom == null ? '—' : `${fmt(h.jamiSom)} so'm`}</span></div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 mt-2 text-[11px] text-slate-500">
-        <span className="tabular-nums">
-          Rulon: {h.rulonSom == null ? "narx yo'q" : `${fmt(h.rulonSom)} so'm`}
-          {h.rulonDollar != null && ` · ${fmt(h.rulonDollar)} $`}
-        </span>
-        {canEdit && (
-          <span className="flex gap-1.5">
-            {q.tasdiqlanmagan && (
-              <button type="button" onClick={() => onTasdiq(q)} title="Tasdiqlash"
-                className="px-2 py-1 rounded border-2 border-emerald-200 text-emerald-700 bg-white">
-                <Check className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <button type="button" onClick={() => onOchir(q)} title="O'chirish"
-              className="px-2 py-1 rounded border-2 border-red-200 text-red-600 bg-white">
-              <Trash2 className="w-3.5 h-3.5" />
+      {canEdit && (
+        <div className="flex justify-end gap-1.5 mt-2">
+          {q.tasdiqlanmagan && (
+            <button type="button" onClick={() => onTasdiq(q)} title="Tasdiqlash"
+              className="px-2 py-1 rounded border-2 border-emerald-200 text-emerald-700 bg-white">
+              <Check className="w-3.5 h-3.5" />
             </button>
-          </span>
-        )}
-      </div>
+          )}
+          <button type="button" onClick={() => onOchir(q)} title="O'chirish"
+            className="px-2 py-1 rounded border-2 border-red-200 text-red-600 bg-white">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -458,41 +460,27 @@ function RulonKarta({
 //  ASOSIY KOMPONENT
 // ============================================================
 export function Rulonlar({
-  rulonlar = {}, narxlar = {}, sozlama = {}, rangTur = {},
+  rulonlar = {}, sozlama = {}, rangTur = {},
   setRulon, canEdit = true, showToast,
 }) {
-  const [filtr, setFiltr] = useState({ zavod: '', tur: '', qalinlik: '', q: '' });
+  const [filtr, setFiltr] = useState(FILTR_BOSH);
   const [sort, setSort] = useState({ ustun: 'nomer', yon: 1 });
 
   const toast = (t) => { if (showToast) showToast(t); };
 
-  // Sotuv ustunlari sarlavhalari — SOZLAMADAN (kodda yozilmagan)
+  // Sotuv ustunlari sarlavhalari va standart yo'lkira — SOZLAMADAN
   const nom1 = sozlama.nom1 || '1-narx';
   const nom2 = sozlama.nom2 || '2-narx';
+  const yolkiraStd = son(sozlama.yolkiraTonna) ?? 0;
 
   // ----- Hisoblash (yadro) -----
-  const qatorlar = useMemo(
-    () => hisobla(rulonlar, { sozlama, narxlar }),
-    [rulonlar, sozlama, narxlar],
-  );
+  const qatorlar = useMemo(() => hisobla(rulonlar, { sozlama }), [rulonlar, sozlama]);
 
-  // ----- Dropdown ro'yxatlari: standart + mavjud qiymatlar -----
-  // Ro'yxatlar SOZLAMADAN keladi (Sozlama panelida tahrirlanadi). Ustiga
-  // mavjud yozuvlardagi noyob qiymatlar qo'shiladi — shuning uchun ro'yxatdan
-  // o'chirilgan nom eski yozuvda ko'rinishda qolaveradi, katak bo'shab qolmaydi.
-  const zavodlar = useMemo(
-    () => birlashtir(sozlamaRoyxat(sozlama, 'zavodlar'), [rulonlar, narxlar], 'zavod'),
-    [sozlama, rulonlar, narxlar],
-  );
-  const turlar = useMemo(
-    () => birlashtir(sozlamaRoyxat(sozlama, 'turlar'), [rulonlar, narxlar], 'tur'),
-    [sozlama, rulonlar, narxlar],
-  );
-  const ranglar = useMemo(
-    () => birlashtir(sozlamaRoyxat(sozlama, 'ranglar'), [rulonlar], 'rang'),
-    [sozlama, rulonlar],
-  );
-  const qalinliklar = useMemo(() => qalinlikRoyxat([rulonlar, narxlar]), [rulonlar, narxlar]);
+  // ----- Dropdown ro'yxatlari: sozlama + mavjud qiymatlar -----
+  const zavodlar = useMemo(() => birlashtir(sozlamaRoyxat(sozlama, 'zavodlar'), [rulonlar], 'zavod'), [sozlama, rulonlar]);
+  const turlar = useMemo(() => birlashtir(sozlamaRoyxat(sozlama, 'turlar'), [rulonlar], 'tur'), [sozlama, rulonlar]);
+  const ranglar = useMemo(() => birlashtir(sozlamaRoyxat(sozlama, 'ranglar'), [rulonlar], 'rang'), [sozlama, rulonlar]);
+  const qalinliklar = useMemo(() => qalinlikRoyxat([rulonlar]), [rulonlar]);
 
   // ----- Filtr + saralash -----
   const korinadigan = useMemo(() => {
@@ -506,7 +494,7 @@ export function Rulonlar({
         const qal = son(q.qalinlik);
         if (qal == null || String(qal) !== filtr.qalinlik) return false;
       }
-      if (qq && !norm(q.rang).includes(qq) && !norm(q.izoh).includes(qq)) return false;
+      if (qq && !norm(q.rang).includes(qq) && !norm(q.izoh).includes(qq) && !norm(q.zavod).includes(qq)) return false;
       return true;
     });
     return res.sort((a, b) => solish(saraQiymat(a, sort.ustun), saraQiymat(b, sort.ustun), sort.yon));
@@ -537,14 +525,10 @@ export function Rulonlar({
     delete yangi.h;
     setRulon(q.id, yangi);
   }
-  // Matn maydonlari
   const matnYoz = (q, kalit) => (xom) => yangila(q, { [kalit]: xom });
   // Raqamli maydonlar: bo'sh bo'lsa '' (kiritilmagan), aks holda son
   const sonYoz = (q, kalit) => (xom) => yangila(q, { [kalit]: xom === '' ? '' : sonQiymat(xom) });
-  // Rang o'zgarganda tur BO'SH bo'lsa — rangdan taxmin qilinadi.
-  //  DIQQAT: faqat rang HAQIQATAN tanlanganda. Bo'sh rang uchun turTaxmin()
-  //  standart turni qaytaradi, ya'ni rang tozalanganda tur jimgina standart
-  //  qiymat bilan to'lib qolardi (va o'sha soxta turga narx topilardi).
+  // Rang o'zgarganda tur BO'SH bo'lsa — rangdan taxmin qilinadi (faqat rang haqiqatan tanlanganda)
   const rangYoz = (q) => (rang) => {
     const patch = { rang };
     if (String(rang || '').trim() && !String(q.tur || '').trim()) {
@@ -560,16 +544,17 @@ export function Rulonlar({
     for (const q of qatorlar) maks = Math.max(maks, son(q.nomer) || 0);
     const id = genId();
     setRulon(id, {
-      id, nomer: maks + 1, rang: '', zavod: '', tur: '', qalinlik: '',
-      ogirlik: '', uzunlik: '', qoldiq: '',
-      xaridNarx: null, xaridKurs: null, xaridSana: null,
-      izoh: '', tasdiqlanmagan: false,
+      id, nomer: maks + 1,
+      sana: toDateInput(),                 // bugun — keyin o'zgartirsa bo'ladi
+      zavod: '', tur: '', rang: '', qalinlik: '',
+      ogirlik: '', narxTonna: '',
+      kurs: son(sozlama.kurs) ?? '',       // sozlamadagi kurs TAKLIF sifatida to'ldiriladi
+      uzunlik: '', yolkiraTonna: '',       // bo'sh = sozlamadagi standart yo'lkira
+      qoldiq: '', izoh: '', tasdiqlanmagan: false,
     });
-    // Yangi rulonning maydonlari BO'SH: filtr yoqilgan bo'lsa u ro'yxatga
-    // tushmasdi va foydalanuvchi "bosilmadi" deb tugmani qayta-qayta bosib,
-    // bazada bo'sh rulonlar to'plab qo'yardi. Shuning uchun filtrni tozalaymiz.
+    // Yangi rulon bo'sh: filtr yoqilgan bo'lsa ro'yxatga tushmasdi — tozalaymiz
     const filtrBor = Boolean(filtr.zavod || filtr.tur || filtr.qalinlik || filtr.q);
-    if (filtrBor) setFiltr({ zavod: '', tur: '', qalinlik: '', q: '' });
+    if (filtrBor) setFiltr(FILTR_BOSH);
     toast(filtrBor ? "Yangi rulon qo'shildi — filtr tozalandi" : "Yangi rulon qo'shildi");
   }
 
@@ -590,25 +575,27 @@ export function Rulonlar({
     setSort((s) => (s.ustun === ustun ? { ustun, yon: -s.yon } : { ustun, yon: 1 }));
   }
 
-  // ----- Excel eksport: JORIY filtrlangan + saralangan jadval -----
-  //  Qalinlik "matn" sifatida chiqadi (0.45 ni butunlashtirib bo'lmaydi),
-  //  qolgan raqamlar SON bo'lib boradi (Math.round bilan).
+  // ----- Excel eksport: JORIY filtrlangan + saralangan jadval, daftar tartibida -----
   const XLS_USTUN = useMemo(() => ([
     { nom: '№', kenglik: 5, tur: 'son', ol: (q) => son(q.nomer) },
-    { nom: 'Rang', kenglik: 18, tur: 'matn', ol: (q) => q.rang || '' },
-    { nom: 'Zavod', kenglik: 20, tur: 'matn', ol: (q) => q.zavod || '' },
-    { nom: 'Tur', kenglik: 18, tur: 'matn', ol: (q) => q.tur || '' },
+    { nom: 'Sana', kenglik: 11, tur: 'matn', ol: (q) => sanaKor(q.sana) },
+    { nom: 'Kimdan', kenglik: 16, tur: 'matn', ol: (q) => q.zavod || '' },
+    { nom: 'Tur', kenglik: 12, tur: 'matn', ol: (q) => q.tur || '' },
+    { nom: 'Rang', kenglik: 14, tur: 'matn', ol: (q) => q.rang || '' },
     { nom: 'Qalinlik', kenglik: 9, tur: 'matn', ol: (q) => xomKor(q.qalinlik) },
-    { nom: "Og'irlik", kenglik: 10, tur: 'son', ol: (q) => son(q.ogirlik) },
-    { nom: 'Uzunlik', kenglik: 10, tur: 'son', ol: (q) => q.h.uzunlik },
-    { nom: 'Qoldiq', kenglik: 10, tur: 'son', ol: (q) => q.h.qoldiq },
-    { nom: 'Yangi narx $/t', kenglik: 13, tur: 'dollar', ol: (q) => q.h.yangiNarx },
+    { nom: "Og'irlik kg", kenglik: 11, tur: 'son', ol: (q) => son(q.ogirlik) },
+    { nom: 'Narx $/t', kenglik: 10, tur: 'dollar', ol: (q) => q.h.narxTonna },
     { nom: 'Rulon $', kenglik: 11, tur: 'dollar', ol: (q) => q.h.rulonDollar },
+    { nom: 'Kurs', kenglik: 9, tur: 'son', ol: (q) => q.h.kurs },
     { nom: "Rulon so'm", kenglik: 15, tur: 'pul', ol: (q) => q.h.rulonSom },
+    { nom: 'Uzunlik m', kenglik: 10, tur: 'son', ol: (q) => q.h.uzunlik },
+    { nom: "Yo'lkira $/t", kenglik: 11, tur: 'dollar', ol: (q) => q.h.yolkiraTonna },
+    { nom: "Yo'lkira $", kenglik: 11, tur: 'dollar', ol: (q) => q.h.yolkiraDollar },
     { nom: '1 m tannarx', kenglik: 13, tur: 'pul', ol: (q) => q.h.metrTannarx },
     { nom: nom1, kenglik: 13, tur: 'pul', ol: (q) => q.h.sotuv1 },
     { nom: nom2, kenglik: 13, tur: 'pul', ol: (q) => q.h.sotuv2 },
-    { nom: 'Izoh', kenglik: 26, tur: 'matn', ol: (q) => q.izoh || '' },
+    { nom: 'Qoldiq m', kenglik: 10, tur: 'son', ol: (q) => q.h.qoldiq },
+    { nom: 'Izoh', kenglik: 24, tur: 'matn', ol: (q) => q.izoh || '' },
   ]), [nom1, nom2]);
 
   function eksport() {
@@ -622,16 +609,15 @@ export function Rulonlar({
       }),
       fon: q.h.daraja || '',
     }));
-    // Jami qatori — ustun turlariga mos: matn ustunda matn, son ustunda son
     const jamiKatak = XLS_USTUN.map((u) => {
-      if (u.nom === 'Rang') return `Jami: ${jami.soni} ta rulon`;
-      if (u.nom === "Og'irlik") return Math.round(jami.ogirlik);
-      if (u.nom === 'Uzunlik') return Math.round(jami.uzunlik);
-      if (u.nom === 'Qoldiq') return Math.round(jami.qoldiq);
-      // Ombor qiymati = Σ (qoldiq × 1 m tannarx) — bu "Rulon so'm" USTUNINING
-      // yig'indisi EMAS, shuning uchun o'sha ustunga qo'yilmaydi: yorliq bilan
-      // izoh ustunida chiqadi.
-      if (u.nom === 'Izoh') return `Ombor qiymati: ${fmt(jami.qiymat)} so'm`;
+      if (u.nom === 'Kimdan') return `Jami: ${jami.soni} ta rulon`;
+      if (u.nom === "Og'irlik kg") return Math.round(jami.ogirlik);
+      if (u.nom === 'Rulon $') return Math.round(jami.rulonDollar);
+      if (u.nom === "Rulon so'm") return Math.round(jami.rulonSom);
+      if (u.nom === 'Uzunlik m') return Math.round(jami.uzunlik);
+      if (u.nom === "Yo'lkira $") return Math.round(jami.yolkiraDollar);
+      if (u.nom === 'Qoldiq m') return Math.round(jami.qoldiq);
+      if (u.nom === 'Izoh') return `Jami so'm: ${fmt(jami.jamiSom)} · Ombor qiymati: ${fmt(jami.qiymat)}`;
       return '';
     });
     downloadXLSX('ombor-rulonlar.xlsx', {
@@ -644,7 +630,7 @@ export function Rulonlar({
   function uzunlikKorinish(h) {
     if (h.uzunlik == null) return <span className="text-slate-300">—</span>;
     return (
-      <span title={h.uzunlikHisoblangan ? "og'irlikdan hisoblandi" : ''}>
+      <span title={h.uzunlikHisoblangan ? "og'irlikdan hisoblandi (rulon qog'ozidagi uzunlikni yozing)" : ''}>
         {h.uzunlikHisoblangan && <span className="text-slate-400">≈ </span>}
         {olchovKor(h.uzunlik)}
       </span>
@@ -652,8 +638,16 @@ export function Rulonlar({
   }
   function qoldiqKorinish(q) {
     if (q.h.qoldiq == null) return <span className="text-slate-300">—</span>;
-    // Qo'lda kiritilmagan bo'lsa (uzunlikka teng) — och rangda
     return <span className={xomKor(q.qoldiq) ? '' : 'text-slate-400'}>{olchovKor(q.h.qoldiq)}</span>;
+  }
+  // Yo'lkira $/t: rulonda yozilmagan bo'lsa sozlamadagi standart och rangda
+  function yolkiraKorinish(h) {
+    return (
+      <span className={h.yolkiraStandart ? 'text-slate-400' : ''}
+        title={h.yolkiraStandart ? "Sozlamadagi standart — o'zgartirish uchun bosing" : ''}>
+        {olchovKor(h.yolkiraTonna, 2)}
+      </span>
+    );
   }
 
   const tonna = jami.ogirlik / 1000;
@@ -664,8 +658,8 @@ export function Rulonlar({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <StatBox label="Rulonlar" value={jami.soni} suffix="ta" />
         <StatBox label="Umumiy og'irlik" value={olchovKor(tonna, 2)} suffix="t" />
-        <StatBox label="Umumiy qoldiq" value={olchovKor(jami.qoldiq)} suffix="m" />
-        <StatBox label="Ombor qiymati" value={Math.round(jami.qiymat)} suffix="so'm" color="emerald" />
+        <StatBox label="Jami xarajat (yo'lkira bilan)" value={Math.round(jami.jamiSom)} suffix="so'm" />
+        <StatBox label="Ombordagi qoldiq qiymati" value={Math.round(jami.qiymat)} suffix="so'm" color="emerald" />
       </div>
 
       {/* ----- Ogohlantirishlar yig'masi ----- */}
@@ -683,8 +677,6 @@ export function Rulonlar({
       )}
 
       <Card>
-        {/* SectionTitle o'zida mb-3 bor — shuning uchun bu qatorga qo'shimcha
-            pastki bo'shliq kerak emas, tugmalar esa tepaga tekislanadi. */}
         <div className="flex items-start justify-between gap-2">
           <SectionTitle icon={Layers}>Ombordagi rulonlar ({korinadigan.length})</SectionTitle>
           <div className="flex gap-2 flex-shrink-0">
@@ -705,8 +697,6 @@ export function Rulonlar({
           zavodlar={zavodlar} turlar={turlar} qalinliklar={qalinliklar} />
 
         {korinadigan.length === 0 ? (
-          /* Ombor BUTUNLAY bo'sh bo'lishi (hali rulon qo'shilmagan) va filtr
-             hech narsa topmagani — ikki xil holat, matni ham har xil bo'lsin. */
           <div className="text-center py-10 text-slate-400">
             <Layers className="w-10 h-10 mx-auto mb-2 opacity-40" />
             {qatorlar.length === 0 ? (
@@ -714,7 +704,7 @@ export function Rulonlar({
                 <p className="text-sm text-slate-500">Omborda hali rulon yo'q</p>
                 <p className="text-xs mt-1">
                   {canEdit
-                    ? "Yuqoridagi \u00abRulon qo'shish\u00bb tugmasi bilan boshlang."
+                    ? "Yuqoridagi «Rulon qo'shish» tugmasi bilan boshlang."
                     : "Rulon qo'shish uchun ruxsat yo'q."}
                 </p>
               </>
@@ -727,25 +717,35 @@ export function Rulonlar({
           </div>
         ) : (
           <>
+            {/* Oq katak — kiritiladi, kulrang — hisoblanadi */}
+            <p className="text-[11px] text-slate-400 mb-1.5">
+              Oq kataklarni bosib to'ldirasiz; <span className="bg-slate-100 px-1 rounded">kulrang</span> ustunlar o'zi hisoblanadi.
+              Uzunlik — rulon ichidagi qog'ozdan; yozilmasa og'irlikdan taxminan (≈) chiqadi.
+            </p>
+
             {/* ================= JADVAL (md dan katta ekran) ================= */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-xs min-w-[1180px]">
+              <table className="w-full text-xs min-w-[1720px]">
                 <thead>
                   <tr className="text-xs text-slate-500 border-b-2 border-slate-200">
                     <Th k="nomer" nom="№" sort={sort} onSort={saral} />
-                    <Th k="rang" nom="Rang" sort={sort} onSort={saral} />
-                    <Th k="zavod" nom="Zavod" sort={sort} onSort={saral} />
+                    <Th k="sana" nom="Sana" sort={sort} onSort={saral} />
+                    <Th k="zavod" nom="Kimdan" sort={sort} onSort={saral} title="Zavod yoki yetkazib beruvchi" />
                     <Th k="tur" nom="Tur" sort={sort} onSort={saral} />
-                    <Th k="qalinlik" nom="Qalinlik" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="ogirlik" nom="Og'irlik" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="uzunlik" nom="Uzunlik" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="qoldiq" nom="Qoldiq" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="yangiNarx" nom="Yangi narx $/t" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="rulonDollar" nom="Rulon $" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="rulonSom" nom="Rulon so'm" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="metrTannarx" nom="1 m tannarx" sort={sort} onSort={saral} hizala="right" />
-                    <Th k="sotuv1" nom={nom1} sort={sort} onSort={saral} hizala="right" />
-                    <Th k="sotuv2" nom={nom2} sort={sort} onSort={saral} hizala="right" />
+                    <Th k="rang" nom="Rang" sort={sort} onSort={saral} />
+                    <Th k="qalinlik" nom="Qal." sort={sort} onSort={saral} hizala="right" title="Qalinlik, mm" />
+                    <Th k="ogirlik" nom="Og'irlik" sort={sort} onSort={saral} hizala="right" title="kg" />
+                    <Th k="narxTonna" nom="Narx $/t" sort={sort} onSort={saral} hizala="right" />
+                    <Th k="rulonDollar" nom="Rulon $" sort={sort} onSort={saral} hizala="right" hisob title="Og'irlik (t) × narx" />
+                    <Th k="kurs" nom="Kurs" sort={sort} onSort={saral} hizala="right" title="Olingan kungi kurs" />
+                    <Th k="rulonSom" nom="Rulon so'm" sort={sort} onSort={saral} hizala="right" hisob title="Rulon $ × kurs" />
+                    <Th k="uzunlik" nom="Uzunlik" sort={sort} onSort={saral} hizala="right" title="m — rulon qog'ozidan" />
+                    <Th k="yolkiraTonna" nom="Yo'lkira $/t" sort={sort} onSort={saral} hizala="right" />
+                    <Th k="yolkiraDollar" nom="Yo'lkira $" sort={sort} onSort={saral} hizala="right" hisob title="Og'irlik (t) × yo'lkira" />
+                    <Th k="metrTannarx" nom="1 m tannarx" sort={sort} onSort={saral} hizala="right" hisob title="(rulon + yo'lkira) so'm ÷ uzunlik" />
+                    <Th k="sotuv1" nom={nom1} sort={sort} onSort={saral} hizala="right" hisob />
+                    <Th k="sotuv2" nom={nom2} sort={sort} onSort={saral} hizala="right" hisob />
+                    <Th k="qoldiq" nom="Qoldiq" sort={sort} onSort={saral} hizala="right" title="Omborda qolgan metr" />
                     <Th k="izoh" nom="Izoh" sort={sort} onSort={saral} />
                     <th className="py-2 px-2 font-semibold text-center whitespace-nowrap">Amallar</th>
                   </tr>
@@ -756,16 +756,25 @@ export function Rulonlar({
                     const h = q.h;
                     return (
                       <tr key={q.id} className={`border-b border-slate-100 align-middle ${FON[h.daraja] || ''}`}>
-                        {/* № + ogohlantirish belgisi */}
                         <td className="px-2 py-1.5 whitespace-nowrap">
                           <span className="inline-flex items-center gap-1 tabular-nums text-slate-500">
                             <OgohBelgi h={h} />
                             {xomKor(q.nomer) || '—'}
                           </span>
                         </td>
-
-                        {/* Rang (namuna + select) */}
-                        <td className="p-0">
+                        <td className="p-0 min-w-[120px]">
+                          <TahrirKatak value={q.sana} onSave={matnYoz(q, 'sana')} canEdit={canEdit} tur="sana"
+                            korinish={<span className="tabular-nums">{sanaKor(q.sana) || <span className="text-slate-300">—</span>}</span>} />
+                        </td>
+                        <td className="p-0 min-w-[110px]">
+                          <TahrirKatak value={q.zavod} onSave={matnYoz(q, 'zavod')} canEdit={canEdit}
+                            tur="select" variantlar={zavodlar} />
+                        </td>
+                        <td className="p-0 min-w-[100px]">
+                          <TahrirKatak value={q.tur} onSave={matnYoz(q, 'tur')} canEdit={canEdit}
+                            tur="select" variantlar={turlar} />
+                        </td>
+                        <td className="p-0 min-w-[110px]">
                           <div className="flex items-center gap-1.5 pl-2">
                             <RangNamuna rang={q.rang} />
                             <div className="flex-1 min-w-0">
@@ -774,45 +783,39 @@ export function Rulonlar({
                             </div>
                           </div>
                         </td>
-
-                        <td className="p-0">
-                          <TahrirKatak value={q.zavod} onSave={matnYoz(q, 'zavod')} canEdit={canEdit}
-                            tur="select" variantlar={zavodlar} />
+                        <td className="p-0 w-16">
+                          <TahrirKatak value={q.qalinlik} onSave={sonYoz(q, 'qalinlik')} canEdit={canEdit} tur="son" hizala="right" placeholder="0,40" />
                         </td>
-                        <td className="p-0">
-                          <TahrirKatak value={q.tur} onSave={matnYoz(q, 'tur')} canEdit={canEdit}
-                            tur="select" variantlar={turlar} />
+                        <td className="p-0 w-20">
+                          <TahrirKatak value={q.ogirlik} onSave={sonYoz(q, 'ogirlik')} canEdit={canEdit} tur="son" hizala="right" placeholder="kg" />
                         </td>
-                        <td className="p-0">
-                          <TahrirKatak value={q.qalinlik} onSave={sonYoz(q, 'qalinlik')} canEdit={canEdit}
-                            tur="son" hizala="right" />
+                        <td className="p-0 w-20">
+                          <TahrirKatak value={q.narxTonna ?? q.xaridNarx} onSave={sonYoz(q, 'narxTonna')} canEdit={canEdit} tur="son" hizala="right" placeholder="$/t" />
                         </td>
-                        <td className="p-0">
-                          <TahrirKatak value={q.ogirlik} onSave={sonYoz(q, 'ogirlik')} canEdit={canEdit}
-                            tur="son" hizala="right" />
+                        <HisobKatak qiymat={h.rulonDollar} />
+                        <td className="p-0 w-20">
+                          <TahrirKatak value={q.kurs ?? q.xaridKurs} onSave={sonYoz(q, 'kurs')} canEdit={canEdit} tur="son" hizala="right" placeholder="kurs" />
                         </td>
-                        <td className="p-0">
+                        <HisobKatak qiymat={h.rulonSom} />
+                        <td className="p-0 w-20">
                           <TahrirKatak value={q.uzunlik} onSave={sonYoz(q, 'uzunlik')} canEdit={canEdit}
-                            tur="son" hizala="right" korinish={uzunlikKorinish(h)}
-                            title={h.uzunlikHisoblangan ? "og'irlikdan hisoblandi" : ''} />
+                            tur="son" hizala="right" korinish={uzunlikKorinish(h)} placeholder="m" />
                         </td>
-                        <td className="p-0">
+                        <td className="p-0 w-20">
+                          <TahrirKatak value={q.yolkiraTonna} onSave={sonYoz(q, 'yolkiraTonna')} canEdit={canEdit}
+                            tur="son" hizala="right" korinish={yolkiraKorinish(h)} placeholder={olchovKor(yolkiraStd, 2)} />
+                        </td>
+                        <HisobKatak qiymat={h.yolkiraDollar} />
+                        <HisobKatak qiymat={h.metrTannarx} qalin />
+                        <HisobKatak qiymat={h.sotuv1} />
+                        <HisobKatak qiymat={h.sotuv2} />
+                        <td className="p-0 w-20">
                           <TahrirKatak value={q.qoldiq} onSave={sonYoz(q, 'qoldiq')} canEdit={canEdit}
                             tur="son" hizala="right" korinish={qoldiqKorinish(q)} />
                         </td>
-
-                        {/* Hisoblangan ustunlar — tahrirlanmaydi */}
-                        <HisobKatak qiymat={h.yangiNarx} narx />
-                        <HisobKatak qiymat={h.rulonDollar} narx />
-                        <HisobKatak qiymat={h.rulonSom} narx />
-                        <HisobKatak qiymat={h.metrTannarx} narx />
-                        <HisobKatak qiymat={h.sotuv1} narx />
-                        <HisobKatak qiymat={h.sotuv2} narx />
-
-                        <td className="p-0 max-w-[220px]">
+                        <td className="p-0 max-w-[200px]">
                           <TahrirKatak value={q.izoh} onSave={matnYoz(q, 'izoh')} canEdit={canEdit} />
                         </td>
-
                         <td className="px-2 py-1.5 text-center whitespace-nowrap">
                           {canEdit ? (
                             <span className="inline-flex gap-1">
@@ -834,26 +837,26 @@ export function Rulonlar({
                   })}
                 </tbody>
 
-                {/* ----- JAMI qatori ----- */}
+                {/* ----- JAMI qatori — ustunlar ostida aynan o'sha ustun yig'indisi ----- */}
                 <tfoot>
-                  <tr className="bg-slate-100 font-semibold text-slate-800 border-t-2 border-slate-300">
-                    <td className="px-2 py-2 whitespace-nowrap" colSpan={5}>
-                      Jami — <span className="tabular-nums">{jami.soni}</span> ta rulon
+                  <tr className="bg-slate-100 font-semibold text-slate-800 border-t-2 border-slate-300 tabular-nums">
+                    <td className="px-2 py-2 whitespace-nowrap" colSpan={6}>
+                      Jami — {jami.soni} ta rulon
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums" title="Umumiy og'irlik (tonna)">
-                      {olchovKor(tonna, 2)} t
+                    <td className="px-2 py-2 text-right" title="Umumiy og'irlik (tonna)">{olchovKor(tonna, 2)} t</td>
+                    <td />
+                    <td className="px-2 py-2 text-right" title="Rulonlar $ yig'indisi (yo'lkirasiz)">{fmt(jami.rulonDollar)}</td>
+                    <td />
+                    <td className="px-2 py-2 text-right" title="Rulon so'm yig'indisi (yo'lkirasiz)">{fmt(jami.rulonSom)}</td>
+                    <td className="px-2 py-2 text-right" title="Umumiy uzunlik">{olchovKor(jami.uzunlik)} m</td>
+                    <td />
+                    <td className="px-2 py-2 text-right" title={`Yo'lkira $ yig'indisi (so'mda: ${fmt(jami.yolkiraSom)})`}>{fmt(jami.yolkiraDollar)}</td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap" colSpan={3} title={`Barcha rulonlarga to'langan jami, yo'lkira bilan (${fmt(jami.jamiDollar)} $)`}>
+                      Jami: {fmt(jami.jamiSom)} so'm
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums" title="Rulonlarning umumiy uzunligi">
-                      {olchovKor(jami.uzunlik)} m
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums" title="Ombordagi umumiy qoldiq">
-                      {olchovKor(jami.qoldiq)} m
-                    </td>
-                    {/* Ombor qiymati = Σ (qoldiq × 1 m tannarx). Bu "Rulon so'm"
-                        ustunining yig'indisi EMAS, shuning uchun ustunga
-                        bog'lanmaydi — yorliq bilan alohida chiqadi. */}
-                    <td className="px-2 py-2 text-right whitespace-nowrap" colSpan={8}>
-                      Ombor qiymati: <span className="tabular-nums">{fmt(jami.qiymat)}</span> so'm
+                    <td className="px-2 py-2 text-right" title="Ombordagi umumiy qoldiq">{olchovKor(jami.qoldiq)} m</td>
+                    <td className="px-2 py-2 text-right whitespace-nowrap" colSpan={2} title="Qoldiq × 1 m tannarx">
+                      Qoldiq qiymati: {fmt(jami.qiymat)}
                     </td>
                   </tr>
                 </tfoot>
@@ -865,28 +868,18 @@ export function Rulonlar({
               {korinadigan.map((q) => (
                 <RulonKarta key={q.id} q={q} canEdit={canEdit}
                   zavodlar={zavodlar} turlar={turlar} ranglar={ranglar}
-                  nom1={nom1} nom2={nom2}
+                  nom1={nom1} nom2={nom2} yolkiraStd={yolkiraStd}
                   matnYoz={matnYoz} sonYoz={sonYoz} rangYoz={rangYoz}
                   onOchir={ochirish} onTasdiq={tasdiqla} />
               ))}
 
-              <div className="rounded-xl bg-slate-100 border border-slate-300 p-3 text-xs text-slate-800">
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Rulonlar</span>
-                  <b className="tabular-nums">{jami.soni} ta</b>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Umumiy og'irlik</span>
-                  <b className="tabular-nums">{olchovKor(tonna, 2)} t</b>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Umumiy qoldiq</span>
-                  <b className="tabular-nums">{olchovKor(jami.qoldiq)} m</b>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-500">Ombordagi mahsulot qiymati</span>
-                  <b className="tabular-nums">{fmt(jami.qiymat)} so'm</b>
-                </div>
+              <div className="rounded-xl bg-slate-100 border border-slate-300 p-3 text-xs text-slate-800 tabular-nums">
+                <div className="flex justify-between py-0.5"><span className="text-slate-500">Rulonlar</span><b>{jami.soni} ta</b></div>
+                <div className="flex justify-between py-0.5"><span className="text-slate-500">Umumiy og'irlik</span><b>{olchovKor(tonna, 2)} t</b></div>
+                <div className="flex justify-between py-0.5"><span className="text-slate-500">Umumiy uzunlik</span><b>{olchovKor(jami.uzunlik)} m</b></div>
+                <div className="flex justify-between py-0.5"><span className="text-slate-500">Yo'lkira</span><b>{fmt(jami.yolkiraSom)} so'm</b></div>
+                <div className="flex justify-between py-0.5"><span className="text-slate-500">Jami xarajat</span><b>{fmt(jami.jamiSom)} so'm</b></div>
+                <div className="flex justify-between py-0.5"><span className="text-slate-500">Qoldiq qiymati</span><b>{fmt(jami.qiymat)} so'm</b></div>
               </div>
             </div>
           </>

@@ -5,17 +5,18 @@
 //    • dropdownlar uchun ro'yxatlar (zavod / tur / rang),
 //    • hisob ishlashi uchun zarur boshlang'ich SOZLAMA.
 //
-//  NARX RO'YXATI va RULONLAR bu yerda YO'Q — ularni foydalanuvchi
-//  interfeysdan o'zi kiritadi (Ombor → Narx ro'yxati va Rulonlar).
-//  Shu sabab kodda birorta zavod narxi ham, birorta rulon ham
-//  qattiq yozilmagan.
+//  RULONLAR bu yerda YO'Q — foydalanuvchi interfeysdan o'zi kiritadi.
+//  Har rulonning narxi va kursi rulonning o'zida yoziladi (daftardagidek),
+//  shu sabab kodda birorta narx ham, birorta rulon ham qattiq yozilmagan.
 //
 //  Firestore kalitlari (loyihaning `shop/<kalit>` modeli):
-//    'ombor-sozlama'   → { kurs, ustama, bolizvchi1, bolizvchi2,
-//                          nom1, nom2, kgPerM, koefSMZ, koefBoshqa, kursSana }
+//    'ombor-sozlama'   → { kurs, yolkiraTonna, bolizvchi1, bolizvchi2,
+//                          nom1, nom2, kgPerM, koefSMZ, koefBoshqa, kursSana,
+//                          zavodlar, turlar, ranglar }
 //    'ombor-rang-tur'  → { qoidalar: [{ naqsh, tur }], standart }
-//    'ombor-narxlar'   → { [id]: { id, zavod, tur, qalinlik, narx, sana, faol } }  ← bo'sh boshlanadi
-//    'ombor-rulonlar'  → { [id]: { id, nomer, rang, zavod, tur, qalinlik, ... } }  ← bo'sh boshlanadi
+//    'ombor-rulonlar'  → { [id]: { id, nomer, sana, zavod, tur, rang, qalinlik,
+//                                  ogirlik, narxTonna, kurs, uzunlik, yolkiraTonna,
+//                                  qoldiq, izoh, tasdiqlanmagan } }  ← bo'sh boshlanadi
 // ============================================================
 
 // ----- Dropdown ro'yxatlari — BOSHLANG'ICH qiymat -----
@@ -31,8 +32,8 @@
 //  shuning uchun ular boshlang'ich qiymat sifatida turadi. Hammasi
 //  interfeysdan o'zgartiriladi va Firestore'da saqlanadi.
 export const SOZLAMA_BOSHLANGICH = {
-  kurs: 12000,        // dollar kursi, so'm
-  ustama: 50,         // zavod ro'yxatiga qo'shiladigan $/tonna
+  kurs: 12000,        // yangi rulon uchun taklif qilinadigan kurs (har rulonda o'zgartiriladi)
+  yolkiraTonna: 10,   // standart yo'lkira, $/tonna (har rulonda o'zgartiriladi)
   bolizvchi1: 0.95,   // 1-sotuv narxi = 1 m tannarx ÷ 0.95
   bolizvchi2: 0.90,   // 2-sotuv narxi = 1 m tannarx ÷ 0.90
   nom1: '5%',         // 1-ustun sarlavhasi
@@ -48,9 +49,11 @@ export const SOZLAMA_BOSHLANGICH = {
   koefBoshqa: 9.05,
   kursSana: '',       // kurs oxirgi marta qachon o'zgartirilgan
   // Dropdown ro'yxatlari — Sozlama panelidan to'liq tahrirlanadi
-  zavodlar: ['SMZ', 'Aziya Steel', 'Master Class (Xitoy)', 'TMZ', 'Demir Master Prime'],
-  turlar: ['оцинковка', 'полимерка', 'хопёр', 'глянцевый', 'глянцевый (плёнка)', 'Мебел'],
-  ranglar: ['Mokriy', 'Oq', 'Qaymoq', 'Shokolad', 'Bordo', 'Somon', 'Granit', 'Qora', 'Sariq'],
+  //  "Kimdan / zavod" — daftardagidek: zavod yoki yetkazib beruvchi ("SMZ Momin")
+  zavodlar: ['SMZ', 'Xitoy', 'Aziya Steel', 'TMZ'],
+  //  Tur — qoplama turi; zavod bilan birga "SMZ rangli", "Xitoy xapyor" bo'lib o'qiladi
+  turlar: ['Rangli', 'Xapyor', 'Atsenkovka', 'Yaltiroq', 'Salafan', 'Mebel'],
+  ranglar: ['Mokriy', 'Oq', 'Qaymoq', 'Shokolad', 'Bordo', 'Somon', 'Granit', 'Qora', 'Sariq', "Ko'k", 'Yashil'],
 };
 
 // Eski kod (va rang→tur qoidalari tahriri) uchun qulay yorliqlar —
@@ -75,14 +78,15 @@ export function sozlamaRoyxat(sozlama, nom) {
 //  Sozlama panelida tahrirlanadi.
 export const RANG_TUR_BOSHLANGICH = {
   qoidalar: [
-    { naqsh: 'atsenkovka', tur: 'оцинковка' },
-    { naqsh: 'salafan',    tur: 'глянцевый (плёнка)' },
-    { naqsh: 'plyonka',    tur: 'глянцевый (плёнка)' },
-    { naqsh: 'yaltiroq',   tur: 'глянцевый' },
-    { naqsh: 'xopyor',     tur: 'хопёр' },
-    { naqsh: 'mebel',      tur: 'Мебел' },
+    { naqsh: 'atsenkovka', tur: 'Atsenkovka' },
+    { naqsh: 'salafan',    tur: 'Salafan' },
+    { naqsh: 'plyonka',    tur: 'Salafan' },
+    { naqsh: 'yaltiroq',   tur: 'Yaltiroq' },
+    { naqsh: 'xopyor',     tur: 'Xapyor' },
+    { naqsh: 'xapyor',     tur: 'Xapyor' },
+    { naqsh: 'mebel',      tur: 'Mebel' },
   ],
-  standart: 'полимерка',
+  standart: 'Rangli',
 };
 
 // ----- Boshlang'ich to'plam -----
