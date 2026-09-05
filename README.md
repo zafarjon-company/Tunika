@@ -78,7 +78,7 @@ npm run preview    # build'ni lokal sinash
 - **Sotuv** — yangi zakas yaratish (mijoz, usta, tovarlar, multi-valyutali
   to'lovlar), zakaslar ro'yxati, chek chiqarish, mijoz/usta bazasi.
 - **Narxlar** — listlar, metrli tovarlar va aksessuarlar narx bazasi.
-- **Yo'qlama** — kunlik *Keldi / Yarim / Kelmadi* belgilash, kalendar,
+- **Yo'qlama** — kunlik *Keldi / Kelmadi* belgilash, kalendar,
   avans.
 - **Ishchilar** — ro'yxat, lavozimlar, qobiliyatlar, kamchiliklar; oylik
   hisob-kitobi.
@@ -90,8 +90,8 @@ npm run preview    # build'ni lokal sinash
     **1 metr uchun tannarxi hamda sotuv narxi**. Har rulon o'z narxi ($/t),
     kursi va yo'lkirasi bilan yoziladi; standart qiymatlar (kurs, yo'lkira,
     bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari) interfeysdan
-    tahrirlanadi va Firestore'da saqlanadi — kodda birorta narx qattiq
-    yozilmagan.
+    tahrirlanadi va Firestore'da saqlanadi — hisob hech qachon koddagi
+    qiymatga qaramaydi (kodda faqat boshlang'ich sozlama bor).
 - **Jurnal** — barcha amallar tarixi.
 - **Sozlamalar** — do'kon nomi, kurs, tovarlar, mavzular (ko'plab tema),
   til, tugmalar.
@@ -104,9 +104,10 @@ maydonlar foydalanuvchi kiritadi, qolgani o'zi hisoblanadi
 
 | Ustun | Kim to'ldiradi | Hisob |
 |---|---|---|
-| №, Sana, Kimdan (zavod), Tur, Rang, Qalinlik | kiritiladi | — |
+| №, Sana, Kimdan (zavod), Rang, Qalinlik | kiritiladi | — |
+| Tur (zavod kategoriyasi) | rangdan o'zi chiqadi (rang → tur qoidalari), qo'lda o'zgartirsa bo'ladi | — |
 | Og'irlik (kg) | kiritiladi | — |
-| Narx $/t | kiritiladi | — |
+| Narx $/t | **zavod narx jadvalidan** o'zi tushadi (kimdan + tur + qalinlik), qo'lda o'zgartirsa bo'ladi | — |
 | **Rulon $** | hisob | `og'irlik / 1000 × narx $/t` |
 | Kurs | kiritiladi (yangi rulonda standart kurs avtomatik) | — |
 | **Rulon so'm** | hisob | `rulon $ × kurs` |
@@ -140,10 +141,28 @@ Ro'yxatda avval asosiy ma'lumot (kimdan, tur, rang, qalinlik) va **sotuv
 narxlari (5 % / 10 %)** ko'rinadi, keyin xarid tafsilotlari; qatorni bosib
 tahrirlash oynasi ochiladi.
 
+### Zavod narx jadvali
+
+Zavodning narx varaqasi sozlamada saqlanadi (`ombor-sozlama.narxJadval`)
+va Sozlama panelidagi **"Zavod narx jadvali ($ / tonna)"** bo'limidan
+tahrirlanadi — varaqadagi tartibda: zavod → kategoriya (tur) → qalinlik → $/t.
+Kategoriya nomlari `turlar` ro'yxati bilan bir xil (Polimerka → Rangli,
+Xopyor → Xapyor, Otsinkovka → Atsenkovka, Glyansoviy → Yaltiroq,
+Glyansoviy plyonka → Salafan, Mebel). Xapyor, Atsenkovka, "Oq yaltiroq",
+"Qaymoq yaltiroq salafan" kabi nomlar **rang** ro'yxatida turadi — sotuvda
+boshqa ranglar qatorida; rang → tur qoidasi ularni zavod kategoriyasiga
+o'tkazadi, narx esa shu kategoriya bo'yicha topiladi.
+
+Formada kimdan + rang + qalinlik tanlansa narx jadvaldan tushadi; jadvaldagi
+qalinliklar tugma sifatida chiqadi. Saqlangan rulonda narx **snapshot** —
+varaqa yangilansa eski rulonlar o'zgarmaydi (tahrirda «jadvaldan ol» tugmasi
+bilan qayta olinadi). Rulonda `narxManba: 'jadval' | 'qolda'` saqlanadi.
+
 Kodda faqat *sozlama* boshlang'ich qiymatlari bor (standart kurs, standart
 yo'lkira, bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari, rang→tur
-qoidalari). Ular Sozlama panelidan tahrirlanadi; **"Boshlang'ich sozlamaga
-qaytarish"** tugmasi faqat shu sozlamani tiklaydi, rulonlarga tegmaydi.
+qoidalari va foydalanuvchi bergan 01.09.2026 narx varaqasi). Ular Sozlama
+panelidan tahrirlanadi; **"Boshlang'ich sozlamaga qaytarish"** tugmasi faqat
+shu sozlamani tiklaydi, rulonlarga tegmaydi.
 
 ## Ma'lumotlar qayerda?
 

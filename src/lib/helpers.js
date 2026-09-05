@@ -607,34 +607,96 @@ export function daysInMonth(oy) {
   return new Date(y, m, 0).getDate(); // keyingi oyning 0-kuni = shu oyning oxirgi kuni
 }
 
-// Bitta ishchining berilgan oy bo'yicha yo'qlama yig'indisi.
-// yoqlama tuzilishi: { 'YYYY-MM-DD': { ishchiId: 'keldi'|'yarim'|'kelmadi' } }
-export function oylikYoqlama(yoqlama, oy, ishchiId) {
-  let toliq = 0;
-  let yarim = 0;
-  for (const sana in yoqlama) {
-    if (!sana.startsWith(oy)) continue;
-    const holat = yoqlama[sana]?.[ishchiId];
-    if (holat === 'keldi') toliq += 1;
-    else if (holat === 'yarim') yarim += 1;
-  }
-  return { toliq, yarim, jamiKun: toliq + yarim * 0.5 };
+// Yo'qlama holati ish kuni hisoblanadimi.
+//  'keldi' — to'liq kun. 'yarim' — ESKI / kamera yozuvi: yarim kun tushunchasi
+//  dasturdan olib tashlangan, bunday yozuv ham TO'LIQ kun deb olinadi.
+//  'kelmadi' yoki belgilanmagan — 0.
+export function ishKuniMi(holat) {
+  return holat === 'keldi' || holat === 'yarim';
 }
 
-// Avans yozuvlarini bir xil massivga keltirish (eski sonli format ham qo'llanadi)
+// Bitta ishchining berilgan oy bo'yicha yo'qlama yig'indisi.
+// yoqlama tuzilishi: { 'YYYY-MM-DD': { ishchiId: 'keldi'|'kelmadi' } }
+export function oylikYoqlama(yoqlama, oy, ishchiId) {
+  let toliq = 0;
+  for (const sana in yoqlama) {
+    if (!sana.startsWith(oy)) continue;
+    if (ishKuniMi(yoqlama[sana]?.[ishchiId])) toliq += 1;
+  }
+  return { toliq, jamiKun: toliq };
+}
+
+// Avans yozuvlarini bir xil massivga keltirish (eski sonli format ham qo'llanadi).
+//  Eski (sonli) yozuv `eski: true` bilan belgilanadi — u butun oyga tegishli,
+//  sanasi yo'q, shuning uchun 1–5-kun qoidasi (avansOyi) unga qo'llanmaydi.
 export function avansYozuvlari(v, oy = '') {
   if (Array.isArray(v)) return v;
   if (typeof v === 'number' && v > 0) {
-    return [{ id: 'eski', method: "So'mda", amount: v, createdAt: oy ? `${oy}-01` : null, notes: '' }];
+    return [{ id: 'eski', method: "So'mda", amount: v, createdAt: oy ? `${oy}-01` : null, notes: '', eski: true }];
   }
   return [];
+}
+
+// ============================================================
+//  AVANS QAYSI OY MAOSHIDAN USHLANADI
+// ------------------------------------------------------------
+//  Maosh har oyning MAOSH_KUNI-sanasida O'TGAN OY uchun beriladi. Shu kungacha
+//  (yangi oyning 1–5-kunlarida) olingan avans hali berilmagan O'TGAN OY
+//  maoshidan ushlanadi. Yangi oyning shu kunlarida ishlagani / kelmagani esa
+//  o'tgan oy hisobiga KIRMAYDI — faqat avans ko'chadi.
+//  Har bir avans faqat BITTA oyga tegishli bo'ladi (ikki marta hisoblanmaydi).
+// ============================================================
+export const MAOSH_KUNI = 5;
+
+// 'YYYY-MM' → oldingi oy
+export function oldingiOy(oy) {
+  const [y, m] = String(oy || '').split('-').map(Number);
+  if (!y || !m) return oy;
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Avans yozuvining sanasidagi kun (mahalliy). Sanasi bo'lmasa — null.
+function avansKuni(entry) {
+  const c = entry && entry.createdAt;
+  if (!c) return null;
+  const s = String(c);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return Number(s.slice(8, 10)); // faqat sana — soatsiz
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.getDate();
+}
+
+// Avans yozuvi qaysi oy maoshidan ushlanadi.
+//  oy — yozuv turgan kalit ('YYYY-MM', avans kiritilgan oy).
+//  1..MAOSH_KUNI kunlarida olingan → oldingi oy; qolgani → o'z oyi.
+//  Eski (sonli) yozuv va sanasiz yozuv — o'z oyi.
+export function avansOyi(entry, oy) {
+  if (!entry || entry.eski) return oy;
+  const kun = avansKuni(entry);
+  if (kun == null || kun > MAOSH_KUNI) return oy;
+  return oldingiOy(oy);
+}
+
+// Ishchining barcha avanslari — QAYSI OY MAOSHIDAN ushlanishi bo'yicha (so'mda):
+//  { 'YYYY-MM': summa }. ishchiHisobi va oylikBalans shundan foydalanadi.
+export function avansTaqsimot(avanslar = {}, ishchiId) {
+  const out = {};
+  for (const oy in avanslar) {
+    for (const p of avansYozuvlari(avanslar[oy]?.[ishchiId], oy)) {
+      const m = avansOyi(p, oy);
+      out[m] = (out[m] || 0) + tolovlarSummasi([p]);
+    }
+  }
+  return out;
 }
 
 // ============================================================
 //  MAOSH HISOBI YADROSI
 // ------------------------------------------------------------
 //  BIZNES QOIDASI: maosh har oyning 5-sanasida O'TGAN OY uchun
-//  beriladi. 'maoshlar' modeli 'avanslar' bilan bir xil:
+//  beriladi. Yangi oyning 1–5-kunlarida olingan avanslar ham o'tgan oy
+//  maoshidan ushlanadi (avansOyi / avansTaqsimot), yangi oy kunlari esa
+//  ishlangan haqqa kirmaydi. 'maoshlar' modeli 'avanslar' bilan bir xil:
 //  { 'YYYY-MM': { ishchiId: [ {id,method,amount,rate,createdAt,notes} ] } }
 //  bu yerda oy = QAYSI OY UCHUN maosh (to'lov sanasi emas!).
 //  Barcha oy bo'yicha hisoblar quyidagi bitta mantiqdan o'tadi —
@@ -653,7 +715,7 @@ export function tolovlarSummasi(entries) {
 }
 
 // FAQAT berilgan 'YYYY-MM' oyi bo'yicha ishlangan haq:
-// kunlik = oylikHaqq / oydagi kunlar; 'keldi' = to'liq kunlik, 'yarim' = yarmi.
+// kunlik = oylikHaqq / oydagi kunlar; ish kuni (keldi) = to'liq kunlik.
 export function oyIshlangan(ishchi, yoqlama = {}, oy) {
   if (!ishchi || !oy) return 0;
   const oylik = Number(ishchi.oylikHaqq) || 0;
@@ -662,42 +724,43 @@ export function oyIshlangan(ishchi, yoqlama = {}, oy) {
   let jami = 0;
   for (const sana in yoqlama) {
     if (!sana.startsWith(oy)) continue;
-    const holat = yoqlama[sana]?.[ishchi.id];
-    if (holat === 'keldi') jami += kunlikHaq;
-    else if (holat === 'yarim') jami += kunlikHaq / 2;
+    if (ishKuniMi(yoqlama[sana]?.[ishchi.id])) jami += kunlikHaq;
   }
   return jami;
 }
 
-// Yo'qlama, avans va maosh ma'lumotlarida uchraydigan BARCHA oylar to'plami.
-function barchaOylar(yoqlama = {}, avanslar = {}, maoshlar = {}) {
+// Yo'qlama, avans (ushlanadigan oyi bo'yicha) va maosh ma'lumotlarida
+// uchraydigan BARCHA oylar to'plami.
+function barchaOylar(yoqlama = {}, avansTaq = {}, maoshlar = {}) {
   const oylar = new Set();
   for (const sana in yoqlama) oylar.add(sana.slice(0, 7));
-  for (const oy in avanslar) oylar.add(oy);
+  for (const oy in avansTaq) oylar.add(oy);
   for (const oy in maoshlar) oylar.add(oy);
   return oylar;
 }
 
 // Bitta ishchining bitta oy bo'yicha xom sonlari (ichki yordamchi).
-function oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, oy) {
+//  avansTaq — avansTaqsimot() natijasi: avans o'z oyi emas, USHLANADIGAN oyi bo'yicha.
+function oyXomHisob(ishchi, yoqlama, avansTaq, maoshlar, oy) {
   return {
     ishlangan: oyIshlangan(ishchi, yoqlama, oy),
-    avans: tolovlarSummasi(avanslar[oy]?.[ishchi.id]),
+    avans: avansTaq[oy] || 0,
     maosh: tolovlarSummasi(maoshlar[oy]?.[ishchi.id]),
   };
 }
 
 // Ishchining BUTUN DAVR bo'yicha hisobi — Hisobot > Ishchilar bilan bir xil qoida:
-//   ishlangan = yo'qlamadan yig'ilgan haq (keldi = oylik/oydagi kunlar, yarim = yarmi)
+//   ishlangan = yo'qlamadan yig'ilgan haq (ish kuni = oylik/oydagi kunlar)
 //   avans     = olingan avanslar (dollar bo'lsa kursda so'mga)
 //   maosh     = to'langan maoshlar (dollar bo'lsa kursda so'mga)
 //   haqqi     = ishlangan − avans − maosh (hozirgi qo'lga tegadigan qoldiq)
 // maoshlar bermasangiz ({} qoladi) — eski chaqiruvlar avvalgidek ishlayveradi.
 export function ishchiHisobi(ishchi, yoqlama = {}, avanslar = {}, maoshlar = {}) {
   if (!ishchi) return { ishlangan: 0, avans: 0, maosh: 0, haqqi: 0 };
+  const avansTaq = avansTaqsimot(avanslar, ishchi.id);
   let ishlangan = 0; let avans = 0; let maosh = 0;
-  for (const oy of barchaOylar(yoqlama, avanslar, maoshlar)) {
-    const x = oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, oy);
+  for (const oy of barchaOylar(yoqlama, avansTaq, maoshlar)) {
+    const x = oyXomHisob(ishchi, yoqlama, avansTaq, maoshlar, oy);
     ishlangan += x.ishlangan; avans += x.avans; maosh += x.maosh;
   }
   return { ishlangan, avans, maosh, haqqi: ishlangan - avans - maosh };
@@ -707,7 +770,8 @@ export function ishchiHisobi(ishchi, yoqlama = {}, avanslar = {}, maoshlar = {})
 //   boshida   = oldingi oylardan ko'chib kelgan qoldiq
 //               (Σ oy' < oy: ishlangan − avans − maosh)
 //   ishlangan = shu oyda ishlangan haq
-//   avans     = shu oyda olingan avanslar
+//   avans     = SHU OY MAOSHIDAN USHLANADIGAN avanslar: shu oyning 6-kunidan
+//               oxirigacha + KEYINGI oyning 1–5-kunlarida olinganlar (avansOyi)
 //   maosh     = SHU OY UCHUN allaqachon to'langan maoshlar
 //   yakun     = boshida + ishlangan − avans  (oy bo'yicha jami haq)
 //   qoldiq    = yakun − maosh                (hali to'lanishi kerak)
@@ -716,13 +780,14 @@ export function ishchiHisobi(ishchi, yoqlama = {}, avanslar = {}, maoshlar = {})
 // aynan teng chiqadi — ikkalasi bitta yadrodan (oyXomHisob) o'tadi.
 export function oylikBalans(ishchi, yoqlama = {}, avanslar = {}, maoshlar = {}, oy) {
   if (!ishchi || !oy) return { boshida: 0, ishlangan: 0, avans: 0, maosh: 0, yakun: 0, qoldiq: 0 };
+  const avansTaq = avansTaqsimot(avanslar, ishchi.id);
   let boshida = 0;
-  for (const o of barchaOylar(yoqlama, avanslar, maoshlar)) {
+  for (const o of barchaOylar(yoqlama, avansTaq, maoshlar)) {
     if (o >= oy) continue; // 'YYYY-MM' formatida satr taqqoslash yetarli
-    const x = oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, o);
+    const x = oyXomHisob(ishchi, yoqlama, avansTaq, maoshlar, o);
     boshida += x.ishlangan - x.avans - x.maosh;
   }
-  const { ishlangan, avans, maosh } = oyXomHisob(ishchi, yoqlama, avanslar, maoshlar, oy);
+  const { ishlangan, avans, maosh } = oyXomHisob(ishchi, yoqlama, avansTaq, maoshlar, oy);
   const yakun = boshida + ishlangan - avans;
   return { boshida, ishlangan, avans, maosh, yakun, qoldiq: yakun - maosh };
 }

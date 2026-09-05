@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:ombor": "node src/lib/omborHisob.test.mjs"
+    "test:ombor": "node src/lib/omborHisob.test.mjs",
+    "test:maosh": "node src/lib/maosh.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",

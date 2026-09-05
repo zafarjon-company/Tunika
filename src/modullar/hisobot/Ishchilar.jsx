@@ -8,7 +8,7 @@
 //  faqat ishchiga kirilganda.
 // ------------------------------------------------------------
 //  Qiymat:  ishga keldi  = +kunlik haq (oylik ÷ oydagi kunlar)
-//           yarim kun    = +kunlik haq / 2
+//                          (eski 'yarim' yozuv ham to'liq kun)
 //           kelmadi      = 0
 //           avans        = −olingan summa (so'mda)
 //           maosh        = −berilgan maosh (so'mda)
@@ -39,8 +39,7 @@ function buildAmallar(ishchi, yoqlama, avanslar, maoshlar) {
     const kunlikHaq = kun ? oylik / kun : 0;
     let qiymat = 0;
     let nom = 'Kelmadi';
-    if (holat === 'keldi') { qiymat = kunlikHaq; nom = 'Ishga keldi'; }
-    else if (holat === 'yarim') { qiymat = kunlikHaq / 2; nom = 'Yarim kun'; }
+    if (holat === 'keldi' || holat === 'yarim') { qiymat = kunlikHaq; nom = 'Ishga keldi'; }
     ops.push({ id: `y-${sana}`, turi: 'yoqlama', nom, sana, qiymat });
   }
 

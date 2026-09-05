@@ -2,12 +2,13 @@
 //  YO'QLAMA BELGILASH (kunlik)
 // ------------------------------------------------------------
 //  Sana tanlanadi, har bir ishchi uchun holat belgilanadi.
-//  yoqlama tuzilishi: { 'YYYY-MM-DD': { ishchiId: 'keldi'|'yarim'|'kelmadi' } }
+//  yoqlama tuzilishi: { 'YYYY-MM-DD': { ishchiId: 'keldi'|'kelmadi' } }
+//  (eski 'yarim' yozuvlar Keldi deb ko'rsatiladi va hisoblanadi)
 // ============================================================
 import React, { useState, useEffect } from 'react';
 import { CalendarCheck, Clock } from 'lucide-react';
 import { Card, SectionTitle, SegmentedControl, StatBox } from '../../components/ui.jsx';
-import { toDateInput, formatDay, ishchiFaolmi } from '../../lib/helpers.js';
+import { toDateInput, formatDay, ishchiFaolmi, ishKuniMi } from '../../lib/helpers.js';
 import { YOQLAMA_HOLATLAR } from '../../lib/constants.js';
 import { storage } from '../../lib/storage.js';
 
@@ -38,15 +39,13 @@ export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlama
   }
 
   const belgilangan = faollar.filter((i) => kunlik[i.id]).length;
-  const keldiN = faollar.filter((i) => kunlik[i.id] === 'keldi').length;
-  const yarimN = faollar.filter((i) => kunlik[i.id] === 'yarim').length;
+  const keldiN = faollar.filter((i) => ishKuniMi(kunlik[i.id])).length;
   const kelmadiN = faollar.filter((i) => kunlik[i.id] === 'kelmadi').length;
 
   const tint = (st) => (
-    st === 'keldi' ? 'bg-emerald-50 border-emerald-200'
-      : st === 'yarim' ? 'bg-amber-50 border-amber-200'
-        : st === 'kelmadi' ? 'bg-red-50 border-red-200'
-          : 'bg-white border-slate-200'
+    ishKuniMi(st) ? 'bg-emerald-50 border-emerald-200'
+      : st === 'kelmadi' ? 'bg-red-50 border-red-200'
+        : 'bg-white border-slate-200'
   );
 
   return (
@@ -69,9 +68,8 @@ export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlama
           </div>
         </div>
         {faollar.length > 0 && (
-          <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className="grid grid-cols-2 gap-2 mt-3">
             <StatBox label="Keldi" value={keldiN} color="emerald" />
-            <StatBox label="Yarim kun" value={yarimN} color="amber" />
             <StatBox label="Kelmadi" value={kelmadiN} />
           </div>
         )}
@@ -100,7 +98,7 @@ export function YoqlamaBelgilash({ ishchilar, yoqlama, setYoqlamaKun, setYoqlama
                   </div>
                 </div>
                 <div className="sm:w-72">
-                  <SegmentedControl value={kunlik[i.id] || ''} onChange={(v) => belgila(i.id, v)} options={OPTIONS} />
+                  <SegmentedControl value={kunlik[i.id] === 'yarim' ? 'keldi' : (kunlik[i.id] || '')} onChange={(v) => belgila(i.id, v)} options={OPTIONS} />
                 </div>
               </div>
             ))}

@@ -2,7 +2,9 @@
 //  MAOSH — oylik maosh hisobi va to'lovi
 // ------------------------------------------------------------
 //  BIZNES QOIDASI: maosh har oyning 5-sanasida O'TGAN OY uchun
-//  beriladi — yangi oy kunlari bu hisobga umuman aralashmaydi.
+//  beriladi. Yangi oyning 1–5-kunlarida olingan AVANSLAR ham o'tgan oy
+//  maoshidan ushlanadi (maosh hali berilmagan); yangi oy kunlarining
+//  ishlagani / kelmagani esa bu hisobga KIRMAYDI.
 //  Shuning uchun standart tanlangan oy = O'TGAN OY, va yozuvlar
 //  'maoshlar[oy]' ga (qaysi oy UCHUN) yoziladi, createdAt esa
 //  haqiqiy to'lov vaqti bo'lib qoladi (oyga majburlanmaydi).
@@ -15,7 +17,7 @@ import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
 import {
   fmt, sonQiymat, toMonthInput, formatDate, formatDay, makeBlankPayment,
-  avansYozuvlari, oylikBalans, oyFaolmi, daysInMonth, oylikYoqlama,
+  avansYozuvlari, oylikBalans, oyFaolmi, daysInMonth, oylikYoqlama, MAOSH_KUNI,
 } from '../../lib/helpers.js';
 import { OY_NOMLARI, DEFAULT_USD_RATE } from '../../lib/constants.js';
 
@@ -140,7 +142,8 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
           <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 tabular-nums">{formatDay(`${oy}-01`)} — {formatDay(oyOxiri)}</span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          Maosh 5-sanada O'TGAN OY uchun beriladi — yangi oy kunlari bu hisobga kirmaydi.
+          Maosh {MAOSH_KUNI}-sanada O'TGAN OY uchun beriladi. Keyingi oyning 1–{MAOSH_KUNI}-kunlarida
+          olingan avanslar ham shu oydan ushlanadi; keyingi oy kunlari (ishlagani / kelmagani) hisobga kirmaydi.
           Kunlik haq = oylik ÷ {kunSoni} kun.
         </p>
       </Card>
@@ -186,7 +189,7 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
                   Oylik {fmt(i.oylikHaqq)} · kunlik {fmt(kunlik)} so'm
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 tabular-nums">
-                  Keldi {y.toliq} · yarim {y.yarim} · kelmadi {kelmadi}
+                  Keldi {y.toliq} · kelmadi {kelmadi}
                 </span>
               </div>
 
@@ -195,7 +198,7 @@ export function MaoshTab({ ishchilar = [], yoqlama = {}, avanslar = {}, maoshlar
                 <Qator label="Oy boshida qoldiq" value={b.boshida}
                   klass={b.boshida >= 0 ? 'text-emerald-700' : 'text-red-600'} />
                 <Qator label={`Shu oyda ishlangan (${y.jamiKun} kun)`} value={b.ishlangan} sign="+" />
-                <Qator label="Shu oyda avans" value={b.avans} sign="−" klass="text-amber-700" />
+                <Qator label={`Avans (shu oy + keyingi oy 1–${MAOSH_KUNI}-kun)`} value={b.avans} sign="−" klass="text-amber-700" />
                 <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-slate-100">
                   <span className="font-bold text-slate-700">= Oy yakuni (jami haq)</span>
                   <span className="font-bold tabular-nums text-slate-900">{fmt(b.yakun)}</span>

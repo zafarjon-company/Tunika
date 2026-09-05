@@ -2,9 +2,10 @@
 //  YO'QLAMA — DAVOMAT KALENDARI (oylik ko'rinish)
 // ------------------------------------------------------------
 //  Ishchi × kun matritsasi: kim qaysi kuni ishlagani bir qarashda.
-//  Katakni bosib belgilash: bo'sh → Keldi → Yarim → Kelmadi → bo'sh.
+//  Katakni bosib belgilash: bo'sh → Keldi → Kelmadi → bo'sh.
 //  O'ngda — har ishchi uchun oylik jami ish kunlari.
-//  yoqlama tuzilishi: { 'YYYY-MM-DD': { ishchiId: 'keldi'|'yarim'|'kelmadi' } }
+//  yoqlama tuzilishi: { 'YYYY-MM-DD': { ishchiId: 'keldi'|'kelmadi' } }
+//  (eski 'yarim' yozuvlar Keldi deb ko'rsatiladi va hisoblanadi)
 // ============================================================
 import React, { useState } from 'react';
 import { CalendarDays } from 'lucide-react';
@@ -13,13 +14,13 @@ import { toMonthInput, toDateInput, daysInMonth, oylikYoqlama, oyFaolmi } from '
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 // Bosilganda holatlar shu tartibda almashinadi (oxiridan keyin — bo'sh)
-const CYCLE = ['keldi', 'yarim', 'kelmadi'];
+const CYCLE = ['keldi', 'kelmadi'];
 const CELL = {
   keldi:   { bg: 'bg-emerald-500 text-white', label: 'K' },
-  yarim:   { bg: 'bg-amber-400 text-white',   label: 'Y' },
+  yarim:   { bg: 'bg-emerald-500 text-white', label: 'K' }, // eski yozuv — Keldi kabi
   kelmadi: { bg: 'bg-red-500 text-white',     label: '×' },
 };
-const HOLAT_NOMI = { keldi: 'Keldi', yarim: 'Yarim kun', kelmadi: 'Kelmadi' };
+const HOLAT_NOMI = { keldi: 'Keldi', yarim: 'Keldi', kelmadi: 'Kelmadi' };
 
 function oyLabel(oy) {
   const [y, m] = (oy || '').split('-').map(Number);
@@ -43,7 +44,7 @@ export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, setYoqlamaKun })
   function cycle(ishchiId, kun) {
     const sana = sanaOf(kun);
     const cur = yoqlama[sana]?.[ishchiId];
-    const idx = CYCLE.indexOf(cur);
+    const idx = CYCLE.indexOf(cur === 'yarim' ? 'keldi' : cur);
     const next = idx === -1 ? 'keldi' : (idx >= CYCLE.length - 1 ? null : CYCLE[idx + 1]);
     setYoqlamaKun(sana, ishchiId, next);
   }
@@ -60,11 +61,10 @@ export function YoqlamaKalendar({ ishchilar = [], yoqlama = {}, setYoqlamaKun })
           </div>
           <div className="ml-auto flex items-center gap-3 text-[11px] text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500" /> Keldi</span>
-            <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-400" /> Yarim</span>
             <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500" /> Kelmadi</span>
           </div>
         </div>
-        <p className="text-[11px] text-slate-400 mt-2">Katakni bosib belgilang: bo'sh → Keldi → Yarim → Kelmadi → bo'sh.</p>
+        <p className="text-[11px] text-slate-400 mt-2">Katakni bosib belgilang: bo'sh → Keldi → Kelmadi → bo'sh.</p>
       </Card>
 
       {ishchilar.length === 0 ? (

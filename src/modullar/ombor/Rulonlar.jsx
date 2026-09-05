@@ -10,8 +10,16 @@
 //  tafsilotlari (og'irlik, uzunlik, narx $/t, kurs, rulon so'm).
 //  Excel eksporti esa daftar tartibida — to'liq hisob zanjiri bilan.
 //
-//  Barcha hisob-kitob src/lib/omborHisob.js dagi sof funksiyalarda;
-//  bu faylda birorta narx / kurs / koeffitsient QATTIQ YOZILMAGAN.
+//  Formada zavod + rang (→ tur) + qalinlik tanlanganda narx ($/t)
+//  sozlamadagi ZAVOD NARX JADVALIDAN o'zi tushadi (qo'lda o'zgartirsa
+//  bo'ladi). Saqlangan rulonda esa narx SNAPSHOT — varaqa yangilansa
+//  eski rulonlar o'zgarmaydi; tahrirda narx jadvaldan faqat tugma
+//  bosilsa qayta olinadi.
+//
+//  Barcha hisob-kitob src/lib/omborHisob.js dagi sof funksiyalarda; bu
+//  faylda narx / kurs / koeffitsient yo'q — hammasi sozlamadan keladi
+//  (boshlang'ich sozlama, jumladan foydalanuvchi bergan narx varaqasi,
+//  omborSeed.js da; interfeysdan tahrirlanadi).
 //
 //  MAVZU (tema): faqat index.css da qayta bo'yaladigan Tailwind
 //  klasslari ishlatiladi — bg-white, bg-slate-50/100, text-slate-400..900,
@@ -26,11 +34,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Trash2, Edit3, ChevronUp, ChevronDown, AlertTriangle, AlertCircle,
-  Search, X, FileSpreadsheet, Layers, Check, Calculator,
+  Search, X, FileSpreadsheet, Layers, Check, Calculator, RotateCcw,
 } from 'lucide-react';
 import { Card, SectionTitle, StatBox, FullModal, rangChipStyle } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn, toDateInput } from '../../lib/helpers.js';
-import { hisobla, rulonHisob, jamiHisob, turTaxmin, son, norm, OGOH } from '../../lib/omborHisob.js';
+import {
+  hisobla, rulonHisob, jamiHisob, turTaxmin, narxTop, jadvalQalinliklar, qalinlikTeng,
+  son, norm, OGOH,
+} from '../../lib/omborHisob.js';
 import { sozlamaRoyxat } from '../../lib/omborSeed.js';
 import { downloadXLSX } from '../../lib/xlsx.js';
 
@@ -175,12 +186,23 @@ function OgohBelgi({ h }) {
   );
 }
 
+// Rang nomidan namuna uchun ASOS rang: "Oq yaltiroq salafan" → "Oq",
+// "Atsenkovka" → metall jilo. Qoplama so'zlari (yaltiroq / salafan / plyonka /
+// mebel) rang emas — namuna uchun olib tashlanadi. Faqat ko'rinish uchun.
+function rangAsos(rang) {
+  const s = norm(rang);
+  if (!s) return '';
+  if (/atsenk|atsink|otsink|aksink|sinkov/.test(s)) return 'Aksinkofka';
+  const asos = s.replace(/\b(yaltiroq|salafan|plyonka|mebel|mat)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  return asos || rang;
+}
+
 // Rang namunasi (kvadratcha)
 function RangNamuna({ rang, size = 'w-4 h-4' }) {
   if (!rang) return <span className={`${size} rounded border border-slate-300 bg-slate-100 inline-block flex-shrink-0`} />;
   return (
     <span className={`${size} rounded border border-black/10 inline-block flex-shrink-0`}
-      title={rang} style={rangChipStyle(rang)} />
+      title={rang} style={rangChipStyle(rangAsos(rang))} />
   );
 }
 
@@ -282,11 +304,13 @@ function formaYasa(r, sozlama, keyingiNomer) {
   };
 }
 
-// Formadan rulon yozuvi: raqamlar son, bo'sh — '' (kiritilmagan)
-function formadanRulon(f, asl) {
+// Formadan rulon yozuvi: raqamlar son, bo'sh — '' (kiritilmagan).
+//  narxManba — 'jadval' (zavod jadvalidan olingan) yoki 'qolda'; berilmasa tegilmaydi.
+function formadanRulon(f, asl, narxManba) {
   const s = (v) => (v === '' || v == null ? '' : (son(v) ?? ''));
   const rulon = {
     ...(asl || {}),
+    ...(narxManba ? { narxManba } : {}),
     nomer: s(f.nomer), sana: f.sana || '',
     zavod: f.zavod.trim(), tur: f.tur.trim(), rang: f.rang.trim(),
     qalinlik: s(f.qalinlik), ogirlik: s(f.ogirlik),
@@ -362,9 +386,33 @@ function RulonForma({
   asl, sozlama, rangTur, zavodlar, turlar, ranglar, nom1, nom2, keyingiNomer,
   onClose, onSave,
 }) {
-  const [f, setF] = useState(() => formaYasa(asl, sozlama, keyingiNomer));
+  const [f, setF] = useState(() => {
+    const bosh = formaYasa(asl, sozlama, keyingiNomer);
+    // Tahrirda tur bo'sh, rang bor bo'lsa — rangdan bir marta chiqariladi (avto rejim)
+    if (asl && !bosh.tur.trim() && bosh.rang.trim()) bosh.tur = turTaxmin(rangTur, bosh.rang) || '';
+    return bosh;
+  });
   const [urinildi, setUrinildi] = useState(false); // "Saqlash" bosilganmi — xatolar shundan keyin ko'rinadi
   const yangi = !asl;
+
+  // ----- Avto bayroqlar -----
+  //  turAvto  — tur rangdan chiqariladi (foydalanuvchi turni qo'lda tanlamaguncha)
+  //  narxAvto — narx zavod jadvalidan tushadi (foydalanuvchi narxni qo'lda yozmaguncha)
+  //  Tahrirda ikkalasi ham O'CHIQ boshlanadi (tur bo'sh bo'lsa — yoqilgan): saqlangan
+  //  rulonning narxi xarid paytidagi snapshot, uni jadval jimgina almashtirmasin.
+  const [turAvto, setTurAvto] = useState(() => !asl || !String(asl.tur || '').trim());
+  const [narxAvto, setNarxAvto] = useState(() => !asl);
+
+  // Zavod + tur + qalinlik bo'yicha jadvaldagi narx va shu zavod/tur uchun qalinliklar
+  const jadvalNarx = useMemo(() => narxTop(sozlama, f.zavod, f.tur, f.qalinlik), [sozlama, f.zavod, f.tur, f.qalinlik]);
+  const jadvalQal = useMemo(() => jadvalQalinliklar(sozlama, f.zavod, f.tur), [sozlama, f.zavod, f.tur]);
+
+  // Avto rejimda jadvaldagi narx o'zgarsa (zavod / tur / qalinlik tanlandi) — maydon yangilanadi
+  useEffect(() => {
+    if (!narxAvto) return;
+    const yangiNarx = jadvalNarx == null ? '' : String(jadvalNarx);
+    setF((p) => (p.narxTonna === yangiNarx ? p : { ...p, narxTonna: yangiNarx }));
+  }, [narxAvto, jadvalNarx]);
 
   // Escape — yopish
   useEffect(() => {
@@ -376,16 +424,36 @@ function RulonForma({
   const set = (patch) => setF((p) => ({ ...p, ...patch }));
   const sonSet = (kalit) => (e) => { const s = sonMatn(e.target.value); if (s !== null) set({ [kalit]: s }); };
   const matnSet = (kalit) => (e) => set({ [kalit]: e.target.value });
-  // Rang tanlanganda tur BO'SH bo'lsa — rangdan taxmin qilinadi
+  // Rang tanlanganda tur avto rejimda bo'lsa — rangdan taxmin qilinadi
+  // ("Xapyor" → Xapyor, "Oq yaltiroq salafan" → Salafan, boshqalar → Rangli)
   const rangSet = (e) => {
     const rang = e.target.value;
     const patch = { rang };
-    if (rang && !f.tur.trim()) {
-      const t = turTaxmin(rangTur, rang);
-      if (t) patch.tur = t;
-    }
+    if (turAvto) patch.tur = rang ? (turTaxmin(rangTur, rang) || '') : '';
     set(patch);
   };
+  // Tur qo'lda tanlansa — avto o'chadi; "—" tanlansa — yana rangdan chiqariladi
+  const turSet = (e) => {
+    const tur = e.target.value;
+    if (!tur) { setTurAvto(true); set({ tur: f.rang ? (turTaxmin(rangTur, f.rang) || '') : '' }); return; }
+    setTurAvto(false);
+    set({ tur });
+  };
+  // Narx qo'lda yozilsa — avto o'chadi (jadval uni bosib yozmaydi)
+  const narxSet = (e) => {
+    const s = sonMatn(e.target.value);
+    if (s === null) return;
+    setNarxAvto(false);
+    set({ narxTonna: s });
+  };
+  // "Jadvaldan ol" — qo'lda yozilgan narxni jadvaldagi bilan almashtirish
+  const narxJadvaldan = () => {
+    if (jadvalNarx == null) return;
+    setNarxAvto(true);
+    set({ narxTonna: String(jadvalNarx) });
+  };
+  const narxJadvalga = son(f.narxTonna) != null && jadvalNarx != null && Math.abs(son(f.narxTonna) - jadvalNarx) < 1e-9;
+  const tanlovToliq = Boolean(f.zavod.trim() && f.tur.trim() && son(f.qalinlik) > 0);
 
   // Jonli hisob — yadro bilan (bu yerda formula yo'q)
   const h = useMemo(() => rulonHisob(formadanRulon(f, asl), { sozlama }), [f, asl, sozlama]);
@@ -397,8 +465,29 @@ function RulonForma({
     e.preventDefault();
     setUrinildi(true);
     if (xatoBor) return;
-    onSave(formadanRulon(f, asl));
+    // Manba faqat narx O'ZGARGANDA yangilanadi: avto (yoki "jadvaldan ol") bilan
+    // jadvaldagiga teng — 'jadval', aks holda 'qolda'. Narx tegilmagan tahrirda
+    // saqlangan manba qoladi (varaqa yangilangan bo'lsa ham "qo'lda"ga aylanmaydi).
+    const aslNarx = asl ? son(asl.narxTonna ?? asl.xaridNarx) : null;
+    const narxOzgardi = !asl || son(f.narxTonna) !== aslNarx;
+    const manba = narxOzgardi ? ((narxAvto && narxJadvalga) ? 'jadval' : 'qolda') : undefined;
+    onSave(formadanRulon(f, asl, manba));
   }
+
+  // Narx maydoni izohi — rejimga qarab (avto / qo'lda / saqlangan snapshot)
+  const narxHint = (() => {
+    const tanlov = `${f.zavod} · ${f.tur} · ${xomKor(f.qalinlik)} mm`;
+    if (jadvalNarx != null) {
+      if (narxJadvalga) return `Jadvaldan: ${tanlov}${sozlama.narxSana ? ` (varaqa ${sanaKor(sozlama.narxSana)})` : ''}`;
+      return asl && !narxAvto
+        ? 'Xarid paytidagi narx (saqlangan) — jadvaldagidan farq qiladi'
+        : "Qo'lda kiritilgan — jadvaldagidan farq qiladi";
+    }
+    if (!narxAvto) return asl ? 'Xarid paytidagi narx (saqlangan)' : "Qo'lda kiritilgan";
+    return tanlovToliq
+      ? `Jadvalda ${tanlov} uchun narx yo'q — qo'lda kiriting`
+      : "Kimdan, rang va qalinlik tanlansa jadvaldan o'zi tushadi";
+  })();
 
   const k = (nom) => (urinildi && xato[nom] ? MAYDON_XATO : MAYDON);
   const tonna = son(f.ogirlik) != null ? son(f.ogirlik) / 1000 : null;
@@ -423,13 +512,6 @@ function RulonForma({
                 {zavodlar.map((z) => <option key={z} value={z}>{z}</option>)}
               </select>
             </Maydon>
-            <Maydon label="Tur" hint="Bo'sh qolsa rangdan o'zi taxmin qilinadi">
-              <select value={f.tur} onChange={matnSet('tur')} className={MAYDON}>
-                <option value="">—</option>
-                {f.tur && !turlar.some((t) => norm(t) === norm(f.tur)) && <option value={f.tur}>{f.tur}</option>}
-                {turlar.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </Maydon>
             <Maydon label="Rang *" xato={xato.rang} korsat={urinildi}>
               <div className="flex items-center gap-2">
                 <RangNamuna rang={f.rang} size="w-8 h-8" />
@@ -440,10 +522,38 @@ function RulonForma({
                 </select>
               </div>
             </Maydon>
-            <Maydon label="Qalinlik (mm) *" xato={xato.qalinlik} korsat={urinildi}>
+            <Maydon label="Tur (zavod kategoriyasi)"
+              hint={turAvto ? "Rangdan o'zi chiqadi — narx shu tur bo'yicha topiladi" : "Qo'lda tanlangan («—» tanlansa yana rangdan chiqadi)"}>
+              <select value={f.tur} onChange={turSet} className={MAYDON}>
+                <option value="">—</option>
+                {f.tur && !turlar.some((t) => norm(t) === norm(f.tur)) && <option value={f.tur}>{f.tur}</option>}
+                {turlar.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Maydon>
+            <Maydon label="Qalinlik (mm) *" xato={xato.qalinlik} korsat={urinildi}
+              hint={f.zavod.trim() && f.tur.trim() && jadvalQal.length === 0
+                ? `Jadvalda ${f.zavod} · ${f.tur} uchun qalinlik yo'q — qo'lda yozing`
+                : ''}>
               <input inputMode="decimal" value={f.qalinlik} onChange={sonSet('qalinlik')} placeholder="0,45"
                 className={`${k('qalinlik')} tabular-nums`} />
             </Maydon>
+            {jadvalQal.length > 0 && (
+              <div className="col-span-2 flex flex-wrap items-center gap-1 -mt-1"
+                title="Jadvaldagi qalinliklar — bosib tanlang">
+                <span className="text-[11px] text-slate-400 mr-1">Jadvalda:</span>
+                {jadvalQal.map((q) => {
+                  const faol = qalinlikTeng(q, f.qalinlik);
+                  return (
+                    <button key={q} type="button" onClick={() => set({ qalinlik: String(q) })}
+                      aria-pressed={faol} title={`${String(q).replace('.', ',')} mm`}
+                      className={`px-1.5 py-0.5 rounded text-[11px] tabular-nums border ${
+                        faol ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                      {String(q).replace('.', ',')}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -456,9 +566,15 @@ function RulonForma({
               <input inputMode="decimal" value={f.ogirlik} onChange={sonSet('ogirlik')} placeholder="5150"
                 className={`${k('ogirlik')} tabular-nums`} />
             </Maydon>
-            <Maydon label="Narx, 1 tonna ($) *" xato={xato.narxTonna} korsat={urinildi}>
-              <input inputMode="decimal" value={f.narxTonna} onChange={sonSet('narxTonna')} placeholder="1130"
+            <Maydon label="Narx, 1 tonna ($) *" xato={xato.narxTonna} korsat={urinildi} hint={narxHint}>
+              <input inputMode="decimal" value={f.narxTonna} onChange={narxSet} placeholder="1130"
                 className={`${k('narxTonna')} tabular-nums`} />
+              {jadvalNarx != null && !narxJadvalga && (
+                <button type="button" onClick={narxJadvaldan}
+                  className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200 bg-white text-[11px] text-slate-600 hover:bg-slate-50">
+                  <RotateCcw className="w-3 h-3" /> Jadvaldan ol: <b className="tabular-nums">{fmt(jadvalNarx)} $</b>
+                </button>
+              )}
             </Maydon>
             <Maydon label="Dollar kursi (so'm) *" xato={xato.kurs} korsat={urinildi} hint="Olingan kungi kurs">
               <input inputMode="decimal" value={f.kurs} onChange={sonSet('kurs')} placeholder="12100"
@@ -917,7 +1033,8 @@ export function Rulonlar({
                         <td className="px-2 py-1.5 text-right"><QoldiqKor q={q} /></td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-700">{olchovKor(q.ogirlik) || <Bosh />}</td>
                         <td className="px-2 py-1.5 text-right"><UzunlikKor h={h} /></td>
-                        <PulKatak qiymat={h.narxTonna} />
+                        <PulKatak qiymat={h.narxTonna}
+                          title={q.narxManba === 'jadval' ? 'Zavod narx jadvalidan' : q.narxManba === 'qolda' ? "Qo'lda kiritilgan" : ''} />
                         <PulKatak qiymat={h.kurs} />
                         <PulKatak qiymat={h.rulonSom} title={h.jamiSom != null ? `Yo'lkira bilan: ${fmt(h.jamiSom)} so'm` : ''} />
                         <td className="px-2 py-1.5 text-slate-500 max-w-[180px] truncate" title={q.izoh || ''}>{q.izoh || <Bosh />}</td>
