@@ -67,7 +67,7 @@ npm run preview    # build'ni lokal sinash
         ├── yoqlama/        # Belgilash, Kalendar, Avans
         ├── ishchilar/      # Royxat, Lavozimlar, Qobiliyatlar, Kamchiliklar
         ├── narxlar/        # Listlar, Metrli, Aksessuarlar
-        ├── ombor/          # Materiallar, Harakat, Rulonlar, OmborSozlama
+        ├── ombor/          # Materiallar, Harakat, Rulonlar, Royxat, OmborSozlama
         ├── hisobot/        # Dashboard, Kassa, Zakaslar, Ishchilar, charts
         ├── jurnal/         # amallar jurnali (log)
         └── sozlamalar/     # Sozlamalar
@@ -89,7 +89,7 @@ npm run preview    # build'ni lokal sinash
   - *Rulonlar* — ombordagi rulonlar daftar jadvali tartibida va ularning
     **1 metr uchun tannarxi hamda sotuv narxi**. Har rulon o'z narxi ($/t),
     kursi va yo'lkirasi bilan yoziladi; standart qiymatlar (kurs, yo'lkira,
-    bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari) interfeysdan
+    bo'luvchilar, tanlov ro'yxatlari) interfeysdan
     tahrirlanadi va Firestore'da saqlanadi — hisob hech qachon koddagi
     qiymatga qaramaydi (kodda faqat boshlang'ich sozlama bor).
 - **Jurnal** — barcha amallar tarixi.
@@ -111,17 +111,17 @@ maydonlar foydalanuvchi kiritadi, qolgani o'zi hisoblanadi
 | **Rulon $** | hisob | `og'irlik / 1000 × narx $/t` |
 | Kurs | kiritiladi (yangi rulonda standart kurs avtomatik) | — |
 | **Rulon so'm** | hisob | `rulon $ × kurs` |
-| Uzunlik (m) | kiritiladi — rulon ichidagi qog'ozdan | bo'sh bo'lsa `og'irlik / (kg/m)` taxminan (≈ belgisi) |
+| Uzunlik (m) | kiritiladi — rulon ichidagi qog'ozdan | kiritilmasa 1 m tannarx chiqmaydi (ogoh) |
 | Yo'lkira $/t | ixtiyoriy — bo'sh bo'lsa standart (sozlamada, boshlang'ich 10) | — |
 | **Yo'lkira $** | hisob | `og'irlik / 1000 × yo'lkira $/t` |
 | **1 m tannarx** | hisob | `(rulon so'm + yo'lkira so'm) ÷ uzunlik` |
-| **5 % / 10 %** (nomlari sozlamada) | hisob | `1 m tannarx ÷ 0.95` / `÷ 0.90` (bo'luvchilar sozlamada) |
+| **5 % / 10 %** (nomlari sozlamada) | hisoblanadi, **yaxlitlangani qo'lda kiritiladi** | `1 m tannarx ÷ 0.95` / `÷ 0.90` (bo'luvchilar sozlamada); formada hisoblangani ko'rinib turadi, foydalanuvchi yaxlitlab (61 476 → 62 000) kiritadi va ro'yxatda o'sha ishlatiladi |
 | Qoldiq (m) | kiritiladi | bo'sh bo'lsa = uzunlik |
 
 Yaxlitlash **faqat ko'rsatishda** (`Math.round`) — oraliq hisoblarda yo'q.
-kg/m jadvali faqat uzunlik yozilmaganda ishlatiladi; uzunlik yozilgan bo'lsa
-haqiqiy kg/m jadvaldagidan ±5 % dan ko'p farq qilsa qator ogohlantiriladi
-(qalinlik noto'g'ri bo'lishi mumkin).
+Qalinlik hamma joyda verguldan keyin ikki xona bilan ko'rsatiladi (0.40, 0.45).
+*Ombor → Ro'yxat* — sotuv uchun qisqa ro'yxat: kimdan · tur · rang · qalinlik ·
+kiritilgan 5 % / 10 % narxlari (faqat ko'rish).
 
 Hisob zanjirini tekshirish:
 
@@ -159,8 +159,8 @@ varaqa yangilansa eski rulonlar o'zgarmaydi (tahrirda «jadvaldan ol» tugmasi
 bilan qayta olinadi). Rulonda `narxManba: 'jadval' | 'qolda'` saqlanadi.
 
 Kodda faqat *sozlama* boshlang'ich qiymatlari bor (standart kurs, standart
-yo'lkira, bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari, rang→tur
-qoidalari va foydalanuvchi bergan 01.09.2026 narx varaqasi). Ular Sozlama
+yo'lkira, bo'luvchilar, tanlov ro'yxatlari, rang→tur qoidalari va
+foydalanuvchi bergan 01.09.2026 narx varaqasi). Ular Sozlama
 panelidan tahrirlanadi; **"Boshlang'ich sozlamaga qaytarish"** tugmasi faqat
 shu sozlamani tiklaydi, rulonlarga tegmaydi.
 

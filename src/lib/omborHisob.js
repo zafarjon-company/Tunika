@@ -58,15 +58,6 @@ export function qalinlikTeng(a, b) {
   return Math.abs(x - y) < QAL_EPS;
 }
 
-// ----- Zavod guruhi (og'irlik jadvali uchun) -----
-//  SMZ zavodi listlari boshqalardan OG'IRROQ chiqadi, shuning uchun
-//  kg/m jadvali ikki guruhga bo'lingan: 'SMZ' va 'BOSHQA'.
-export function zavodGuruh(zavod) {
-  // Nomi qo'lda yozilgan bo'lishi mumkin ("SMZ zavod", "smz-2") — shuning uchun
-  // aniq tenglik emas, alohida so'z sifatida qidiramiz.
-  return /(^|\s|-)smz($|\s|-)/.test(norm(zavod)) ? 'SMZ' : 'BOSHQA';
-}
-
 // Jadvaldan qalinlik bo'yicha qiymat olish. Kalitlar matn ("0.40"), kiritma
 // esa son (0.4) bo'lishi mumkin — shuning uchun son sifatida solishtiramiz.
 function jadvalQiymat(jadval, qalinlik) {
@@ -81,19 +72,13 @@ function jadvalQiymat(jadval, qalinlik) {
   return null;
 }
 
-// 1 metr listning og'irligi (kg/m).
-//  Avval sozlamadagi kgPerM jadvalidan; jadvalda yo'q qalinlik uchun
-//  chiziqli koeffitsient (kgPerM = qalinlik × koef) ishlatiladi.
-//  Ikkalasi ham bo'lmasa — null (hisoblab bo'lmaydi).
-export function kgPerMetr(sozlama, zavod, qalinlik) {
-  const q = son(qalinlik);
-  if (!musbat(q)) return null;
-  const guruh = zavodGuruh(zavod);
-  const jadval = ((sozlama && sozlama.kgPerM) || {})[guruh];
-  const jadvaldan = jadvalQiymat(jadval, q);
-  if (musbat(jadvaldan)) return jadvaldan;
-  const koef = son(guruh === 'SMZ' ? sozlama && sozlama.koefSMZ : sozlama && sozlama.koefBoshqa);
-  return musbat(koef) ? q * koef : null;
+// Qalinlikni ko'rsatish: HAR DOIM verguldan keyin ikki xona ("0.40", "0.45",
+// "1.00") — do'konda shunday o'rganilgan. Kasri ko'proq bo'lsa (0.225) o'zicha.
+export function qalKor(q) {
+  const n = son(q);
+  if (n == null) return '';
+  const kasr = (String(n).split('.')[1] || '').length;
+  return kasr > 2 ? String(n) : n.toFixed(2);
 }
 
 // ----- Zavod narx jadvali ($/tonna) -----
@@ -147,18 +132,15 @@ export function jadvalQalinliklar(sozlama, zavod, tur) {
 // ----- Ogohlantirish kodlari (3.4-bo'lim) -----
 export const OGOH = {
   NARX_YOQ:   'narxYoq',    // narx yoki kurs kiritilmagan — hisoblab bo'lmaydi
-  UZUNLIK_YOQ:'uzunlikYoq', // uzunlik kiritilmagan va kg/m dan ham chiqmadi
-  QALINLIK:   'qalinlik',   // o'lchangan kg/m jadvaldagidan ±5% dan ko'p farq qiladi
+  UZUNLIK_YOQ:'uzunlikYoq', // uzunlik kiritilmagan — 1 m tannarx chiqmaydi
   TASDIQSIZ:  'tasdiqsiz',  // zavod/tur/qalinlik noaniq
 };
-
-// O'lchangan va kutilgan kg/m orasidagi ruxsat etilgan farq (±5 %)
-export const KG_M_CHEK = 0.05;
 
 // ----- ASOSIY: bitta rulonni to'liq hisoblash -----
 //  rulon — { nomer, sana, zavod (kimdan), tur, rang, qalinlik,
 //            ogirlik (kg), narxTonna ($/t), kurs (so'm/$), uzunlik (m),
-//            yolkiraTonna ($/t yoki null = standart), qoldiq, izoh, tasdiqlanmagan }
+//            yolkiraTonna ($/t yoki null = standart), qoldiq, izoh, tasdiqlanmagan,
+//            narx1, narx2 — foydalanuvchi KIRITGAN (yaxlitlangan) sotuv narxlari }
 //  ctx   — { sozlama }
 //  Natija — barcha oraliq qiymatlar YAXLITLANMAGAN holda.
 //  Hisoblab bo'lmagan qiymat = null (0 emas! "0 so'm" deb ko'rsatilmasin).
@@ -191,22 +173,27 @@ export function rulonHisob(rulon, ctx = {}) {
   const jamiSom = rulonSom != null ? rulonSom + (yolkiraSom || 0) : null;
   const jamiDollar = rulonDollar != null ? rulonDollar + (yolkiraDollar || 0) : null;
 
-  // 5) Uzunlik: kiritilgan bo'lsa o'sha (rulon ichidagi qog'ozdan),
-  //    bo'lmasa og'irlikdan kg/m jadvali orqali — FAQAT zaxira, "≈" bilan ko'rsatiladi
-  const kgM = kgPerMetr(sozlama, r.zavod, qalinlik);
+  // 5) Uzunlik — FAQAT kiritilgani (rulon ichidagi qog'ozdan). Og'irlikdan
+  //    taxmin qilinmaydi: kiritilmasa 1 m tannarx chiqmaydi va ogoh beriladi.
   const kiritilganUzunlik = son(r.uzunlik);
-  const hisobUzunlik = (musbat(ogirlik) && musbat(kgM)) ? ogirlik / kgM : null;
-  const uzunlik = musbat(kiritilganUzunlik) ? kiritilganUzunlik : hisobUzunlik;
-  const uzunlikHisoblangan = !musbat(kiritilganUzunlik) && musbat(hisobUzunlik);
+  const uzunlik = musbat(kiritilganUzunlik) ? kiritilganUzunlik : null;
 
   // 6) 1 m tannarxi so'm
   const metrTannarx = (jamiSom != null && musbat(uzunlik)) ? jamiSom / uzunlik : null;
 
-  // 7-8) Sotuv narxlari (bo'luvchi 0 bo'lsa — hisoblanmaydi)
+  // 7-8) Sotuv narxlari: HISOBLANGANI (tannarx ÷ bo'luvchi) va foydalanuvchi
+  //    KIRITGANI (yaxlitlangan, masalan 61 476 → 62 000). Ro'yxat va hisobda
+  //    kiritilgani ustun turadi; kiritilmagan bo'lsa hisoblangani olinadi.
   const b1 = son(sozlama.bolizvchi1);
   const b2 = son(sozlama.bolizvchi2);
-  const sotuv1 = (metrTannarx != null && musbat(b1)) ? metrTannarx / b1 : null;
-  const sotuv2 = (metrTannarx != null && musbat(b2)) ? metrTannarx / b2 : null;
+  const sotuv1Hisob = (metrTannarx != null && musbat(b1)) ? metrTannarx / b1 : null;
+  const sotuv2Hisob = (metrTannarx != null && musbat(b2)) ? metrTannarx / b2 : null;
+  const narx1 = son(r.narx1);
+  const narx2 = son(r.narx2);
+  const sotuv1Qolda = musbat(narx1);
+  const sotuv2Qolda = musbat(narx2);
+  const sotuv1 = sotuv1Qolda ? narx1 : sotuv1Hisob;
+  const sotuv2 = sotuv2Qolda ? narx2 : sotuv2Hisob;
 
   // Rulonning ombordagi qoldig'i (kiritilmagan bo'lsa — uzunlikka teng)
   const qoldiqXom = son(r.qoldiq);
@@ -230,7 +217,7 @@ export function rulonHisob(rulon, ctx = {}) {
     ogohlar.push({ kod: OGOH.NARX_YOQ, daraja: 'toq', matn: `Kiritilmagan: ${yetishmaydi}` });
   }
 
-  // Uzunlik yo'q va hisoblab ham bo'lmadi — 1 m tannarx chiqmaydi
+  // Uzunlik yo'q — 1 m tannarx chiqmaydi
   if (musbat(ogirlik) && !musbat(uzunlik)) {
     ogohlar.push({
       kod: OGOH.UZUNLIK_YOQ, daraja: 'toq',
@@ -238,27 +225,12 @@ export function rulonHisob(rulon, ctx = {}) {
     });
   }
 
-  // O'lchangan kg/m jadvaldagidan ±5 % dan ko'p farq qilsa — qalinlik yoki
-  // uzunlik noto'g'ri yozilgan bo'lishi mumkin. FAQAT uzunlik QO'LDA kiritilgan
-  // bo'lsa tekshiriladi (hisoblangan uzunlikda farq ta'rifi bo'yicha 0).
-  let olchanganKgM = null;
-  if (musbat(ogirlik) && musbat(kiritilganUzunlik)) {
-    olchanganKgM = ogirlik / kiritilganUzunlik;
-    if (musbat(kgM) && Math.abs(olchanganKgM - kgM) / kgM > KG_M_CHEK) {
-      ogohlar.push({
-        kod: OGOH.QALINLIK, daraja: 'toq',
-        matn: `Qalinlik yoki uzunlik mos emas shekilli (o'lchangan ${olchanganKgM.toFixed(2)} kg/m, kutilgan ${kgM.toFixed(2)} kg/m)`,
-      });
-    }
-  }
-
   return {
     narxTonna, kurs, yolkiraTonna, yolkiraStandart,
     rulonDollar, rulonSom, yolkiraDollar, yolkiraSom, jamiDollar, jamiSom,
-    uzunlik, uzunlikHisoblangan, hisobUzunlik,
-    metrTannarx, sotuv1, sotuv2,
+    uzunlik,
+    metrTannarx, sotuv1, sotuv2, sotuv1Hisob, sotuv2Hisob, sotuv1Qolda, sotuv2Qolda,
     qoldiq, qoldiqQiymat,
-    kgM, olchanganKgM,
     ogohlar,
     // Qator fonini tanlash uchun eng "og'ir" daraja
     daraja: ogohlar.some((o) => o.daraja === 'qizil') ? 'qizil'

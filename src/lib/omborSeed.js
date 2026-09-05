@@ -13,13 +13,14 @@
 //
 //  Firestore kalitlari (loyihaning `shop/<kalit>` modeli):
 //    'ombor-sozlama'   → { kurs, yolkiraTonna, bolizvchi1, bolizvchi2,
-//                          nom1, nom2, kgPerM, koefSMZ, koefBoshqa, kursSana,
+//                          nom1, nom2, kursSana,
 //                          zavodlar, turlar, ranglar,
 //                          narxJadval: { [zavod]: { [tur]: { [qalinlik]: $/t } } },
 //                          narxSana }
 //    'ombor-rang-tur'  → { qoidalar: [{ naqsh, tur }], standart }
 //    'ombor-rulonlar'  → { [id]: { id, nomer, sana, zavod, tur, rang, qalinlik,
 //                                  ogirlik, narxTonna, kurs, uzunlik, yolkiraTonna,
+//                                  narx1, narx2 (kiritilgan sotuv narxlari),
 //                                  qoldiq, izoh, tasdiqlanmagan } }  ← bo'sh boshlanadi
 // ============================================================
 
@@ -88,15 +89,6 @@ export const SOZLAMA_BOSHLANGICH = {
   bolizvchi2: 0.90,   // 2-sotuv narxi = 1 m tannarx ÷ 0.90
   nom1: '5%',         // 1-ustun sarlavhasi
   nom2: '10%',        // 2-ustun sarlavhasi
-  // Qalinlik → 1 m og'irligi (kg). SMZ listlari boshqalardan og'irroq chiqadi.
-  // Bu o'lchov ma'lumoti — uzunlik og'irlikdan shu jadval orqali hisoblanadi.
-  kgPerM: {
-    SMZ:    { '0.35': 3.27, '0.40': 3.74, '0.45': 4.23, '0.50': 4.63, '0.60': 5.44 },
-    BOSHQA: { '0.35': 3.25, '0.40': 3.62, '0.45': 4.07, '0.50': 4.53, '0.60': 5.36 },
-  },
-  // Jadvalda yo'q qalinlik uchun: kg/m = qalinlik × koef
-  koefSMZ: 9.35,
-  koefBoshqa: 9.05,
   kursSana: '',       // kurs oxirgi marta qachon o'zgartirilgan
   // Dropdown ro'yxatlari — Sozlama panelidan to'liq tahrirlanadi
   //  "Kimdan / zavod" — daftardagidek: zavod yoki yetkazib beruvchi ("SMZ Momin")
