@@ -6,8 +6,10 @@
 //  Model: har rulonda O'ZINING narxi ($/t), kursi va yo'lkirasi ($/t)
 //  yoziladi — foydalanuvchining daftaridagidek.
 // ============================================================
-import { rulonHisob, kgPerMetr, jamiHisob, turTaxmin, zavodGuruh, norm, OGOH } from './omborHisob.js';
-import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, sozlamaRoyxat } from './omborSeed.js';
+import {
+  rulonHisob, kgPerMetr, jamiHisob, turTaxmin, zavodGuruh, narxTop, jadvalQalinliklar, norm, OGOH,
+} from './omborHisob.js';
+import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, NARX_JADVAL_BOSHLANGICH, sozlamaRoyxat } from './omborSeed.js';
 
 const R = (n) => Math.round(n);
 let xato = 0;
@@ -228,6 +230,53 @@ console.log("\n=== 9) NOMNI HAMMA RULONDA QAYTA NOMLASH ===\n");
   tekshir("yangi qator (asl bo'sh) → emas", false, aniqla({ asl: '', v: 'Yangi' }));
   tekshir("faqat registr → emas", false, aniqla({ asl: 'SMZ', v: 'smz' }));
   tekshir("ishlatilmagan nom → emas", false, aniqla({ asl: 'Demir', v: 'Demir Master' }));
+}
+
+console.log("\n=== 10) ZAVOD NARX JADVALI ===\n");
+{
+  const s = SOZLAMA_BOSHLANGICH;
+  tekshir('SMZ · Rangli · 0.45 → 1270', 1270, narxTop(s, 'SMZ', 'Rangli', 0.45));
+  tekshir('registr / vergul farqsiz ("smz", "rangli", "0,45")', 1270, narxTop(s, 'smz', 'rangli', '0,45'));
+  tekshir('SMZ · Xapyor · "0.40" → 1380', 1380, narxTop(s, 'SMZ', 'Xapyor', '0.40'));
+  tekshir('SMZ · Atsenkovka · 2.5 → 1090', 1090, narxTop(s, 'SMZ', 'Atsenkovka', 2.5));
+  tekshir('SMZ · Salafan · 0.35 → 1480', 1480, narxTop(s, 'SMZ', 'Salafan', 0.35));
+  tekshir('Aziya Steel · Xapyor · 0.4 → 1260', 1260, narxTop(s, 'Aziya Steel', 'Xapyor', 0.4));
+  tekshir('Xitoy · Rangli · 0.22 → 1200', 1200, narxTop(s, 'Xitoy', 'Rangli', 0.22));
+  tekshir("jadvalda yo'q zavod (TMZ) → null", null, narxTop(s, 'TMZ', 'Rangli', 0.4));
+  tekshir("jadvalda yo'q qalinlik (SMZ Mebel 0.5) → null", null, narxTop(s, 'SMZ', 'Mebel', 0.5));
+  tekshir("bo'sh tur → null", null, narxTop(s, 'SMZ', '', 0.4));
+  tekshir("sozlamada jadval yo'q → null", null, narxTop({}, 'SMZ', 'Rangli', 0.4));
+  tekshir('qalinliklar: SMZ Yaltiroq', '0.35,0.4,0.45', jadvalQalinliklar(s, 'SMZ', 'Yaltiroq').join(','));
+  tekshir('qalinliklar: SMZ Atsenkovka 26 ta', 26, jadvalQalinliklar(s, 'SMZ', 'Atsenkovka').length);
+  tekshir("qalinliklar: yo'q zavod → []", 0, jadvalQalinliklar(s, 'TMZ', 'Rangli').length);
+  // Nol / manfiy narxli qator jadvaldan tushib qoladi
+  const s2 = { narxJadval: { A: { B: { '0.4': 0, '0.5': 1000, '0.6': -5 } } } };
+  tekshir('nol narx → null', null, narxTop(s2, 'A', 'B', 0.4));
+  tekshir("nol/manfiy narxli qalinlik ro'yxatga tushmaydi", '0.5', jadvalQalinliklar(s2, 'A', 'B').join(','));
+  // Boshlang'ich jadval butunligi: har katak musbat son, kalit — son matni,
+  // zavod / tur nomlari ro'yxatlarda bor (aks holda formada topilmaydi)
+  let kataklar = 0;
+  let buzuq = 0;
+  for (const [z, turlar] of Object.entries(NARX_JADVAL_BOSHLANGICH)) {
+    if (!SOZLAMA_BOSHLANGICH.zavodlar.some((x) => norm(x) === norm(z))) buzuq += 1;
+    for (const [t, ustun] of Object.entries(turlar)) {
+      if (!SOZLAMA_BOSHLANGICH.turlar.some((x) => norm(x) === norm(t))) buzuq += 1;
+      for (const [q, v] of Object.entries(ustun)) {
+        kataklar += 1;
+        if (!(Number(q) > 0) || !(Number(v) > 0) || String(Number(q)) !== q) buzuq += 1;
+      }
+    }
+  }
+  tekshir("boshlang'ich jadval: 81 katak (01.09.2026 varaqasi)", 81, kataklar);
+  tekshir("boshlang'ich jadval: buzuq katak / nom yo'q", 0, buzuq);
+  // Rang → tur: yangi ranglar o'z kategoriyasiga tushadi
+  tekshir("'Xapyor' rangi → Xapyor turi", 'Xapyor', turTaxmin(RANG_TUR_BOSHLANGICH, 'Xapyor'));
+  tekshir("'Atsenkovka' rangi → Atsenkovka", 'Atsenkovka', turTaxmin(RANG_TUR_BOSHLANGICH, 'Atsenkovka'));
+  tekshir("'Oq yaltiroq' → Yaltiroq", 'Yaltiroq', turTaxmin(RANG_TUR_BOSHLANGICH, 'Oq yaltiroq'));
+  tekshir("'Qaymoq yaltiroq salafan' → Salafan", 'Salafan', turTaxmin(RANG_TUR_BOSHLANGICH, 'Qaymoq yaltiroq salafan'));
+  // Har boshlang'ich rang uchun taxmin qilingan tur — tur ro'yxatida bor
+  const yoqTur = SOZLAMA_BOSHLANGICH.ranglar.filter((r) => !SOZLAMA_BOSHLANGICH.turlar.includes(turTaxmin(RANG_TUR_BOSHLANGICH, r)));
+  tekshir("har rangning turi tur ro'yxatida bor", '', yoqTur.join(','));
 }
 
 console.log(`\n${'='.repeat(46)}`);

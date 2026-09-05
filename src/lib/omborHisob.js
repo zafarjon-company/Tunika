@@ -96,6 +96,54 @@ export function kgPerMetr(sozlama, zavod, qalinlik) {
   return musbat(koef) ? q * koef : null;
 }
 
+// ----- Zavod narx jadvali ($/tonna) -----
+//  sozlama.narxJadval = { [zavod]: { [tur]: { [qalinlik]: narx } } } — zavodning
+//  narx varaqasi (rasmdagi jadval) sozlamada saqlanadi va interfeysdan
+//  tahrirlanadi. Zavod va tur nomlari norm() bilan (registr / apostrof
+//  farqisiz), qalinlik son sifatida ("0,40" === 0.4) solishtiriladi.
+//
+//  MUHIM: jadval FAQAT yangi rulon kiritishda narxni TAKLIF qiladi. Hisob
+//  uchun asos — rulonning o'zida yozilgan narx (xarid paytidagi). Varaqa
+//  yangilansa eski rulonlar o'zgarmaydi — daftardagidek.
+
+// Obyektda nomi norm() bo'yicha mos kalitni topish (saqlangan yozuvi bilan)
+function kalitTop(obj, nom) {
+  const n = norm(nom);
+  if (!n || !obj || typeof obj !== 'object') return null;
+  for (const k of Object.keys(obj)) if (norm(k) === n) return k;
+  return null;
+}
+
+// Zavod + tur uchun qalinlik → narx ustuni (yo'q bo'lsa null)
+function narxUstun(sozlama, zavod, tur) {
+  const jadval = sozlama && sozlama.narxJadval;
+  const zk = kalitTop(jadval, zavod);
+  if (zk == null) return null;
+  const tk = kalitTop(jadval[zk], tur);
+  if (tk == null) return null;
+  const ustun = jadval[zk][tk];
+  return (ustun && typeof ustun === 'object') ? ustun : null;
+}
+
+// Jadvaldan narx ($/t). Zavod, tur yoki qalinlik topilmasa — null.
+export function narxTop(sozlama, zavod, tur, qalinlik) {
+  const ustun = narxUstun(sozlama, zavod, tur);
+  return ustun ? jadvalQiymat(ustun, qalinlik) : null;
+}
+
+// Zavod + tur uchun jadvaldagi qalinliklar (son, o'sish tartibida) —
+// formada tez tanlash uchun. Narxi yo'q / nol qatorlar tushib qoladi.
+export function jadvalQalinliklar(sozlama, zavod, tur) {
+  const ustun = narxUstun(sozlama, zavod, tur);
+  if (!ustun) return [];
+  const out = new Set();
+  for (const k of Object.keys(ustun)) {
+    const q = son(k);
+    if (musbat(q) && musbat(son(ustun[k]))) out.add(q);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
 // ----- Ogohlantirish kodlari (3.4-bo'lim) -----
 export const OGOH = {
   NARX_YOQ:   'narxYoq',    // narx yoki kurs kiritilmagan — hisoblab bo'lmaydi

@@ -3,6 +3,7 @@
 // ------------------------------------------------------------
 //  Rulonlar hisobiga kiradigan BARCHA kirish qiymatlari shu
 //  panelda tahrirlanadi: standart kurs, standart yo'lkira, sotuv bo'luvchilari,
+//  ZAVOD NARX JADVALI (zavod → tur → qalinlik → $/t, varaqa sanasi),
 //  qalinlik → kg/m jadvali, koeffitsientlar va rang → tur
 //  qoidalari. Bu faylda birorta narx / kurs / koeffitsient
 //  QATTIQ YOZILMAGAN — hammasi proplardan keladi va yana
@@ -26,7 +27,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Settings, ChevronDown, ChevronUp, Plus, Trash2, Save, RotateCcw,
-  Database, Loader2, AlertTriangle, Check, List,
+  Database, Loader2, AlertTriangle, Check, List, Table2, Factory,
 } from 'lucide-react';
 import { Card, SectionTitle } from '../../components/ui.jsx';
 import { fmt, genId, sonMatn } from '../../lib/helpers.js';
@@ -135,11 +136,83 @@ function dublikatlar(qatorlar) {
   return dubl;
 }
 
+// ----- Zavod narx jadvali ($/t) — forma holati -----
+//  Saqlangan shakl: { [zavod]: { [tur]: { [qalinlik]: narx } } }.
+//  Formada esa zavod va tur QATOR ID lari bo'yicha turadi: nom o'zgartirilsa
+//  jadval unga ergashadi (saqlashda joriy nom bilan yoziladi).
+function kalitTop(obj, nom) {
+  const n = norm(nom);
+  if (!n || !obj || typeof obj !== 'object') return null;
+  for (const k of Object.keys(obj)) if (norm(k) === n) return k;
+  return null;
+}
+function narxHolat(jadval, zavodQatorlar, turQatorlar) {
+  const j = (jadval && typeof jadval === 'object') ? jadval : {};
+  const out = {};
+  for (const z of zavodQatorlar) {
+    const zk = kalitTop(j, z.v);
+    const zObj = (zk != null && j[zk] && typeof j[zk] === 'object') ? j[zk] : null;
+    out[z.id] = {};
+    for (const t of turQatorlar) {
+      const tk = zObj ? kalitTop(zObj, t.v) : null;
+      out[z.id][t.id] = tk != null ? kgQatorlar(zObj[tk]) : [];
+    }
+  }
+  return out;
+}
+// Forma holatidagi bitta ustun (zavod × tur) — yo'q bo'lsa bo'sh
+const narxUstunQatorlar = (f, zId, tId) => ((f.narx && f.narx[zId] && f.narx[zId][tId]) || []);
+
+// Forma → saqlanadigan jadval.
+//  Ro'yxatdagi zavod / turlar joriy nomi bilan qayta yoziladi. Ro'yxatda YO'Q
+//  (eski) zavod yoki turlarning narxlari esa TEGILMAYDI — sozlamani saqlash
+//  jimgina ma'lumot o'chirmasin. Bo'sh ustunlar yozilmaydi.
+function narxObyekt(f, eskiJadval) {
+  const eski = (eskiJadval && typeof eskiJadval === 'object') ? eskiJadval : {};
+  const nomlar = (qatorlar) => {
+    const st = new Set();
+    for (const r of qatorlar) { if (norm(r.v)) st.add(norm(r.v)); if (norm(r.asl)) st.add(norm(r.asl)); }
+    return st;
+  };
+  const zNomlar = nomlar(f.royxat.zavodlar);
+  const tNomlar = nomlar(f.royxat.turlar);
+  const out = {};
+  // 1) Ro'yxatda yo'q eski zavodlar — butunlay saqlanadi
+  for (const [z, turlar] of Object.entries(eski)) {
+    if (!zNomlar.has(norm(z)) && turlar && typeof turlar === 'object') out[z] = turlar;
+  }
+  // 2) Ro'yxatdagi zavodlar — joriy nomi bilan
+  for (const z of f.royxat.zavodlar) {
+    const zNom = String(z.v || '').trim();
+    if (!zNom) continue;
+    const turlarOut = {};
+    // shu zavodning (eski yoki yangi nomi bilan) ro'yxatda yo'q turlari saqlanadi
+    for (const nom of [z.asl, z.v]) {
+      const zk = kalitTop(eski, nom);
+      if (zk == null || !eski[zk] || typeof eski[zk] !== 'object') continue;
+      for (const [t, ustun] of Object.entries(eski[zk])) if (!tNomlar.has(norm(t))) turlarOut[t] = ustun;
+    }
+    for (const t of f.royxat.turlar) {
+      const tNom = String(t.v || '').trim();
+      if (!tNom) continue;
+      const ustun = kgObyekt(narxUstunQatorlar(f, z.id, t.id));
+      if (Object.keys(ustun).length) turlarOut[tNom] = ustun;
+    }
+    if (Object.keys(turlarOut).length) out[zNom] = turlarOut;
+  }
+  return out;
+}
+
 // Sozlama propidan forma holatini yasash (hamma raqam MATN sifatida turadi —
 // vergul bilan yozishga xalaqit bermasin)
 function formaYasa(s) {
   const o = s || {};
   const kg = (o.kgPerM && typeof o.kgPerM === 'object') ? o.kgPerM : {};
+  const royxat = {
+    zavodlar: royxatQatorlar(sozlamaRoyxat(o, 'zavodlar')),
+    turlar: royxatQatorlar(sozlamaRoyxat(o, 'turlar')),
+    ranglar: royxatQatorlar(sozlamaRoyxat(o, 'ranglar')),
+  };
   return {
     kurs: xom(o.kurs),
     yolkiraTonna: xom(o.yolkiraTonna),
@@ -150,11 +223,10 @@ function formaYasa(s) {
     koefSMZ: xom(o.koefSMZ),
     koefBoshqa: xom(o.koefBoshqa),
     kg: { SMZ: kgQatorlar(kg.SMZ), BOSHQA: kgQatorlar(kg.BOSHQA) },
-    royxat: {
-      zavodlar: royxatQatorlar(sozlamaRoyxat(o, 'zavodlar')),
-      turlar: royxatQatorlar(sozlamaRoyxat(o, 'turlar')),
-      ranglar: royxatQatorlar(sozlamaRoyxat(o, 'ranglar')),
-    },
+    royxat,
+    // Zavod narx jadvali — zavod / tur qator id lari bo'yicha
+    narx: narxHolat(o.narxJadval, royxat.zavodlar, royxat.turlar),
+    narxSana: xom(o.narxSana),
   };
 }
 
@@ -179,6 +251,8 @@ function solish(f, r) {
       t: f.royxat.turlar.map((x) => x.v),
       c: f.royxat.ranglar.map((x) => x.v),
     },
+    ns: f.narxSana,
+    nx: f.royxat.zavodlar.map((z) => f.royxat.turlar.map((t) => narxUstunQatorlar(f, z.id, t.id).map((x) => [x.q, x.v]))),
     q: r.qoidalar.map((x) => [x.naqsh, x.tur]),
     st: r.standart,
   });
@@ -214,8 +288,12 @@ function MatnMaydon({ label, value, onChange, disabled, hint, placeholder }) {
   );
 }
 
-// ----- kg/m jadvalining bitta guruhi (SMZ yoki BOSHQA) -----
-function KgGuruh({ nom, izoh, qatorlar, dubl, notoliq, canEdit, onQator, onQosh, onOchir }) {
+// ----- Qalinlik → qiymat ustuni (kg/m guruhi yoki zavod narx ustuni) -----
+//  qiymatNom — o'ng ustun sarlavhasi ('kg / m' yoki '$ / t')
+function KgGuruh({
+  nom, izoh, qatorlar, dubl, notoliq, canEdit, onQator, onQosh, onOchir,
+  qiymatNom = 'kg / m', boshMatn = "Jadval bo'sh — faqat koeffitsient ishlatiladi",
+}) {
   return (
     <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50">
       <div className="flex items-baseline justify-between mb-2">
@@ -225,12 +303,12 @@ function KgGuruh({ nom, izoh, qatorlar, dubl, notoliq, canEdit, onQator, onQosh,
 
       <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5 items-center mb-1">
         <span className="text-[10px] text-slate-400 uppercase tracking-wider">Qalinlik</span>
-        <span className="text-[10px] text-slate-400 uppercase tracking-wider">kg / m</span>
+        <span className="text-[10px] text-slate-400 uppercase tracking-wider">{qiymatNom}</span>
         <span className="w-7" />
       </div>
 
       {qatorlar.length === 0 && (
-        <p className="text-[11px] text-slate-400 py-2 text-center">Jadval bo'sh — faqat koeffitsient ishlatiladi</p>
+        <p className="text-[11px] text-slate-400 py-2 text-center">{boshMatn}</p>
       )}
 
       {qatorlar.map((r) => {
@@ -386,6 +464,20 @@ export function OmborSozlama({
     ...f, kg: { ...f.kg, [guruh]: f.kg[guruh].filter((r) => r.id !== id) },
   }));
 
+  // ----- Zavod narx jadvali (zavod × tur ustunlari) -----
+  const narxUstunYoz = (f, zId, tId, qatorlar) => ({
+    ...f, narx: { ...(f.narx || {}), [zId]: { ...((f.narx || {})[zId] || {}), [tId]: qatorlar } },
+  });
+  const narxTahrir = (zId, tId, id, patch) => setForma((f) => narxUstunYoz(
+    f, zId, tId, narxUstunQatorlar(f, zId, tId).map((r) => (r.id === id ? { ...r, ...patch } : r)),
+  ));
+  const narxQosh = (zId, tId) => setForma((f) => narxUstunYoz(
+    f, zId, tId, [...narxUstunQatorlar(f, zId, tId), { id: genId(), q: '', v: '' }],
+  ));
+  const narxOchir = (zId, tId, id) => setForma((f) => narxUstunYoz(
+    f, zId, tId, narxUstunQatorlar(f, zId, tId).filter((r) => r.id !== id),
+  ));
+
   // ----- Tanlov ro'yxatlari (zavod / tur / rang) -----
   const royxatSet = (nom, id, v) => setForma((f) => ({
     ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].map((r) => (r.id === id ? { ...r, v } : r)) },
@@ -500,7 +592,25 @@ export function OmborSozlama({
   const notoliqBoshqa = useMemo(() => notoliqlar(forma.kg.BOSHQA), [forma.kg.BOSHQA]);
   const notoliqBor = notoliqSMZ.size > 0 || notoliqBoshqa.size > 0;
 
-  const xatoBor = maydonXato || dublBor || notoliqBor;
+  // Zavod narx jadvali: har ustunda takror / to'ldirilmagan qatorlar
+  const narxXato = useMemo(() => {
+    const dubl = new Set();
+    const notoliq = new Set();
+    for (const z of forma.royxat.zavodlar) {
+      for (const t of forma.royxat.turlar) {
+        const q = narxUstunQatorlar(forma, z.id, t.id);
+        dublikatlar(q).forEach((id) => dubl.add(id));
+        notoliqlar(q).forEach((id) => notoliq.add(id));
+      }
+    }
+    return { dubl, notoliq };
+  }, [forma]);
+  const narxXatoBor = narxXato.dubl.size > 0 || narxXato.notoliq.size > 0;
+  // Bo'sh nomli qatorlar jadvalda ko'rinmaydi (saqlashda ham tashlanadi)
+  const zavodQatorlarToliq = forma.royxat.zavodlar.filter((r) => String(r.v || '').trim());
+  const turQatorlarToliq = forma.royxat.turlar.filter((r) => String(r.v || '').trim());
+
+  const xatoBor = maydonXato || dublBor || notoliqBor || narxXatoBor;
 
   // Ustama foizi: 1 m tannarx ÷ b → +X %
   const foizMatn = (b) => (b != null && b > 0
@@ -561,6 +671,8 @@ export function OmborSozlama({
       turlar: royxatMassiv(forma.royxat.turlar),
       ranglar: royxatMassiv(forma.royxat.ranglar),
       kursSana: kursOzgardi ? bugun() : (sozlama.kursSana || ''),
+      narxJadval: narxObyekt(forma, sozlama.narxJadval),
+      narxSana: forma.narxSana || '',
     };
     const yangiRT = {
       qoidalar: rt.qoidalar
@@ -625,6 +737,7 @@ export function OmborSozlama({
     const savol = "Sozlama boshlang'ich holatga qaytariladi:\n"
       + "  • standart kurs, standart yo'lkira, bo'luvchilar, ustun nomlari\n"
       + "  • kg/m jadvali va koeffitsientlar\n"
+      + "  • zavod narx jadvali (boshlang'ich 01.09.2026 varaqasi)\n"
       + "  • rang → tur qoidalari\n\n"
       + "DIQQAT: bular TO'LIQ ALMASHTIRILADI — qo'shgan qalinliklaringiz,\n"
       + "qoidalaringiz va joriy kurs o'chadi.\n\n"
@@ -652,7 +765,8 @@ export function OmborSozlama({
 
   // Yopiq holatdagi qisqacha ma'lumot
   const qisqacha = `Standart kurs ${fmt(sozlama.kurs)} so'm · Yo'lkira ${olchovKor(sozlama.yolkiraTonna, 2)} $/t`
-    + ` · ${sozlama.nom1 || '—'} / ${sozlama.nom2 || '—'}`;
+    + ` · ${sozlama.nom1 || '—'} / ${sozlama.nom2 || '—'}`
+    + (sozlama.narxSana ? ` · Narx varaqasi ${sozlama.narxSana}` : '');
 
   const sinovNatija = turTaxmin({ qoidalar: rt.qoidalar, standart: rt.standart }, sinov);
 
@@ -804,7 +918,7 @@ export function OmborSozlama({
                 onKochir={(id, yon) => royxatKochir('zavodlar', id, yon)} />
 
               <RoyxatTahrir
-                sarlavha="Turlar" izoh="Qoplama turi — narx aynan shu bo'yicha topiladi."
+                sarlavha="Turlar (zavod kategoriyasi)" izoh="Narx jadvalidagi ustunlar shu nomlar bilan — narx zavod + tur + qalinlik bo'yicha topiladi."
                 qatorlar={forma.royxat.turlar} sanoq={sanoq.turlar} canEdit={canEdit}
                 onSet={(id, v) => royxatSet('turlar', id, v)}
                 onQosh={() => royxatQosh('turlar')}
@@ -812,7 +926,7 @@ export function OmborSozlama({
                 onKochir={(id, yon) => royxatKochir('turlar', id, yon)} />
 
               <RoyxatTahrir
-                sarlavha="Ranglar" izoh="Narxga ta'sir qilmaydi — faqat rulonni tanib olish uchun."
+                sarlavha="Ranglar" izoh="Sotuvdagi nomi. Xapyor, Atsenkovka, yaltiroq ham rang — rang → tur qoidasi ularni o'z kategoriyasiga o'tkazadi."
                 qatorlar={forma.royxat.ranglar} sanoq={sanoq.ranglar} canEdit={canEdit}
                 onSet={(id, v) => royxatSet('ranglar', id, v)}
                 onQosh={() => royxatQosh('ranglar')}
@@ -822,8 +936,83 @@ export function OmborSozlama({
 
             <p className="text-[11px] text-slate-400 mt-2">
               Bo'sh qatorlar va takror nomlar saqlashda o'zi tashlab yuboriladi.
-              Qalinlik alohida ro'yxat emas — u har qatorda qo'lda yoziladi.
+              Qalinlik alohida ro'yxat emas — formada zavod narx jadvalidagi qalinliklar
+              tugma sifatida chiqadi, boshqasini qo'lda yozsa bo'ladi.
             </p>
+          </div>
+
+          {/* ----- 2c) Zavod narx jadvali ($ / tonna) ----- */}
+          <div className="pt-2 border-t border-slate-100">
+            <SectionTitle icon={Table2}>Zavod narx jadvali ($ / tonna)</SectionTitle>
+            <p className="text-[11px] text-slate-500 -mt-2 mb-3">
+              Zavod narx varaqasi — rasmdagi tartibda: zavod → kategoriya (tur) → qalinlik → narx.
+              Yangi rulon kiritishda <b>kimdan + rang (→ tur) + qalinlik</b> tanlansa narx shu
+              jadvaldan o'zi tushadi (qo'lda o'zgartirsa bo'ladi). <b>Mavjud rulonlarga ta'sir qilmaydi</b>
+              {' '}— ularda xarid paytidagi narx qoladi. Yangi varaqa kelsa shu yerda yangilang.
+            </p>
+
+            <div className="max-w-xs mb-3">
+              <label className="block text-xs text-slate-500 mb-1">Varaqa sanasi</label>
+              <input type="date" value={forma.narxSana} disabled={!canEdit}
+                onChange={(e) => tahrir({ narxSana: e.target.value })}
+                className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white disabled:bg-slate-100 disabled:text-slate-400" />
+            </div>
+
+            {zavodQatorlarToliq.length === 0 && (
+              <p className="text-[11px] text-slate-400 py-2">Avval yuqoridagi «Zavodlar» ro'yxatiga zavod qo'shing.</p>
+            )}
+
+            <div className="space-y-3">
+              {zavodQatorlarToliq.map((z) => {
+                const bor = turQatorlarToliq.filter((t) => narxUstunQatorlar(forma, z.id, t.id).length > 0);
+                const yoq = turQatorlarToliq.filter((t) => narxUstunQatorlar(forma, z.id, t.id).length === 0);
+                const soni = bor.reduce((sum, t) => sum + narxUstunQatorlar(forma, z.id, t.id).length, 0);
+                return (
+                  <div key={z.id} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <Factory className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm font-bold text-slate-900">{z.v}</span>
+                      <span className="text-[11px] text-slate-400 tabular-nums">
+                        {soni ? `${soni} ta narx` : "narx yo'q — formada qo'lda kiritiladi"}
+                      </span>
+                    </div>
+                    {bor.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {bor.map((t) => (
+                          <KgGuruh key={t.id} nom={t.v} izoh="" qiymatNom="$ / t" boshMatn="Bo'sh"
+                            qatorlar={narxUstunQatorlar(forma, z.id, t.id)}
+                            dubl={narxXato.dubl} notoliq={narxXato.notoliq} canEdit={canEdit}
+                            onQator={(id, p) => narxTahrir(z.id, t.id, id, p)}
+                            onQosh={() => narxQosh(z.id, t.id)}
+                            onOchir={(id) => narxOchir(z.id, t.id, id)} />
+                        ))}
+                      </div>
+                    )}
+                    {canEdit && yoq.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className="text-[11px] text-slate-400">Kategoriya qo'shish:</span>
+                        {yoq.map((t) => (
+                          <button key={t.id} type="button" onClick={() => narxQosh(z.id, t.id)}
+                            className="px-2 py-1 rounded border border-dashed border-slate-300 bg-white text-slate-600 text-[11px] inline-flex items-center gap-1 hover:bg-slate-50">
+                            <Plus className="w-3 h-3" /> {t.v}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {narxXatoBor && (
+              <div className="mt-2 flex items-start gap-1.5 text-[11px] bg-red-50 border border-red-200 text-red-700 rounded p-2">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                <span>
+                  Narx jadvalida takror yoki to'ldirilmagan (yoki 0) qator bor — qizil kataklarni
+                  tuzating yoki qatorni o'chiring (aks holda saqlab bo'lmaydi).
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ----- 3) Rang → tur qoidalari ----- */}
