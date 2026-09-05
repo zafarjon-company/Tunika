@@ -16,8 +16,10 @@
 //  eski rulonlar o'zgarmaydi; tahrirda narx jadvaldan faqat tugma
 //  bosilsa qayta olinadi.
 //
-//  Barcha hisob-kitob src/lib/omborHisob.js dagi sof funksiyalarda;
-//  bu faylda birorta narx / kurs / koeffitsient QATTIQ YOZILMAGAN.
+//  Barcha hisob-kitob src/lib/omborHisob.js dagi sof funksiyalarda; bu
+//  faylda narx / kurs / koeffitsient yo'q — hammasi sozlamadan keladi
+//  (boshlang'ich sozlama, jumladan foydalanuvchi bergan narx varaqasi,
+//  omborSeed.js da; interfeysdan tahrirlanadi).
 //
 //  MAVZU (tema): faqat index.css da qayta bo'yaladigan Tailwind
 //  klasslari ishlatiladi — bg-white, bg-slate-50/100, text-slate-400..900,
@@ -384,7 +386,12 @@ function RulonForma({
   asl, sozlama, rangTur, zavodlar, turlar, ranglar, nom1, nom2, keyingiNomer,
   onClose, onSave,
 }) {
-  const [f, setF] = useState(() => formaYasa(asl, sozlama, keyingiNomer));
+  const [f, setF] = useState(() => {
+    const bosh = formaYasa(asl, sozlama, keyingiNomer);
+    // Tahrirda tur bo'sh, rang bor bo'lsa — rangdan bir marta chiqariladi (avto rejim)
+    if (asl && !bosh.tur.trim() && bosh.rang.trim()) bosh.tur = turTaxmin(rangTur, bosh.rang) || '';
+    return bosh;
+  });
   const [urinildi, setUrinildi] = useState(false); // "Saqlash" bosilganmi — xatolar shundan keyin ko'rinadi
   const yangi = !asl;
 
@@ -458,8 +465,29 @@ function RulonForma({
     e.preventDefault();
     setUrinildi(true);
     if (xatoBor) return;
-    onSave(formadanRulon(f, asl, narxJadvalga ? 'jadval' : 'qolda'));
+    // Manba faqat narx O'ZGARGANDA yangilanadi: avto (yoki "jadvaldan ol") bilan
+    // jadvaldagiga teng — 'jadval', aks holda 'qolda'. Narx tegilmagan tahrirda
+    // saqlangan manba qoladi (varaqa yangilangan bo'lsa ham "qo'lda"ga aylanmaydi).
+    const aslNarx = asl ? son(asl.narxTonna ?? asl.xaridNarx) : null;
+    const narxOzgardi = !asl || son(f.narxTonna) !== aslNarx;
+    const manba = narxOzgardi ? ((narxAvto && narxJadvalga) ? 'jadval' : 'qolda') : undefined;
+    onSave(formadanRulon(f, asl, manba));
   }
+
+  // Narx maydoni izohi — rejimga qarab (avto / qo'lda / saqlangan snapshot)
+  const narxHint = (() => {
+    const tanlov = `${f.zavod} · ${f.tur} · ${xomKor(f.qalinlik)} mm`;
+    if (jadvalNarx != null) {
+      if (narxJadvalga) return `Jadvaldan: ${tanlov}${sozlama.narxSana ? ` (varaqa ${sanaKor(sozlama.narxSana)})` : ''}`;
+      return asl && !narxAvto
+        ? 'Xarid paytidagi narx (saqlangan) — jadvaldagidan farq qiladi'
+        : "Qo'lda kiritilgan — jadvaldagidan farq qiladi";
+    }
+    if (!narxAvto) return asl ? 'Xarid paytidagi narx (saqlangan)' : "Qo'lda kiritilgan";
+    return tanlovToliq
+      ? `Jadvalda ${tanlov} uchun narx yo'q — qo'lda kiriting`
+      : "Kimdan, rang va qalinlik tanlansa jadvaldan o'zi tushadi";
+  })();
 
   const k = (nom) => (urinildi && xato[nom] ? MAYDON_XATO : MAYDON);
   const tonna = son(f.ogirlik) != null ? son(f.ogirlik) / 1000 : null;
@@ -502,31 +530,30 @@ function RulonForma({
                 {turlar.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </Maydon>
-            <div className="col-span-2">
-              <Maydon label="Qalinlik (mm) *" xato={xato.qalinlik} korsat={urinildi}
-                hint={f.zavod.trim() && f.tur.trim() && jadvalQal.length === 0
-                  ? `Jadvalda ${f.zavod} · ${f.tur} uchun qalinlik yo'q — qo'lda yozing`
-                  : ''}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input inputMode="decimal" value={f.qalinlik} onChange={sonSet('qalinlik')} placeholder="0,45"
-                    className={`${k('qalinlik')} tabular-nums !w-28`} />
-                  {jadvalQal.length > 0 && (
-                    <div className="flex flex-wrap gap-1" title="Jadvaldagi qalinliklar — bosib tanlang">
-                      {jadvalQal.map((q) => {
-                        const faol = qalinlikTeng(q, f.qalinlik);
-                        return (
-                          <button key={q} type="button" onClick={() => set({ qalinlik: String(q) })}
-                            className={`px-1.5 py-0.5 rounded text-[11px] tabular-nums border ${
-                              faol ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                            {String(q).replace('.', ',')}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </Maydon>
-            </div>
+            <Maydon label="Qalinlik (mm) *" xato={xato.qalinlik} korsat={urinildi}
+              hint={f.zavod.trim() && f.tur.trim() && jadvalQal.length === 0
+                ? `Jadvalda ${f.zavod} · ${f.tur} uchun qalinlik yo'q — qo'lda yozing`
+                : ''}>
+              <input inputMode="decimal" value={f.qalinlik} onChange={sonSet('qalinlik')} placeholder="0,45"
+                className={`${k('qalinlik')} tabular-nums`} />
+            </Maydon>
+            {jadvalQal.length > 0 && (
+              <div className="col-span-2 flex flex-wrap items-center gap-1 -mt-1"
+                title="Jadvaldagi qalinliklar — bosib tanlang">
+                <span className="text-[11px] text-slate-400 mr-1">Jadvalda:</span>
+                {jadvalQal.map((q) => {
+                  const faol = qalinlikTeng(q, f.qalinlik);
+                  return (
+                    <button key={q} type="button" onClick={() => set({ qalinlik: String(q) })}
+                      aria-pressed={faol} title={`${String(q).replace('.', ',')} mm`}
+                      className={`px-1.5 py-0.5 rounded text-[11px] tabular-nums border ${
+                        faol ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+                      {String(q).replace('.', ',')}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -539,24 +566,15 @@ function RulonForma({
               <input inputMode="decimal" value={f.ogirlik} onChange={sonSet('ogirlik')} placeholder="5150"
                 className={`${k('ogirlik')} tabular-nums`} />
             </Maydon>
-            <Maydon label="Narx, 1 tonna ($) *" xato={xato.narxTonna} korsat={urinildi}
-              hint={jadvalNarx == null
-                ? (tanlovToliq
-                  ? `Jadvalda ${f.zavod} · ${f.tur} · ${xomKor(f.qalinlik)} mm uchun narx yo'q — qo'lda kiriting`
-                  : "Zavod, rang va qalinlik tanlansa jadvaldan o'zi tushadi")
-                : (narxJadvalga
-                  ? `Jadvaldan: ${f.zavod} · ${f.tur} · ${xomKor(f.qalinlik)} mm${sozlama.narxSana ? ` (varaqa ${sanaKor(sozlama.narxSana)})` : ''}`
-                  : (
-                    <span className="inline-flex flex-wrap items-center gap-1">
-                      <span>Qo'lda. Jadvalda: <b className="tabular-nums text-slate-600">{fmt(jadvalNarx)} $</b></span>
-                      <button type="button" onClick={narxJadvaldan}
-                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
-                        <RotateCcw className="w-3 h-3" /> jadvaldan ol
-                      </button>
-                    </span>
-                  ))}>
+            <Maydon label="Narx, 1 tonna ($) *" xato={xato.narxTonna} korsat={urinildi} hint={narxHint}>
               <input inputMode="decimal" value={f.narxTonna} onChange={narxSet} placeholder="1130"
                 className={`${k('narxTonna')} tabular-nums`} />
+              {jadvalNarx != null && !narxJadvalga && (
+                <button type="button" onClick={narxJadvaldan}
+                  className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-200 bg-white text-[11px] text-slate-600 hover:bg-slate-50">
+                  <RotateCcw className="w-3 h-3" /> Jadvaldan ol: <b className="tabular-nums">{fmt(jadvalNarx)} $</b>
+                </button>
+              )}
             </Maydon>
             <Maydon label="Dollar kursi (so'm) *" xato={xato.kurs} korsat={urinildi} hint="Olingan kungi kurs">
               <input inputMode="decimal" value={f.kurs} onChange={sonSet('kurs')} placeholder="12100"

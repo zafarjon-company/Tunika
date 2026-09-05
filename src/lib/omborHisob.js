@@ -107,7 +107,7 @@ export function kgPerMetr(sozlama, zavod, qalinlik) {
 //  yangilansa eski rulonlar o'zgarmaydi — daftardagidek.
 
 // Obyektda nomi norm() bo'yicha mos kalitni topish (saqlangan yozuvi bilan)
-function kalitTop(obj, nom) {
+export function kalitTop(obj, nom) {
   const n = norm(nom);
   if (!n || !obj || typeof obj !== 'object') return null;
   for (const k of Object.keys(obj)) if (norm(k) === n) return k;

@@ -10,7 +10,8 @@
 //  RULONLAR (yangi qism): ombordagi rulonlar va ularning 1 metr uchun
 //  tannarxi/sotuv narxi — daftar jadvali tartibida. Har rulon o'z narxi
 //  ($/t), kursi va yo'lkirasi bilan yoziladi; standart qiymatlar
-//  (kurs, yo'lkira, bo'luvchilar, kg/m) FIRESTORE'dan keladi — kodda narx yo'q.
+//  (kurs, yo'lkira, bo'luvchilar, kg/m, zavod narx jadvali) FIRESTORE'dan
+//  keladi — kodda faqat boshlang'ich sozlama bor (omborSeed.js), hisobda emas.
 //    omborRulonlar = { [id]: Rulon },  setRulon(id, rulon|null)
 //    omborSozlama  = { kurs, yolkiraTonna, bolizvchi1, bolizvchi2, nom1, nom2,
 //                      kgPerM, koefSMZ, koefBoshqa, kursSana, zavodlar, turlar, ranglar,

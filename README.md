@@ -90,8 +90,8 @@ npm run preview    # build'ni lokal sinash
     **1 metr uchun tannarxi hamda sotuv narxi**. Har rulon o'z narxi ($/t),
     kursi va yo'lkirasi bilan yoziladi; standart qiymatlar (kurs, yo'lkira,
     bo'luvchilar, kg/m jadvali, tanlov ro'yxatlari) interfeysdan
-    tahrirlanadi va Firestore'da saqlanadi — kodda birorta narx qattiq
-    yozilmagan.
+    tahrirlanadi va Firestore'da saqlanadi — hisob hech qachon koddagi
+    qiymatga qaramaydi (kodda faqat boshlang'ich sozlama bor).
 - **Jurnal** — barcha amallar tarixi.
 - **Sozlamalar** — do'kon nomi, kurs, tovarlar, mavzular (ko'plab tema),
   til, tugmalar.

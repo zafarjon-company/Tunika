@@ -10,6 +10,9 @@ import {
   rulonHisob, kgPerMetr, jamiHisob, turTaxmin, zavodGuruh, narxTop, jadvalQalinliklar, norm, OGOH,
 } from './omborHisob.js';
 import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, NARX_JADVAL_BOSHLANGICH, sozlamaRoyxat } from './omborSeed.js';
+import {
+  narxHolat, narxBogla, narxObyekt, narxQatorOchir, narxUstunQatorlar, royxatDublikatlar, ustunObyekt,
+} from './omborNarxJadval.js';
 
 const R = (n) => Math.round(n);
 let xato = 0;
@@ -277,6 +280,144 @@ console.log("\n=== 10) ZAVOD NARX JADVALI ===\n");
   // Har boshlang'ich rang uchun taxmin qilingan tur — tur ro'yxatida bor
   const yoqTur = SOZLAMA_BOSHLANGICH.ranglar.filter((r) => !SOZLAMA_BOSHLANGICH.turlar.includes(turTaxmin(RANG_TUR_BOSHLANGICH, r)));
   tekshir("har rangning turi tur ro'yxatida bor", '', yoqTur.join(','));
+}
+
+console.log("\n=== 11) NARX JADVALI TAHRIRLAGICHI (sof mantiq) ===\n");
+{
+  // Tartib: Object.keys butun sonli kalitlarni ('1','2') oldinga chiqaradi — sort kerak
+  tekshir('qalinliklar: SMZ Atsenkovka tartibi',
+    '0.18,0.2,0.22,0.25,0.28,0.3,0.33,0.35,0.37,0.4,0.45,0.5,0.6,0.7,0.8,0.9,1,1.1,1.2,1.4,1.5,1.6,1.8,2,2.2,2.5',
+    jadvalQalinliklar(SOZLAMA_BOSHLANGICH, 'SMZ', 'Atsenkovka').join(','));
+  tekshir('qalinliklar: butun va kasr aralash → son tartibi', '0.18,1,2,10',
+    jadvalQalinliklar({ narxJadval: { A: { B: { 2: 1, '0.18': 1, 10: 1, 1: 1 } } } }, 'A', 'B').join(','));
+
+  const seed = NARX_JADVAL_BOSHLANGICH;
+  let idS = 0;
+  const qator = (v, asl = v) => ({ id: `r${idS += 1}`, v, asl });
+  const royxat = (zavodlar, turlar) => ({ zavodlar: zavodlar.map((z) => qator(z)), turlar: turlar.map((t) => qator(t)) });
+  const formaYasa = (jadval, zavodlar, turlar) => {
+    const r = royxat(zavodlar, turlar);
+    return { royxat: r, narx: narxHolat(jadval, r.zavodlar, r.turlar) };
+  };
+  const Z = SOZLAMA_BOSHLANGICH.zavodlar;
+  const T = SOZLAMA_BOSHLANGICH.turlar;
+  const kataklar = (j) => Object.values(j).reduce((n, t) => n + Object.values(t).reduce((m, u) => m + Object.keys(u).length, 0), 0);
+  const teng = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const norml = (j) => Object.fromEntries(Object.entries(j).sort().map(([z, t]) => [z, Object.fromEntries(Object.entries(t).sort().map(([k, u]) => [k, Object.fromEntries(Object.entries(u).sort())]))]));
+
+  // A) O'zgarishsiz: yuklab qayta saqlash — mazmuni bir xil
+  const fA = formaYasa(seed, Z, T);
+  tekshir('A: yuklab-saqlash mazmuni bir xil', true, teng(norml(narxObyekt(fA, seed)), norml(seed)));
+  tekshir('A: 81 katak', 81, kataklar(narxObyekt(fA, seed)));
+
+  // Nomni yozish (royxatSet kabi): qator v o'zgaradi, so'ng narxBogla
+  const nomYoz = (f, nom, id, v) => {
+    const eski = f.royxat[nom].find((r) => r.id === id);
+    const next = { ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].map((r) => (r.id === id ? { ...r, v } : r)) } };
+    const opts = { eskiNom: eski.v };
+    if (nom === 'zavodlar') opts.zId = id; else opts.tId = id;
+    return narxBogla(next, seed, opts);
+  };
+  const ochir = (f, nom, id) => narxQatorOchir({ ...f, royxat: { ...f.royxat, [nom]: f.royxat[nom].filter((r) => r.id !== id) } }, nom, id);
+  const qosh = (f, nom) => { const q = qator('', ''); return [{ ...f, royxat: { ...f.royxat, [nom]: [...f.royxat[nom], q] } }, q.id]; };
+
+  // B) Zavodni o'chirib, qayta qo'shib, nomini yozib saqlash — narxlar qoladi
+  let fB = formaYasa(seed, Z, T);
+  fB = ochir(fB, 'zavodlar', fB.royxat.zavodlar.find((r) => r.v === 'Xitoy').id);
+  let idB; [fB, idB] = qosh(fB, 'zavodlar');
+  fB = nomYoz(fB, 'zavodlar', idB, 'Xitoy');
+  const tRangli = fB.royxat.turlar.find((r) => r.v === 'Rangli').id;
+  tekshir("B: qayta qo'shilgan Xitoy ustunlari formada ko'rinadi", 10, narxUstunQatorlar(fB, idB, tRangli).length);
+  const oB = narxObyekt(fB, seed);
+  tekshir("B: saqlashda Xitoy Rangli 0.22 qoladi", 1200, oB.Xitoy && oB.Xitoy.Rangli && oB.Xitoy.Rangli['0.22']);
+  tekshir('B: katak soni 81', 81, kataklar(oB));
+
+  // C) Ikki sessiya: o'chirib saqlash (yetim qoladi) → keyin qayta qo'shib saqlash
+  let fC = formaYasa(seed, Z, T);
+  fC = ochir(fC, 'zavodlar', fC.royxat.zavodlar.find((r) => r.v === 'Xitoy').id);
+  const saqC1 = narxObyekt(fC, seed);
+  tekshir("C: o'chirib saqlansa Xitoy yetim sifatida qoladi", 1210, saqC1.Xitoy && saqC1.Xitoy.Xapyor['0.4']);
+  let fC2 = formaYasa(saqC1, Z.filter((z) => z !== 'Xitoy'), T);
+  let idC; [fC2, idC] = qosh(fC2, 'zavodlar');
+  fC2 = nomYoz(fC2, 'zavodlar', idC, 'xitoy'); // registr farqi bilan
+  const saqC2 = narxObyekt(fC2, saqC1);
+  const xitoyKalit = Object.keys(saqC2).find((k) => norm(k) === 'xitoy');
+  tekshir("C: qayta qo'shilganda Xitoy Xapyor 0.4 qoladi", 1210, xitoyKalit && saqC2[xitoyKalit].Xapyor['0.4']);
+  tekshir("C: Xitoy bitta kalit bilan (takror emas)", 1, Object.keys(saqC2).filter((k) => norm(k) === 'xitoy').length);
+
+  // D) Turni o'chirib saqlash → SMZ Mebel qoladi; qayta qo'shib saqlash → yana bor
+  let fD = formaYasa(seed, Z, T);
+  fD = ochir(fD, 'turlar', fD.royxat.turlar.find((r) => r.v === 'Mebel').id);
+  const saqD1 = narxObyekt(fD, seed);
+  tekshir("D: tur o'chirilsa SMZ Mebel yetim qoladi", 1470, saqD1.SMZ.Mebel && saqD1.SMZ.Mebel['0.3']);
+  let fD2 = formaYasa(saqD1, Z, T.filter((t) => t !== 'Mebel'));
+  let idD; [fD2, idD] = qosh(fD2, 'turlar');
+  fD2 = nomYoz(fD2, 'turlar', idD, 'Mebel');
+  const saqD2 = narxObyekt(fD2, saqD1);
+  tekshir("D: tur qayta qo'shilsa SMZ Mebel 0.3 qoladi", 1470, saqD2.SMZ.Mebel && saqD2.SMZ.Mebel['0.3']);
+  tekshir("D: katak soni 81", 81, kataklar(saqD2));
+
+  // E) Qayta nomlash: Xitoy → Master Class — narxlar ergashadi, eski nom qolmaydi
+  let fE = formaYasa(seed, Z, T);
+  fE = nomYoz(fE, 'zavodlar', fE.royxat.zavodlar.find((r) => r.v === 'Xitoy').id, 'Master Class');
+  const oE = narxObyekt(fE, seed);
+  tekshir('E: yangi nom bilan yoziladi', 1200, oE['Master Class'] && oE['Master Class'].Rangli['0.22']);
+  tekshir('E: eski nom qolmaydi', undefined, oE.Xitoy);
+
+  // F) Nomi tozalangan qator ({asl:'Xitoy', v:''}) — o'chirilgan kabi: narxi saqlanadi
+  let fF = formaYasa(seed, Z, T);
+  fF = { ...fF, royxat: { ...fF.royxat, zavodlar: fF.royxat.zavodlar.map((r) => (r.v === 'Xitoy' ? { ...r, v: '' } : r)) } };
+  const oF = narxObyekt(fF, seed);
+  tekshir("F: nomi tozalangan zavod narxi yetim sifatida qoladi", 1200, oF.Xitoy && oF.Xitoy.Rangli['0.22']);
+
+  // G) Takror nomlar: 'SMZ' va 'smz' — bitta kalit, ikkalasi ham xato sifatida belgilanadi
+  let fG = formaYasa(seed, [...Z, 'smz'], T);
+  const oG = narxObyekt(fG, seed);
+  tekshir('G: takror nomdan bitta kalit yoziladi', 1, Object.keys(oG).filter((k) => norm(k) === 'smz').length);
+  tekshir('G: royxatDublikatlar ikkala qatorni belgilaydi', 2, royxatDublikatlar(fG.royxat.zavodlar).size);
+  tekshir("G: takror yo'q → bo'sh", 0, royxatDublikatlar(formaYasa(seed, Z, T).royxat.zavodlar).size);
+
+  // H) Yangi qator nomini yozish: "Xito" → bo'sh, "Xitoy" → bog'lanadi, "Xitoy2" → yana bo'sh (ko'chib qolmaydi)
+  let fH = formaYasa(seed, Z.filter((z) => z !== 'Xitoy'), T);
+  let idH; [fH, idH] = qosh(fH, 'zavodlar');
+  const tXap = fH.royxat.turlar.find((r) => r.v === 'Xapyor').id;
+  fH = nomYoz(fH, 'zavodlar', idH, 'Xito');
+  tekshir("H: 'Xito' → bo'sh", 0, narxUstunQatorlar(fH, idH, tXap).length);
+  fH = nomYoz(fH, 'zavodlar', idH, 'Xitoy');
+  tekshir("H: 'Xitoy' → Xapyor 5 qator", 5, narxUstunQatorlar(fH, idH, tXap).length);
+  fH = nomYoz(fH, 'zavodlar', idH, 'Xitoy2');
+  tekshir("H: 'Xitoy2' → avto bog'langan ustun bo'shaydi", 0, narxUstunQatorlar(fH, idH, tXap).length);
+  // qo'lda to'ldirilgan ustun nom o'zgarsa ham qoladi
+  fH = { ...fH, narx: { ...fH.narx, [idH]: { ...fH.narx[idH], [tXap]: [{ id: 'x', q: '0.4', v: '999' }] } } };
+  fH = nomYoz(fH, 'zavodlar', idH, 'Xitoy');
+  tekshir("H: qo'lda to'ldirilgan ustunga tegilmaydi", 999, ustunObyekt(narxUstunQatorlar(fH, idH, tXap))['0.4']);
+
+  // I) Yuklangan qator qayta nomlansa — narxlari ergashadi (bo'shatilmaydi)
+  let fI = formaYasa(seed, Z, T);
+  const idI = fI.royxat.zavodlar.find((r) => r.v === 'Xitoy').id;
+  const tRangliI = fI.royxat.turlar.find((r) => r.v === 'Rangli').id;
+  fI = nomYoz(fI, 'zavodlar', idI, 'Xitoy (Master)');
+  tekshir("I: yuklangan qator qayta nomlansa Rangli 10 qator qoladi", 10, narxUstunQatorlar(fI, idI, tRangliI).length);
+  tekshir("I: saqlashda yangi nom bilan yoziladi", 1200, narxObyekt(fI, seed)['Xitoy (Master)'].Rangli['0.22']);
+
+  // J) Bog'lanmagan (undefined) ustun — saqlangandagi qoladi; [] — bo'shatilgan, yozilmaydi
+  let fJ = formaYasa(seed, Z, T);
+  const idJ = fJ.royxat.zavodlar.find((r) => r.v === 'SMZ').id;
+  const tMebel = fJ.royxat.turlar.find((r) => r.v === 'Mebel').id;
+  const { [idJ]: _smz, ...boshqa } = fJ.narx;
+  const oJ1 = narxObyekt({ ...fJ, narx: boshqa }, seed);
+  tekshir("J: undefined ustunlar saqlangandagi holicha", 1270, oJ1.SMZ.Rangli['0.45']);
+  const oJ2 = narxObyekt({ ...fJ, narx: { ...fJ.narx, [idJ]: { ...fJ.narx[idJ], [tMebel]: [] } } }, seed);
+  tekshir("J: bo'shatilgan ustun yozilmaydi", undefined, oJ2.SMZ.Mebel);
+
+  // K) narxQatorOchir: zavod o'chirilsa uning ustunlari, tur o'chirilsa hamma zavoddagi ustuni ketadi
+  let fK = formaYasa(seed, Z, T);
+  const idK = fK.royxat.zavodlar.find((r) => r.v === 'SMZ').id;
+  const tMebelK = fK.royxat.turlar.find((r) => r.v === 'Mebel').id;
+  tekshir('K: zavod ustunlari olib tashlanadi', undefined, narxQatorOchir(fK, 'zavodlar', idK).narx[idK]);
+  tekshir('K: avval tur ustuni bor edi', true, Object.values(fK.narx).every((z) => Array.isArray(z[tMebelK])));
+  const fK2 = narxQatorOchir(fK, 'turlar', tMebelK);
+  tekshir('K: tur ustuni har zavoddan olib tashlanadi', true, Object.values(fK2.narx).every((z) => z[tMebelK] === undefined));
 }
 
 console.log(`\n${'='.repeat(46)}`);
