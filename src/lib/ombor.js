@@ -12,6 +12,9 @@
 //               bogla: null | { kind, id }, rang, izoh, ochirilgan? }
 //  Harakat  = { id, ts, turi, omborId, miqdor, narx, izoh,
 //               orderId?, orderNumber?, userLogin }
+//  Rulon kirimi (Rulonlar bo'limidan) — omborId o'rniga:
+//             { rulonId, nomi (snapshot), birlik:'kg', uzunlik (m),
+//               narx: 1 m tannarxi, narxBirlik:'m' }
 //
 //  O'chirish — { ochirilgan: true } bayrog'i bilan (merge'da
 //  haqiqiy o'chirish murakkab). Ro'yxatlarda ular ko'rinmaydi.

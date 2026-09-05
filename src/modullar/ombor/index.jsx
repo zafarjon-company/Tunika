@@ -5,7 +5,8 @@
 //  MATERIALLAR (eski qism): ombor = { [id]: Material },
 //  omborHarakat = { [id]: Harakat }. Yozish props orqali:
 //    setOmborItem(id, material|null)  — bitta material (null = o'chirish)
-//    setHarakat(id, harakat)          — bitta harakat yozuvi
+//    setHarakat(id, harakat)          — bitta harakat yozuvi (Materiallar
+//                                       kirim/chiqimi va YANGI RULON kirimi)
 //
 //  RULONLAR (yangi qism): ombordagi rulonlar va ularning 1 metr uchun
 //  tannarxi/sotuv narxi — daftar jadvali tartibida. Har rulon o'z narxi
@@ -126,7 +127,8 @@ export function OmborModule({
           <Rulonlar
             rulonlar={omborRulonlar}
             sozlama={omborSozlama} rangTur={omborRangTur}
-            setRulon={setRulon} canEdit={canEdit} showToast={showToast} />
+            setRulon={setRulon} setHarakat={setHarakat} currentUser={currentUser}
+            canEdit={canEdit} showToast={showToast} />
         </>
       )}
 

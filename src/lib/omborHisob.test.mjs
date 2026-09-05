@@ -129,6 +129,9 @@ console.log("\n=== 4) UZUNLIK FAQAT KIRITILGANI, QALINLIK KO'RINISHI, KIRITILGAN
   tekshir("2-narx qo'lda emas", false, h2.sotuv2Qolda);
   const h3 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { narx1: 0, narx2: '' }), ctx0);
   tekshir("narx1 = 0 → hisoblangani (0 kiritilgan deb olinmaydi)", R(h3.sotuv1Hisob), R(h3.sotuv1));
+  // 1 m og'irligi (kg/m) = jami og'irlik ÷ jami uzunlik; uzunlik yo'q — null
+  tekshir('kg/m = 5150 ÷ 1436 = 3.586', 3.586, Math.round(h2.kgMetr * 1000) / 1000);
+  tekshir("uzunlik yo'q → kg/m null", null, h.kgMetr);
 }
 
 console.log('\n=== 5) OGOHLANTIRISHLAR ===\n');

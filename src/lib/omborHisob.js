@@ -177,6 +177,8 @@ export function rulonHisob(rulon, ctx = {}) {
   //    taxmin qilinmaydi: kiritilmasa 1 m tannarx chiqmaydi va ogoh beriladi.
   const kiritilganUzunlik = son(r.uzunlik);
   const uzunlik = musbat(kiritilganUzunlik) ? kiritilganUzunlik : null;
+  // 5b) 1 m og'irligi (kg/m) = jami og'irlik ÷ jami uzunlik (Ro'yxat ustuni)
+  const kgMetr = (musbat(ogirlik) && musbat(uzunlik)) ? ogirlik / uzunlik : null;
 
   // 6) 1 m tannarxi so'm
   const metrTannarx = (jamiSom != null && musbat(uzunlik)) ? jamiSom / uzunlik : null;
@@ -228,7 +230,7 @@ export function rulonHisob(rulon, ctx = {}) {
   return {
     narxTonna, kurs, yolkiraTonna, yolkiraStandart,
     rulonDollar, rulonSom, yolkiraDollar, yolkiraSom, jamiDollar, jamiSom,
-    uzunlik,
+    uzunlik, kgMetr,
     metrTannarx, sotuv1, sotuv2, sotuv1Hisob, sotuv2Hisob, sotuv1Qolda, sotuv2Qolda,
     qoldiq, qoldiqQiymat,
     ogohlar,
