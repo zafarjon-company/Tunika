@@ -85,7 +85,8 @@ npm run preview    # build'ni lokal sinash
 - **Hisobot** — dashboard, kassa, zakaslar va ishchilar bo'yicha hisobot,
   grafiklar.
 - **Ombor** — ikki qism:
-  - *Materiallar / Harakat* — material qoldig'i, kirim-chiqim tarixi.
+  - *Materiallar / Harakat* — material qoldig'i, kirim-chiqim tarixi
+    (Harakat jurnaliga yangi rulon kirimi ham tushadi).
   - *Rulonlar* — ombordagi rulonlar daftar jadvali tartibida va ularning
     **1 metr uchun tannarxi hamda sotuv narxi**. Har rulon o'z narxi ($/t),
     kursi va yo'lkirasi bilan yoziladi; standart qiymatlar (kurs, yo'lkira,
@@ -121,7 +122,8 @@ maydonlar foydalanuvchi kiritadi, qolgani o'zi hisoblanadi
 Yaxlitlash **faqat ko'rsatishda** (`Math.round`) — oraliq hisoblarda yo'q.
 Qalinlik hamma joyda verguldan keyin ikki xona bilan ko'rsatiladi (0.40, 0.45).
 *Ombor → Ro'yxat* — sotuv uchun qisqa ro'yxat: kimdan · tur · rang · qalinlik ·
-kiritilgan 5 % / 10 % narxlari (faqat ko'rish).
+kiritilgan 5 % / 10 % narxlari · kg/m (1 m og'irligi = og'irlik ÷ uzunlik;
+faqat ko'rish).
 
 Hisob zanjirini tekshirish:
 

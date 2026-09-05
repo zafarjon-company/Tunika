@@ -30,6 +30,9 @@
 //  Ma'lumot:
 //    rulonlar — { [id]: Rulon } obyekt-xarita
 //    setRulon(id, rulon)  — bitta rulonni yozadi (null = o'chiradi)
+//    setHarakat(id, harakat) — YANGI rulon saqlanganda ombor-harakat
+//      jurnaliga "kirim" yozuvi (Ombor → Harakat tabida ko'rinadi).
+//      Tahrir va o'chirish jurnalga yozilmaydi — ular harakat emas.
 // ============================================================
 import React, { useState, useMemo, useEffect } from 'react';
 import {
@@ -150,6 +153,13 @@ function solish(a, b, yon) {
 // Rulonning qisqa nomi (tasdiq / xabarlar uchun): "Mokriy 0.45 mm · SMZ"
 function rulonNomi(r) {
   return [r.rang, qalKor(r.qalinlik) && `${qalKor(r.qalinlik)} mm`, r.zavod].filter(Boolean).join(' · ');
+}
+
+// Harakat jurnali uchun rulon nomi (SNAPSHOT — rulon o'chirilsa ham tarix o'qiladi)
+function rulonHarakatNomi(r) {
+  const nomer = r.nomer === '' || r.nomer == null ? '' : ` №${r.nomer}`;
+  const tafsilot = [r.zavod, r.tur, r.rang, qalKor(r.qalinlik) && `${qalKor(r.qalinlik)} mm`].filter(Boolean).join(' · ');
+  return `Rulon${nomer}${tafsilot ? ` — ${tafsilot}` : ''}`;
 }
 
 // ============================================================
@@ -767,7 +777,7 @@ function RulonKarta({ q, canEdit, nom1, nom2, onTahrir, onOchir, onTasdiq }) {
 // ============================================================
 export function Rulonlar({
   rulonlar = {}, sozlama = {}, rangTur = {},
-  setRulon, canEdit = true, showToast,
+  setRulon, setHarakat, currentUser, canEdit = true, showToast,
 }) {
   const [filtr, setFiltr] = useState(FILTR_BOSH);
   const [sort, setSort] = useState({ ustun: 'nomer', yon: 1 });
@@ -848,6 +858,20 @@ export function Rulonlar({
     const yangi = !forma || !forma.asl;
     const id = yangi ? genId() : forma.asl.id;
     setRulon(id, { ...rulon, id });
+    // Yangi rulon — Harakat jurnaliga "kirim" (Materiallar kirimi kabi):
+    // miqdor kg da, narx — 1 m tannarxi (so'm/m), uzunlik alohida.
+    if (yangi && setHarakat) {
+      const h = rulonHisob(rulon, { sozlama });
+      const hid = genId();
+      setHarakat(hid, {
+        id: hid, ts: new Date().toISOString(), turi: 'kirim',
+        rulonId: id, nomi: rulonHarakatNomi(rulon),
+        miqdor: son(rulon.ogirlik) ?? 0, birlik: 'kg',
+        uzunlik: h.uzunlik, narx: h.metrTannarx, narxBirlik: 'm',
+        izoh: [rulon.sana && `Xarid sanasi ${sanaKor(rulon.sana)}`, rulon.izoh].filter(Boolean).join(' · ') || 'Rulon kirimi',
+        userLogin: (currentUser && currentUser.login) || '—',
+      });
+    }
     setForma(null);
     if (yangi) {
       // Filtr yoqilgan bo'lsa yangi rulon ko'rinmay qolishi mumkin — tozalaymiz

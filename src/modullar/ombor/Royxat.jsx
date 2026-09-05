@@ -2,9 +2,10 @@
 //  OMBOR → RO'YXAT — sotuv uchun qisqa narx ro'yxati
 // ------------------------------------------------------------
 //  Barcha rulonlar FAQAT eng kerakli ma'lumoti bilan:
-//    Kimdan (zavod) · Tur · Rang · Qalinlik · 1-narx (5%) · 2-narx (10%)
+//    Kimdan (zavod) · Tur · Rang · Qalinlik · 1-narx (5%) · 2-narx (10%) · kg/m
 //  Narxlar — Rulonlar formasida foydalanuvchi KIRITGAN (yaxlitlangan)
 //  sotuv narxlari; kiritilmagan bo'lsa hisoblangani (och rangda).
+//  kg/m — 1 m og'irligi = jami og'irlik ÷ jami uzunlik (omborHisob.kgMetr).
 //  Faqat ko'rish — tahrirlash Rulonlar bo'limida.
 //
 //  Hisob src/lib/omborHisob.js da; bu faylda narx yo'q. Faqat mavzu
@@ -28,6 +29,11 @@ function rangAsos(rang) {
 function RangNamuna({ rang }) {
   if (!rang) return <span className="w-4 h-4 rounded border border-slate-300 bg-slate-100 inline-block flex-shrink-0" />;
   return <span className="w-4 h-4 rounded border border-black/10 inline-block flex-shrink-0" title={rang} style={rangChipStyle(rangAsos(rang))} />;
+}
+
+// 1 m og'irligi — o'lchov (pul emas): ikki xona bilan, yo'q bo'lsa "—"
+function kgMetrKor(v) {
+  return v == null || !Number.isFinite(Number(v)) ? '—' : Number(v).toFixed(2);
 }
 
 // Narx katagi: kiritilgani — qalin; hisoblangani — och, title bilan
@@ -90,7 +96,7 @@ export function Royxat({ rulonlar = {}, sozlama = {} }) {
       <SectionTitle icon={ClipboardList}>Narx ro'yxati ({korinadigan.length})</SectionTitle>
       <p className="text-[11px] text-slate-500 -mt-2 mb-3">
         Rulonlar bo'limida kiritilgan yaxlitlangan sotuv narxlari. Och rangdagi narx — hali qo'lda
-        kiritilmagan, hisoblangani ko'rsatilyapti.
+        kiritilmagan, hisoblangani ko'rsatilyapti. kg/m — 1 metr og'irligi (og'irlik ÷ uzunlik).
       </p>
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -123,7 +129,7 @@ export function Royxat({ rulonlar = {}, sozlama = {} }) {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs min-w-[560px]">
+          <table className="w-full text-xs min-w-[620px]">
             <thead>
               <tr className="text-xs text-slate-500 border-b-2 border-slate-200">
                 <th className="py-2 px-2 text-left font-semibold">№</th>
@@ -133,6 +139,7 @@ export function Royxat({ rulonlar = {}, sozlama = {} }) {
                 <th className="py-2 px-2 text-right font-semibold" title="Qalinlik, mm">Qal.</th>
                 <th className="py-2 px-2 text-right font-semibold text-slate-900" title="Sotuv narxi, 1 m (so'm)">{nom1}</th>
                 <th className="py-2 px-2 text-right font-semibold text-slate-900" title="Sotuv narxi, 1 m (so'm)">{nom2}</th>
+                <th className="py-2 px-2 text-right font-semibold" title="1 m og'irligi = jami og'irlik ÷ jami uzunlik">kg/m</th>
               </tr>
             </thead>
             <tbody>
@@ -147,6 +154,10 @@ export function Royxat({ rulonlar = {}, sozlama = {} }) {
                   <td className="px-2 py-1.5 text-right tabular-nums text-slate-900">{qalKor(r.qalinlik) || '—'}</td>
                   <NarxKatak qiymat={r.h.sotuv1} qolda={r.h.sotuv1Qolda} hisob={r.h.sotuv1Hisob} />
                   <NarxKatak qiymat={r.h.sotuv2} qolda={r.h.sotuv2Qolda} hisob={r.h.sotuv2Hisob} />
+                  <td className="px-2 py-1.5 text-right tabular-nums text-slate-700"
+                    title={r.h.kgMetr == null ? "Uzunlik kiritilmagan" : `${r.ogirlik} kg ÷ ${r.h.uzunlik} m`}>
+                    {kgMetrKor(r.h.kgMetr)}
+                  </td>
                 </tr>
               ))}
             </tbody>
