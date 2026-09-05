@@ -58,9 +58,10 @@ function MijozDetailModal({ customer, orders, onClose, onEdit }) {
     [orders, customer],
   );
   const s = jamla(zak);
+  // Fon bosilganda yopilmaydi — faqat X tugmasi (matn belgilashda oyna yopilib qolmasin)
   return (
-    <div className="fixed inset-0 z-40 bg-slate-900/40 flex items-end sm:items-center justify-center no-print" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-40 bg-slate-900/40 flex items-end sm:items-center justify-center no-print">
+      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* sarlavha */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
           <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-base flex-shrink-0">

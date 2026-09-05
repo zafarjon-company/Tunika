@@ -1,6 +1,6 @@
 // ============================================================
 //  OMBOR (SKLAD) MODULI — sub-tab boshqaruvi
-//  Materiallar / Harakat / Rulonlar
+//  Materiallar / Harakat / Rulonlar / Ro'yxat (sotuv narx ro'yxati)
 // ------------------------------------------------------------
 //  MATERIALLAR (eski qism): ombor = { [id]: Material },
 //  omborHarakat = { [id]: Harakat }. Yozish props orqali:
@@ -10,28 +10,30 @@
 //  RULONLAR (yangi qism): ombordagi rulonlar va ularning 1 metr uchun
 //  tannarxi/sotuv narxi — daftar jadvali tartibida. Har rulon o'z narxi
 //  ($/t), kursi va yo'lkirasi bilan yoziladi; standart qiymatlar
-//  (kurs, yo'lkira, bo'luvchilar, kg/m, zavod narx jadvali) FIRESTORE'dan
+//  (kurs, yo'lkira, bo'luvchilar, zavod narx jadvali) FIRESTORE'dan
 //  keladi — kodda faqat boshlang'ich sozlama bor (omborSeed.js), hisobda emas.
 //    omborRulonlar = { [id]: Rulon },  setRulon(id, rulon|null)
 //    omborSozlama  = { kurs, yolkiraTonna, bolizvchi1, bolizvchi2, nom1, nom2,
-//                      kgPerM, koefSMZ, koefBoshqa, kursSana, zavodlar, turlar, ranglar,
+//                      kursSana, zavodlar, turlar, ranglar,
 //                      narxJadval: { [zavod]: { [tur]: { [qalinlik]: $/t } } }, narxSana }
 //    omborRangTur  = { qoidalar: [{ naqsh, tur }], standart }
 // ============================================================
 import React, { useState, useMemo } from 'react';
-import { Boxes, History, Layers, AlertTriangle } from 'lucide-react';
+import { Boxes, History, Layers, ClipboardList, AlertTriangle } from 'lucide-react';
 import { StatBox } from '../../components/ui.jsx';
 import { fmt } from '../../lib/helpers.js';
 import { omborRoyxat, kamQoldiqlar, birlikBelgisi } from '../../lib/ombor.js';
 import { Materiallar } from './Materiallar.jsx';
 import { Harakat } from './Harakat.jsx';
 import { Rulonlar } from './Rulonlar.jsx';
+import { Royxat } from './Royxat.jsx';
 import { OmborSozlama } from './OmborSozlama.jsx';
 
 const SUB_TABLAR = [
   { k: 'materiallar', label: 'Materiallar',    icon: Boxes },
   { k: 'harakat',     label: 'Harakat',        icon: History },
   { k: 'rulonlar',    label: 'Rulonlar',       icon: Layers },
+  { k: 'royxat',      label: "Ro'yxat",        icon: ClipboardList },
 ];
 
 export function OmborModule({
@@ -110,6 +112,9 @@ export function OmborModule({
       {sub === 'harakat' && <Harakat omborHarakat={omborHarakat} ombor={ombor} />}
 
       {/* Rulonlar: sozlamalar paneli sahifa yuqorisida (3.2-bo'lim), tagida jadval */}
+      {/* Ro'yxat: sotuv uchun qisqa narx ro'yxati (faqat ko'rish) */}
+      {sub === 'royxat' && <Royxat rulonlar={omborRulonlar} sozlama={omborSozlama} />}
+
       {sub === 'rulonlar' && (
         <>
           <OmborSozlama

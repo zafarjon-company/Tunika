@@ -4,8 +4,7 @@
 //  Rulonlar hisobiga kiradigan BARCHA kirish qiymatlari shu
 //  panelda tahrirlanadi: standart kurs, standart yo'lkira, sotuv bo'luvchilari,
 //  ZAVOD NARX JADVALI (zavod → tur → qalinlik → $/t, varaqa sanasi),
-//  qalinlik → kg/m jadvali, koeffitsientlar va rang → tur
-//  qoidalari. Bu faylda birorta narx / kurs / koeffitsient
+//  va rang → tur qoidalari. Bu faylda birorta narx / kurs / koeffitsient
 //  QATTIQ YOZILMAGAN — hammasi proplardan keladi va yana
 //  proplar orqali (updateSozlama / updateRangTur) yoziladi.
 //
@@ -46,7 +45,7 @@ const bugun = () => new Date().toISOString().slice(0, 10);
 // Saqlangan qiymatni maydon matniga aylantirish
 const xom = (v) => (v == null || v === '' ? '' : String(v));
 
-// O'lchov (kg/m, koef) — pul emas, shuning uchun fmt emas
+// O'lchov — pul emas, shuning uchun fmt emas
 function olchovKor(n, kasr = 2) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
@@ -56,7 +55,7 @@ function olchovKor(n, kasr = 2) {
 
 // qalKalit / kgQatorlar (ustunQatorlar) / kgObyekt (ustunObyekt) — qalinlik →
 // qiymat ustunlari uchun umumiy yordamchilar; omborNarxJadval.js dan keladi
-// (kg/m jadvali va zavod narx jadvali bir xil shaklda tahrirlanadi).
+// (zavod narx jadvali ustunlari shu shaklda tahrirlanadi).
 
 // ----- Tanlov ro'yxatlari (zavod / tur / rang) -----
 //  Tahrirlash paytida matn o'zgargani uchun har qatorga barqaror id kerak
@@ -125,7 +124,6 @@ function dublikatlar(qatorlar) {
 // vergul bilan yozishga xalaqit bermasin)
 function formaYasa(s) {
   const o = s || {};
-  const kg = (o.kgPerM && typeof o.kgPerM === 'object') ? o.kgPerM : {};
   const royxat = {
     zavodlar: royxatQatorlar(sozlamaRoyxat(o, 'zavodlar')),
     turlar: royxatQatorlar(sozlamaRoyxat(o, 'turlar')),
@@ -138,9 +136,6 @@ function formaYasa(s) {
     bolizvchi2: xom(o.bolizvchi2),
     nom1: o.nom1 || '',
     nom2: o.nom2 || '',
-    koefSMZ: xom(o.koefSMZ),
-    koefBoshqa: xom(o.koefBoshqa),
-    kg: { SMZ: kgQatorlar(kg.SMZ), BOSHQA: kgQatorlar(kg.BOSHQA) },
     royxat,
     // Zavod narx jadvali — zavod / tur qator id lari bo'yicha
     narx: narxHolat(o.narxJadval, royxat.zavodlar, royxat.turlar),
@@ -162,8 +157,7 @@ function rtYasa(rt) {
 function solish(f, r) {
   return JSON.stringify({
     kurs: f.kurs, yk: f.yolkiraTonna, b1: f.bolizvchi1, b2: f.bolizvchi2,
-    n1: f.nom1, n2: f.nom2, kS: f.koefSMZ, kB: f.koefBoshqa,
-    kg: { SMZ: f.kg.SMZ.map((x) => [x.q, x.v]), BOSHQA: f.kg.BOSHQA.map((x) => [x.q, x.v]) },
+    n1: f.nom1, n2: f.nom2,
     ry: {
       z: f.royxat.zavodlar.map((x) => x.v),
       t: f.royxat.turlar.map((x) => x.v),
@@ -206,11 +200,11 @@ function MatnMaydon({ label, value, onChange, disabled, hint, placeholder }) {
   );
 }
 
-// ----- Qalinlik → qiymat ustuni (kg/m guruhi yoki zavod narx ustuni) -----
-//  qiymatNom — o'ng ustun sarlavhasi ('kg / m' yoki '$ / t')
+// ----- Qalinlik → qiymat ustuni (zavod narx jadvalining bitta ustuni) -----
+//  qiymatNom — o'ng ustun sarlavhasi
 function KgGuruh({
   nom, izoh, qatorlar, dubl, notoliq, canEdit, onQator, onQosh, onOchir,
-  qiymatNom = 'kg / m', boshMatn = "Jadval bo'sh — faqat koeffitsient ishlatiladi",
+  qiymatNom = '$ / t', boshMatn = "Bo'sh",
 }) {
   return (
     <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50">
@@ -372,17 +366,6 @@ export function OmborSozlama({
 
   // ----- Formani tahrirlash -----
   const tahrir = (patch) => setForma((f) => ({ ...f, ...patch }));
-  const kgTahrir = (guruh, id, patch) => setForma((f) => ({
-    ...f,
-    kg: { ...f.kg, [guruh]: f.kg[guruh].map((r) => (r.id === id ? { ...r, ...patch } : r)) },
-  }));
-  const kgQosh = (guruh) => setForma((f) => ({
-    ...f, kg: { ...f.kg, [guruh]: [...f.kg[guruh], { id: genId(), q: '', v: '' }] },
-  }));
-  const kgOchir = (guruh, id) => setForma((f) => ({
-    ...f, kg: { ...f.kg, [guruh]: f.kg[guruh].filter((r) => r.id !== id) },
-  }));
-
   // ----- Zavod narx jadvali (zavod × tur ustunlari) -----
   const narxUstunYoz = (f, zId, tId, qatorlar) => ({
     ...f, narx: { ...(f.narx || {}), [zId]: { ...((f.narx || {})[zId] || {}), [tId]: qatorlar } },
@@ -494,16 +477,13 @@ export function OmborSozlama({
 
   // ----- Tekshiruvlar -----
   //  Bu qiymatlar butun rulonlar jadvalini boshqaradi: kurs 0 bo'lsa rulon
-  //  so'mi, 1 m tannarxi va ikkala sotuv narxi ham "—" ga aylanadi; koef 0
-  //  bo'lsa jadvalda yo'q qalinlik uchun kg/m umuman hisoblanmaydi. Shuning
+  //  so'mi, 1 m tannarxi va ikkala sotuv narxi ham "—" ga aylanadi. Shuning
   //  uchun bo'sh / nol qiymat bilan SAQLASHGA yo'l qo'ymaymiz.
   const musbatXato = (n) => (!(n != null && n > 0) ? "0 dan katta bo'lishi kerak" : '');
   const kurs = son(forma.kurs);
   const yolkira = son(forma.yolkiraTonna);
   const b1 = son(forma.bolizvchi1);
   const b2 = son(forma.bolizvchi2);
-  const kSMZ = son(forma.koefSMZ);
-  const kBoshqa = son(forma.koefBoshqa);
   const kursXato = musbatXato(kurs);
   // Yo'lkira 0 bo'lishi mumkin (yo'lkirasiz), lekin BO'SH yoki MANFIY bo'lmasin
   const yolkiraXato = yolkira == null
@@ -511,16 +491,7 @@ export function OmborSozlama({
     : (yolkira < 0 ? "Manfiy bo'lmasin" : '');
   const b1Xato = musbatXato(b1);
   const b2Xato = musbatXato(b2);
-  const kSMZXato = musbatXato(kSMZ);
-  const kBoshqaXato = musbatXato(kBoshqa);
-  const maydonXato = !!(kursXato || yolkiraXato || b1Xato || b2Xato || kSMZXato || kBoshqaXato);
-
-  const dublSMZ = useMemo(() => dublikatlar(forma.kg.SMZ), [forma.kg.SMZ]);
-  const dublBoshqa = useMemo(() => dublikatlar(forma.kg.BOSHQA), [forma.kg.BOSHQA]);
-  const dublBor = dublSMZ.size > 0 || dublBoshqa.size > 0;
-  const notoliqSMZ = useMemo(() => notoliqlar(forma.kg.SMZ), [forma.kg.SMZ]);
-  const notoliqBoshqa = useMemo(() => notoliqlar(forma.kg.BOSHQA), [forma.kg.BOSHQA]);
-  const notoliqBor = notoliqSMZ.size > 0 || notoliqBoshqa.size > 0;
+  const maydonXato = !!(kursXato || yolkiraXato || b1Xato || b2Xato);
 
   // Bo'sh nomli qatorlar jadvalda ko'rinmaydi (saqlashda ham tashlanadi)
   const zavodQatorlarToliq = forma.royxat.zavodlar.filter((r) => String(r.v || '').trim());
@@ -551,7 +522,7 @@ export function OmborSozlama({
   }), [forma.royxat]);
   const royxatDublBor = royxatDubl.zavodlar.size + royxatDubl.turlar.size + royxatDubl.ranglar.size > 0;
 
-  const xatoBor = maydonXato || dublBor || notoliqBor || narxXatoBor || royxatDublBor;
+  const xatoBor = maydonXato || narxXatoBor || royxatDublBor;
 
   // Ustama foizi: 1 m tannarx ÷ b → +X %
   const foizMatn = (b) => (b != null && b > 0
@@ -605,9 +576,6 @@ export function OmborSozlama({
       bolizvchi2: b2,
       nom1: forma.nom1.trim(),
       nom2: forma.nom2.trim(),
-      koefSMZ: kSMZ ?? 0,
-      koefBoshqa: kBoshqa ?? 0,
-      kgPerM: { SMZ: kgObyekt(forma.kg.SMZ), BOSHQA: kgObyekt(forma.kg.BOSHQA) },
       zavodlar: royxatMassiv(forma.royxat.zavodlar),
       turlar: royxatMassiv(forma.royxat.turlar),
       ranglar: royxatMassiv(forma.royxat.ranglar),
@@ -677,7 +645,6 @@ export function OmborSozlama({
     if (!canEdit || !onSeed || seedIsh) return;
     const savol = "Sozlama boshlang'ich holatga qaytariladi:\n"
       + "  • standart kurs, standart yo'lkira, bo'luvchilar, ustun nomlari\n"
-      + "  • kg/m jadvali va koeffitsientlar\n"
       + "  • zavod narx jadvali (boshlang'ich 01.09.2026 varaqasi)\n"
       + "  • rang → tur qoidalari\n\n"
       + "DIQQAT: bular TO'LIQ ALMASHTIRILADI — qo'shgan qalinliklaringiz,\n"
@@ -699,10 +666,6 @@ export function OmborSozlama({
       setSeedIsh('');
     }
   }
-
-  // BOSHQA guruhga kiradigan zavodlar (SMZ dan qolganlari) — eslatma uchun
-  const boshqaZavodlar = forma.royxat.zavodlar.map((r) => r.v)
-    .filter((z) => z && !/smz/i.test(z)).join(', ');
 
   // Yopiq holatdagi qisqacha ma'lumot
   const qisqacha = `Standart kurs ${fmt(sozlama.kurs)} so'm · Yo'lkira ${olchovKor(sozlama.yolkiraTonna, 2)} $/t`
@@ -784,57 +747,6 @@ export function OmborSozlama({
               onChange={(v) => tahrir({ nom2: v })} placeholder="10%"
               hint="Jadvaldagi 2-sotuv ustuni nomi" />
 
-            <SonMaydon
-              label="SMZ koeffitsienti" value={forma.koefSMZ} disabled={!canEdit}
-              onChange={(v) => tahrir({ koefSMZ: v })} xato={kSMZXato}
-              hint="Jadvalda yo'q qalinlik uchun" />
-
-            <SonMaydon
-              label="BOSHQA koeffitsienti" value={forma.koefBoshqa} disabled={!canEdit}
-              onChange={(v) => tahrir({ koefBoshqa: v })} xato={kBoshqaXato}
-              hint="Jadvalda yo'q qalinlik uchun" />
-          </div>
-
-          {/* ----- 2) Qalinlik → kg/m jadvali ----- */}
-          <div>
-            <div className="flex items-baseline justify-between mb-2">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                Qalinlik → 1 m og'irligi (kg)
-              </span>
-              <span className="text-[11px] text-slate-500">
-                Jadvalda yo'q qalinlik uchun: kg/m = qalinlik × koef
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <KgGuruh
-                nom="SMZ" izoh="faqat SMZ zavodi" qatorlar={forma.kg.SMZ}
-                dubl={dublSMZ} notoliq={notoliqSMZ} canEdit={canEdit}
-                onQator={(id, p) => kgTahrir('SMZ', id, p)}
-                onQosh={() => kgQosh('SMZ')} onOchir={(id) => kgOchir('SMZ', id)} />
-              <KgGuruh
-                nom="BOSHQA" izoh={boshqaZavodlar} qatorlar={forma.kg.BOSHQA}
-                dubl={dublBoshqa} notoliq={notoliqBoshqa} canEdit={canEdit}
-                onQator={(id, p) => kgTahrir('BOSHQA', id, p)}
-                onQosh={() => kgQosh('BOSHQA')} onOchir={(id) => kgOchir('BOSHQA', id)} />
-            </div>
-
-            {dublBor && (
-              <div className="mt-2 flex items-start gap-1.5 text-[11px] bg-red-50 border border-red-300 text-red-700 rounded p-2">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
-                <span>Bir xil qalinlik takrorlangan — qizil kataklarni tuzating (aks holda saqlab bo'lmaydi).</span>
-              </div>
-            )}
-
-            {notoliqBor && (
-              <div className="mt-2 flex items-start gap-1.5 text-[11px] bg-red-50 border border-red-300 text-red-700 rounded p-2">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
-                <span>
-                  Qalinlik yoki kg/m to'ldirilmagan (yoki 0) — bunday qator jadvalga
-                  TUSHMAYDI. Qizil kataklarni to'ldiring yoki qatorni o'chiring.
-                </span>
-              </div>
-            )}
           </div>
 
           {/* ----- 2b) Tanlov ro'yxatlari (zavod / tur / rang) ----- */}
@@ -851,7 +763,7 @@ export function OmborSozlama({
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <RoyxatTahrir
-                sarlavha="Zavodlar (kimdan)" izoh="Nomida SMZ bo'lganlar SMZ kg/m jadvalini oladi, qolganlari BOSHQA."
+                sarlavha="Zavodlar (kimdan)" izoh="Narx jadvalida har zavod alohida blok bo'lib turadi."
                 qatorlar={forma.royxat.zavodlar} sanoq={sanoq.zavodlar} dubl={royxatDubl.zavodlar} canEdit={canEdit}
                 onSet={(id, v) => royxatSet('zavodlar', id, v)}
                 onQosh={() => royxatQosh('zavodlar')}

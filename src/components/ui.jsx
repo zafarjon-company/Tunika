@@ -281,16 +281,13 @@ export function StatBox({ label, value, suffix, color = 'slate' }) {
 }
 
 // ----- Kichik markaziy modal (tasdiq, qarz to'lash) -----
+// Modal oynalar FAQAT "Yopish" (X) yoki "Bekor" tugmasi bilan yopiladi.
+// Fon (backdrop) bosilganda yopilmaydi: matnni sichqoncha bilan belgilayotganda
+// kursor fonga chiqib ketsa oyna yopilib qolardi — noqulay edi.
 export function SmallModal({ onClose, title, children }) {
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-900/40 no-print"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-900/40 no-print">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
           <h3 className="font-bold text-slate-900">{title}</h3>
           <button onClick={onClose} aria-label="Yopish" title="Yopish" className="text-slate-400 hover:text-slate-700">
@@ -383,16 +380,11 @@ export function PhoneInput({ value, onChange, className }) {
 }
 
 // ----- To'liq (sheet) modal — pickerlar uchun -----
+// Fon bosilganda yopilmaydi (SmallModal dagi izohga qarang) — faqat X / Bekor.
 export function FullModal({ onClose, title, children }) {
   return (
-    <div
-      className="fixed inset-0 z-40 bg-slate-900/40 flex items-end sm:items-center justify-center no-print"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-40 bg-slate-900/40 flex items-end sm:items-center justify-center no-print">
+      <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
           <h3 className="font-bold text-slate-900">{title}</h3>
           <button onClick={onClose} aria-label="Yopish" title="Yopish" className="text-slate-400 hover:text-slate-700">

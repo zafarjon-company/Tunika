@@ -7,7 +7,7 @@
 //  yoziladi — foydalanuvchining daftaridagidek.
 // ============================================================
 import {
-  rulonHisob, kgPerMetr, jamiHisob, turTaxmin, zavodGuruh, narxTop, jadvalQalinliklar, norm, OGOH,
+  rulonHisob, jamiHisob, turTaxmin, narxTop, jadvalQalinliklar, qalKor, norm, OGOH,
 } from './omborHisob.js';
 import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, NARX_JADVAL_BOSHLANGICH, sozlamaRoyxat } from './omborSeed.js';
 import {
@@ -107,18 +107,28 @@ console.log("\n=== 3) NARX VA KURS HAR RULONDA ===\n");
   tekshir("eski maydonlar (xaridNarx/xaridKurs) o'qildi", 49036, R(he.metrTannarx));
 }
 
-console.log('\n=== 4) KG/M JADVALI (faqat zaxira va tekshiruv uchun) ===\n');
-tekshir('SMZ 0.40',    3.74, kgPerMetr(SOZLAMA_BOSHLANGICH, 'SMZ', 0.4));
-tekshir('BOSHQA 0.40', 3.62, kgPerMetr(SOZLAMA_BOSHLANGICH, 'Xitoy', 0.4));
-tekshir("jadvalda yo'q qalinlik → koef", 2.3375, kgPerMetr(SOZLAMA_BOSHLANGICH, 'SMZ', 0.25));
-tekshir("'SMZ Momin' ham SMZ guruhi", 'SMZ', zavodGuruh('SMZ Momin'));
-tekshir("'Xitoy' → BOSHQA", 'BOSHQA', zavodGuruh('Xitoy'));
+console.log("\n=== 4) UZUNLIK FAQAT KIRITILGANI, QALINLIK KO'RINISHI, KIRITILGAN SOTUV NARXI ===\n");
 {
-  // Uzunlik kiritilmasa — og'irlikdan hisoblanadi va "≈" belgisi qo'yiladi
+  // Uzunlik kiritilmasa — taxmin qilinmaydi: tannarx chiqmaydi, ogoh beriladi
   const h = rulonHisob(rulonYasa(3740, 1130, 12100, ''), ctx0);
-  tekshir('uzunlik (3740 / 3.74)', 1000, R(h.uzunlik));
-  tekshir('uzunlik hisoblanganmi', true, h.uzunlikHisoblangan);
-  tekshir("uzunlik yo'q ogohi CHIQMAYDI (hisoblandi)", false, h.ogohlar.some((o) => o.kod === OGOH.UZUNLIK_YOQ));
+  tekshir('uzunlik kiritilmagan → null', null, h.uzunlik);
+  tekshir('tannarx null', null, h.metrTannarx);
+  tekshir("uzunlik yo'q ogohi bor", true, h.ogohlar.some((o) => o.kod === OGOH.UZUNLIK_YOQ));
+  // Qalinlik har doim ikki xonali
+  tekshir("qalKor 0.4 → '0.40'", '0.40', qalKor(0.4));
+  tekshir("qalKor '0,45' → '0.45'", '0.45', qalKor('0,45'));
+  tekshir("qalKor 1 → '1.00'", '1.00', qalKor(1));
+  tekshir("qalKor 0.225 → o'zicha", '0.225', qalKor(0.225));
+  tekshir("qalKor bo'sh → ''", '', qalKor(''));
+  // Kiritilgan (yaxlitlangan) sotuv narxi hisoblanganidan ustun
+  const h2 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { narx1: 52000 }), ctx0);
+  tekshir('hisoblangan 5% = 51 617 (70 415 950 ÷ 1436 ÷ 0.95)', 51617, R(h2.sotuv1Hisob));
+  tekshir("kiritilgan 5% = 52 000 ustun", 52000, h2.sotuv1);
+  tekshir("1-narx qo'lda", true, h2.sotuv1Qolda);
+  tekshir("2-narx kiritilmagan → hisoblangani", R(h2.sotuv2Hisob), R(h2.sotuv2));
+  tekshir("2-narx qo'lda emas", false, h2.sotuv2Qolda);
+  const h3 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { narx1: 0, narx2: '' }), ctx0);
+  tekshir("narx1 = 0 → hisoblangani (0 kiritilgan deb olinmaydi)", R(h3.sotuv1Hisob), R(h3.sotuv1));
 }
 
 console.log('\n=== 5) OGOHLANTIRISHLAR ===\n');
@@ -132,18 +142,12 @@ console.log('\n=== 5) OGOHLANTIRISHLAR ===\n');
   const h2 = rulonHisob(rulonYasa(5150, 1130, '', 1436), ctx0);
   tekshir("kurs yo'q → ogoh", true, kod(h2).includes(OGOH.NARX_YOQ));
   tekshir("kurs yo'q matni", true, h2.ogohlar.find((o) => o.kod === OGOH.NARX_YOQ).matn.includes('kurs'));
-  // Uzunlik yo'q va kg/m ham chiqmadi (qalinlik yo'q)
+  // Uzunlik yo'q → uzunlik ogohi
   const h3 = rulonHisob(rulonYasa(5150, 1130, 12100, '', { qalinlik: '' }), ctx0);
-  tekshir("uzunlik va qalinlik yo'q → uzunlik ogohi", true, kod(h3).includes(OGOH.UZUNLIK_YOQ));
-  // ±5 %: 5150/1422 = 3.62 (SMZ 0.40 kutilgani 3.74 → 3.2 % — chegarada, OGOH YO'Q)
-  const h4 = rulonHisob(rulonYasa(5150, 1130, 12100, 1422), ctx0);
-  tekshir("±5 % ichida — qalinlik ogohi yo'q", false, kod(h4).includes(OGOH.QALINLIK));
-  // 5150/1200 = 4.29 → 14.7 % farq → OGOH
+  tekshir("uzunlik yo'q → uzunlik ogohi", true, kod(h3).includes(OGOH.UZUNLIK_YOQ));
+  // Uzunlik bor — qalinlik / kg-m tekshiruvi YO'Q (jadval olib tashlangan): ogoh chiqmaydi
   const h5 = rulonHisob(rulonYasa(5150, 1130, 12100, 1200), ctx0);
-  tekshir('±5 % dan tashqarida — qalinlik ogohi bor', true, kod(h5).includes(OGOH.QALINLIK));
-  // Daftardagi 33-qator: "0,45" deb yozilgan, lekin 5332/1472 = 3.62 → 0.40 ga o'xshaydi
-  const h6 = rulonHisob(rulonYasa(5332, 1090, 12100, 1472, { qalinlik: 0.45 }), ctx0);
-  tekshir("33-qator (0,45 deb yozilgan) ogoh beradi", true, kod(h6).includes(OGOH.QALINLIK));
+  tekshir("uzunlik bor → hech qanday ogoh yo'q", 0, h5.ogohlar.length);
   // Tasdiqlanmagan
   const h7 = rulonHisob(rulonYasa(5150, 1130, 12100, 1436, { tasdiqlanmagan: true }), ctx0);
   tekshir('tasdiqlanmagan ogohi', true, kod(h7).includes(OGOH.TASDIQSIZ));
