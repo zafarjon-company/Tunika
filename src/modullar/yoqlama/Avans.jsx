@@ -10,7 +10,10 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Check, Wallet, ChevronDown } from 'lucide-react';
 import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
-import { fmt, toMonthInput, formatDate, formatDay, daysInMonth, makeBlankPayment, ishchiHisobi, oyIshlangan, sonQiymat, oyFaolmi } from '../../lib/helpers.js';
+import {
+  fmt, toMonthInput, formatDate, formatDay, daysInMonth, makeBlankPayment, ishchiHisobi, oyIshlangan,
+  sonQiymat, oyFaolmi, avansOyi, MAOSH_KUNI,
+} from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 function oyLabel(oy) {
@@ -126,7 +129,7 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
           // "Hozirgi haqqi" to'langan maoshlarni ham ayiradi.
           const h = ishchiHisobi(i, yoqlama, avanslar, maoshlar);
           // "Ishlangan" FAQAT tanlangan oy uchun hisoblanadi (butun davr emas):
-          // yo'qlamadan shu oyning "keldi"/"yarim" kunlari yig'iladi.
+          // yo'qlamadan shu oyning ish kunlari yig'iladi.
           // Maosh bo'limidagi oylikBalans(...).ishlangan bilan bir xil qiymat.
           const ishlanganOy = oyIshlangan(i, yoqlama, oy);
           return (
@@ -182,7 +185,17 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
                           <span className="font-medium">{p.method}</span>
                           {p.notes ? <span className="text-slate-400"> · {p.notes}</span> : ''}
                         </div>
-                        {p.createdAt && <div className="text-[11px] text-slate-400">{formatDate(p.createdAt)}</div>}
+                        {p.createdAt && (
+                          <div className="text-[11px] text-slate-400">
+                            {formatDate(p.createdAt)}
+                            {/* 1–5-kunda olingan avans — o'tgan oy maoshidan ushlanadi */}
+                            {avansOyi(p, oy) !== oy && (
+                              <span className="ml-1 text-amber-700" title={`Oyning 1–${MAOSH_KUNI}-kunida olingan — o'tgan oy maoshidan ushlanadi`}>
+                                → {oyLabel(avansOyi(p, oy))} maoshidan
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="font-semibold tabular-nums text-slate-800">

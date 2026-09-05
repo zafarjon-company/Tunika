@@ -78,7 +78,7 @@ npm run preview    # build'ni lokal sinash
 - **Sotuv** — yangi zakas yaratish (mijoz, usta, tovarlar, multi-valyutali
   to'lovlar), zakaslar ro'yxati, chek chiqarish, mijoz/usta bazasi.
 - **Narxlar** — listlar, metrli tovarlar va aksessuarlar narx bazasi.
-- **Yo'qlama** — kunlik *Keldi / Yarim / Kelmadi* belgilash, kalendar,
+- **Yo'qlama** — kunlik *Keldi / Kelmadi* belgilash, kalendar,
   avans.
 - **Ishchilar** — ro'yxat, lavozimlar, qobiliyatlar, kamchiliklar; oylik
   hisob-kitobi.

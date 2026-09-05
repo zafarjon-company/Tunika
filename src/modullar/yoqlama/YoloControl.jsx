@@ -79,7 +79,7 @@ export function YoloControl() {
         </button>
         <div className="flex items-center gap-1.5 text-xs text-slate-500 ml-auto">
           <Clock className="w-3.5 h-3.5" />
-          <span>Yarim:</span>
+          <span>Kechikish:</span>
           <input type="time" value={sett?.late_after || '09:00'}
             onChange={(e) => setTime('late_after', e.target.value)}
             className="px-1.5 py-1 border border-slate-200 rounded text-xs" />
@@ -91,7 +91,7 @@ export function YoloControl() {
       </div>
       <p className="text-[11px] text-slate-400 -mt-1">
         «YOLOni ochish» — kompyuterda jonli oyna: kameralar, tanilganlar, kim nechchida kelgani.
-        «Yarim» — shu vaqtdan keyin kelgan ishchi yarim kun hisoblanadi.
+        «Kechikish» — shu vaqtdan keyin kelgan ishchi kechikkan deb qayd etiladi (yo'qlamada baribir «Keldi», yarim kun yo'q).
       </p>
 
       {names.length > 0 && (

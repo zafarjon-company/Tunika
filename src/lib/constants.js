@@ -51,10 +51,10 @@ export const DEFAULT_AKSESSUARLAR = [
 export const STANOK_OPTIONS = ['Chaprost', 'Gofra'];
 export const PAYMENT_METHODS = ["So'mda", "Dollorda", "Clickda", "Kartada", "Perechisleniyada"];
 
-// Yo'qlama holatlari (kunlar — oylik hisobida ish haqi koeffitsiyenti)
+// Yo'qlama holatlari (kunlar — oylik hisobida ish haqi koeffitsiyenti).
+// Yarim kun tushunchasi olib tashlangan — eski 'yarim' yozuvlar to'liq kun deb olinadi.
 export const YOQLAMA_HOLATLAR = [
   { value: 'keldi',   label: 'Keldi',   kunlar: 1 },
-  { value: 'yarim',   label: 'Yarim',   kunlar: 0.5 },
   { value: 'kelmadi', label: 'Kelmadi', kunlar: 0 },
 ];
 

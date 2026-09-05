@@ -104,11 +104,10 @@ export function kunlikHisobotMatni({
     ? ishchilar.filter((w) => w && ishchiFaolmi(w, kun))
     : [];
   const kunYoq = (yoqlama && typeof yoqlama === 'object' && yoqlama[kun]) || {};
-  let keldi = 0, yarim = 0, kelmadi = 0;
+  let keldi = 0, kelmadi = 0;
   ishList.forEach((w) => {
     const h = kunYoq[w.id];
-    if (h === 'keldi') keldi += 1;
-    else if (h === 'yarim') yarim += 1;
+    if (h === 'keldi' || h === 'yarim') keldi += 1; // eski 'yarim' — to'liq kun
     else if (h === 'kelmadi') kelmadi += 1;
   });
 
@@ -135,7 +134,7 @@ export function kunlikHisobotMatni({
   qatorlar.push(`⏰ Muddati bugun/kechikkan: ${muddatli} ta`);
   qatorlar.push('');
   qatorlar.push(`👷 Yo'qlama (jami ${ishList.length} ishchi):`);
-  qatorlar.push(`   keldi ${keldi} · yarim ${yarim} · kelmadi ${kelmadi}`);
+  qatorlar.push(`   keldi ${keldi} · kelmadi ${kelmadi}`);
   qatorlar.push('');
   qatorlar.push(`📦 Kam qoldiq materiallar: ${kam.length} ta`);
   if (kam.length) {
