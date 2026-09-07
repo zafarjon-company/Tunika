@@ -1194,3 +1194,106 @@ html.themed .firma-nomi {
 @media (prefers-reduced-motion: reduce) {
   .fx-orn { animation: none !important; opacity: .4; }
 }
+
+/* ============================================================
+   CHIZMA → DETAL CHIZISH (detalEngine.js) — rejim tablari va qo'shimcha
+   elementlar. Umumiy ramka/panel/tugmalar .chz-* uslublarini qayta ishlatadi.
+   ============================================================ */
+.chz-tabsrow { display: flex; align-items: center; margin: 4px 0 8px; }
+.chz-tabs { display: inline-flex; gap: 2px; padding: 3px; background: #f1f5f9; border-radius: 9px; }
+html.themed .chz-tabs { background: var(--c-surface2); }
+.chz-tab {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: none; border-radius: 7px;
+  background: transparent; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background .12s, color .12s, box-shadow .12s;
+}
+.chz-tab:hover { color: #0f172a; }
+.chz-tab.on { background: #fff; color: #0f172a; box-shadow: 0 1px 2px rgba(15, 23, 42, .12); }
+html.themed .chz-tab { color: var(--c-t3); }
+html.themed .chz-tab:hover { color: var(--c-t1); }
+html.themed .chz-tab.on { background: var(--c-chip); color: var(--c-t1); }
+
+/* Variantlar qatori (birlik, burchak rejimi, orto/polar, eksport) */
+.dtl-optbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chz button.tool.etool.erase { border-color: #ef4444; color: #ef4444; }
+.chz button.tool.etool.erase.active { background: color-mix(in srgb, #ef4444 16%, transparent); box-shadow: 0 0 0 1.5px #ef4444 inset; }
+
+/* Dinamik kiritish qutisi: Uzunlik + Burchak */
+.chz-inputbox.dtl-box { gap: 6px; padding: 5px 6px; }
+.chz-inputbox.dtl-box label { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: #64748b; white-space: nowrap; }
+html.themed .chz-inputbox.dtl-box label { color: var(--c-t3); }
+.chz-inputbox.dtl-box label input { width: 72px; }
+.chz-inputbox.dtl-box label i { font-style: normal; font-size: 11px; font-weight: 700; color: #94a3b8; }
+.chz-inputbox.dtl-box button {
+  padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer;
+  border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #334155;
+}
+.chz-inputbox.dtl-box button.ok { border-color: var(--chz-accent); color: var(--chz-accent); }
+.chz-inputbox.dtl-box button:hover { border-color: var(--chz-accent); }
+html.themed .chz-inputbox.dtl-box button { background: var(--c-chip); color: var(--c-t2); border-color: var(--c-line); }
+html.themed .chz-inputbox.dtl-box input { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+
+/* Yon panel: nom, kutubxona tugmalari */
+.dtl-h3 { margin-top: 14px; }
+.dtl-name input { width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 600; color: #0f172a; background: #fff; }
+.dtl-name input:focus { outline: none; border-color: var(--chz-accent); }
+html.themed .dtl-name input { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+.dtl-libbtns { display: flex; gap: 5px; margin-top: 6px; }
+.dtl-btn {
+  flex: 1; padding: 6px 8px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #334155; transition: background .12s, border-color .12s, color .12s;
+}
+.dtl-btn.on { border-color: var(--chz-accent); color: var(--chz-accent); }
+.dtl-btn:hover { border-color: var(--chz-accent); }
+html.themed .dtl-btn { background: var(--c-chip); color: var(--c-t2); border-color: var(--c-line); }
+.dtl-cnt { font-weight: 600; color: #94a3b8; font-size: 11px; }
+.dtl-lib { margin-top: 6px; }
+.dtl-libitem { display: flex; align-items: stretch; gap: 4px; margin-bottom: 4px; }
+.dtl-libopen {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left;
+  padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; cursor: pointer;
+}
+.dtl-libopen b { font-size: 11.5px; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.dtl-libopen span { font-size: 10px; color: #94a3b8; }
+.dtl-libopen:hover { border-color: var(--chz-accent); }
+.dtl-libitem.cur .dtl-libopen { border-color: var(--chz-accent); background: color-mix(in srgb, var(--chz-accent) 8%, #fff); }
+html.themed .dtl-libopen { background: var(--c-surface); border-color: var(--c-line); }
+html.themed .dtl-libopen b { color: var(--c-t1); }
+html.themed .dtl-libitem.cur .dtl-libopen { background: color-mix(in srgb, var(--chz-accent) 14%, var(--c-surface)); }
+.dtl-libdel { flex: none; width: 26px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; color: #94a3b8; font-size: 11px; cursor: pointer; }
+.dtl-libdel:hover, .dtl-libdel.arm { border-color: #ef4444; color: #ef4444; }
+.dtl-libdel.arm { width: auto; padding: 0 6px; font-size: 10px; font-weight: 700; }
+html.themed .dtl-libdel { background: var(--c-surface); border-color: var(--c-line); }
+.dtl-empty { font-size: 11px; font-style: italic; color: #94a3b8; padding: 4px 2px; }
+html.themed .dtl-empty { color: var(--c-t3); }
+
+/* Segmentlar jadvali: № | uzunlik | burchak | ∠ */
+.dtl-table { margin-top: 8px; }
+.dtl-thead, .dtl-trow { display: grid; grid-template-columns: 22px 1fr 1fr 44px; gap: 4px; align-items: center; }
+.dtl-thead { font-size: 9.5px; color: #94a3b8; margin-bottom: 3px; padding: 0 2px; }
+.dtl-thead span:nth-child(4) { text-align: center; font-size: 12px; }
+html.themed .dtl-thead { color: var(--c-t3); }
+.dtl-trow { margin-bottom: 3px; }
+.dtl-trow > span:first-child { font-size: 10.5px; font-weight: 700; color: #64748b; text-align: center; }
+.dtl-trow input {
+  width: 100%; min-width: 0; padding: 4px 5px; font-size: 11.5px; font-weight: 600; text-align: right;
+  color: #0f172a; background: #fff; border: 1px solid #cbd5e1; border-radius: 5px;
+}
+.dtl-trow input:focus { outline: none; border-color: var(--chz-accent); }
+.dtl-trow input:disabled { opacity: .55; }
+.dtl-trow.wrap input { border-style: dashed; }
+.dtl-vang { font-size: 10.5px; font-weight: 700; color: var(--chz-offset); text-align: center; white-space: nowrap; }
+html.themed .dtl-trow > span:first-child { color: var(--c-t3); }
+html.themed .dtl-trow input { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+.dtl-closed { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: #334155; cursor: pointer; }
+html.themed .dtl-closed { color: var(--c-t2); }
+
+/* Xona konturi → Tahrir: AutoCAD buyruq satri */
+.chz-cmd {
+  width: 230px; max-width: 42vw; padding: 4px 8px; font-size: 11.5px; font-weight: 600;
+  font-family: ui-monospace, Consolas, "Courier New", monospace; text-transform: uppercase;
+  color: #0f172a; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+}
+.chz-cmd::placeholder { text-transform: none; font-weight: 500; color: #94a3b8; }
+.chz-cmd:focus { outline: none; border-color: var(--chz-edit); box-shadow: 0 0 0 2px color-mix(in srgb, var(--chz-edit) 25%, transparent); }
+html.themed .chz-cmd { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }

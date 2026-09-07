@@ -182,3 +182,37 @@ qaytganda fonda sinxronlanadi.
 Loyiha GitHub repozitoriysiga ulangan; Vercel `vercel.json` asosida
 avtomatik build qiladi (`npm run build` → `dist/`). `main`/`master`
 branchга push qilinganda Vercel o'zi qayta deploy qiladi.
+
+## Chizma → Detal chizish
+
+Savdo bo'limidagi **Chizma** kartasi ikki rejimda ishlaydi (tab):
+
+- **Xona konturi** — xona chizmasi, kazirok/devor/qosh/qozon hisobi
+  (`src/modullar/sotuv/chizmaEngine.js`).
+- **Detal chizish** — alohida detalni (patalok, qosh profili, paloska,
+  burchak...) AutoCAD uslubida chizish (`src/modullar/sotuv/detalEngine.js`):
+  har segment **uzunlik (sm)** + **burchak (gradus)** bilan kiritiladi
+  (dinamik kiritish qutisi: uzunlik → Tab → burchak → Enter), yoki sichqoncha
+  bilan bosiladi (nuqta/o'rta/(0,0) ga yopishish, Orto F8, Polar 15° F10).
+  Burchak rejimi: **mutlaq** (0° o'ng, 90° tepa) yoki **nisbiy** (oldingi
+  chiziqdan burilish). Chizmada har segment uzunligi va har uchdagi ichki
+  burchak yozilib turadi. Yon panelda **segmentlar jadvali** (uzunlik/burchak
+  tahrirlanadi — kontur qayta quriladi), **yoyilma** (segmentlar yig'indisi =
+  profil uchun list eni), gabarit, qayirmalar soni. Asboblar: chiziq,
+  to'rtburchak, aylana, o'lcham chizig'i, ko'chirish/nusxa/burish/aks/masshtab/
+  offset/o'chirish, griplar, undo/redo. Nomlangan detallar **kutubxonasi**
+  (`detal-chizma-lib-v1`, localStorage), joriy chizma `detal-chizma-v1`.
+  **DXF** import (mm/sm/m, $INSUNITS) va eksport (mm, LINE/CIRCLE), **PNG** rasm.
+
+### Xona konturi → Tahrir rejimi (AutoCAD qulayliklari)
+
+Xona chizmasidagi **Tahrir** (erkin geometriya) qatlami ham AutoCAD uslubida
+ishlaydi: Line/Polyline/Rectangle/Circle'da nuqtani bosgach **dinamik kiritish
+qutisi** chiqadi — uzunlik (mm/sm/m) + burchak (mutlaq yoki nisbiy) yozib
+Enter; Move/Copy (masofa + burchak), Rotate (gradus), Scale (koeffitsient),
+Offset (masofa; polyline ham) qiymat bilan. **Orto** (F8) / **Polar 15°** (F10),
+nuqta/o'rta/xona burchaklariga yopishish (belgi bilan), tanlangan elementning
+**griplari** (sudrash), chiziqqa 2 marta bosib uzunlik/burchak tahriri,
+**Explode** (polyline → chiziqlar), **Masofa** (DI) o'lchash, **Ctrl+A**,
+**buyruq satri** (harf bossangiz o'zi tushadi): L, PL, REC, C, DIM, M, CO, RO,
+MI, SC, O, TR, EX, F, E, X, DI, U, Z.

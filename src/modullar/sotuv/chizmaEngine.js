@@ -348,6 +348,16 @@ const TEMPLATE = `
     <button type="button" class="tool etool" data-chz="etExtend" data-tool="extend" title="Extend — chiziq uchini eng yaqin chegaragacha cho'zish">Extend</button>
     <button type="button" class="tool etool" data-chz="etFillet" data-tool="fillet" title="Fillet — ikki chiziqni burchakda tutashtirish (kesishgacha trim/extend)">Fillet</button>
     <button type="button" class="tool etool" data-chz="etErase" data-tool="erase" title="Erase — o'chirish">Erase</button>
+    <button type="button" class="tool etool" data-chz="etExplode" data-tool="explode" title="Explode (X) — polyline/to'rtburchakni alohida chiziqlarga ajratish (Trim/Extend/Fillet uchun)">Explode</button>
+    <button type="button" class="tool etool" data-chz="etMeasure" data-tool="measure" title="Masofa (DI) — ikki nuqta orasidagi masofa va burchakni o'lchash (chizmaga tushmaydi)">Masofa</button>
+    <span class="sep"></span>
+    <button type="button" class="tool tg" data-chz="tgEOrtho" title="Orto (F8) — kursor faqat 0°/90°/180°/270° ga yuradi">Orto</button>
+    <button type="button" class="tool tg" data-chz="tgEPolar" title="Polar (F10) — kursor 15° qadamlarga yopishadi">Polar 15°</button>
+    <select class="rowUnit" data-chz="eAngMode" title="Yozilgan burchak: mutlaq (0° o'ng, 90° tepa — AutoCAD) yoki nisbiy (oldingi chiziqdan burilish: + chapga, − o'ngga)">
+      <option value="abs">mutlaq °</option><option value="rel">nisbiy °</option>
+    </select>
+    <span class="sep"></span>
+    <input type="text" class="chz-cmd" data-chz="cmdInput" placeholder="Buyruq: L PL REC C M CO RO MI SC O TR EX F E X DI" title="AutoCAD buyruq satri — qisqartmani yozib Enter. Tahrir rejimida harf bossangiz o'zi shu yerga tushadi (L — Line, PL — Polyline, REC, C, M, CO, RO, MI, SC, O, TR, EX, F, E, X — Explode, DI — Masofa, U — orqaga, Z — markazga)" autocomplete="off" />
     <span class="sep"></span>
     <span class="chz-tglbl">Rang/qalinlik:</span>
     <input type="color" class="chz-colorin" data-chz="entColor" value="#0d9488" title="Rang — tanlangan element(lar)ga va yangi chiziladiganlarga" />
@@ -371,6 +381,14 @@ const TEMPLATE = `
         <select data-chz="unitSelect">
           <option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option>
         </select>
+      </div>
+      <div class="chz-inputbox dtl-box" data-chz="editBox">
+        <label data-chz="ef1Wrap"><span data-chz="ef1Label">Uzunlik</span><input data-chz="ef1" type="text" inputmode="decimal" data-num="pos" autocomplete="off" /><i data-chz="ef1Unit">m</i></label>
+        <label data-chz="ef2Wrap"><span data-chz="ef2Label">Burchak</span><input data-chz="ef2" type="text" inputmode="decimal" data-num="neg" autocomplete="off" /><i data-chz="ef2Unit">&deg;</i></label>
+        <select data-chz="eUnitSel" title="Uzunlik birligi"><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option></select>
+        <button type="button" class="ok" data-chz="ebOk" title="Kiritish (Enter)">&#10003;</button>
+        <button type="button" data-chz="ebClose" title="Konturni yopish — oxirgi nuqtani boshlang'ich nuqtaga ulash (C)">Yopish</button>
+        <button type="button" data-chz="ebEnd" title="Tugatish (Esc)">&#10005;</button>
       </div>
     </div>
     <div class="chz-panel">
@@ -449,7 +467,9 @@ const TEMPLATE = `
           <span style="color:var(--chz-accent)">o'ngdan-chapga</span> = kesib o'tganlar ham.<br>
         &bull; <b>Surish (pan)</b>: o'rta yoki o'ng tugmani bosib torting. G'ildirak — zoom.<br>
         &bull; Birlik: chizish — <b>default m</b>, offset — <b>default cm</b>. Panelda har detal o'z birligi.<br>
-        &bull; <b>Ctrl+Z/Ctrl+Y</b> — orqaga/oldinga; <b>Markazga (Ctrl+E)</b> — chiziqlar chegarasigacha avtozoom.
+        &bull; <b>Ctrl+Z/Ctrl+Y</b> — orqaga/oldinga; <b>Markazga (Ctrl+E)</b> — chiziqlar chegarasigacha avtozoom.<br>
+        &bull; <span style="color:var(--chz-edit)"><b>Tahrir (AutoCAD)</b></span>: Line/Polyline'da nuqtani bosgach chiqqan qutiga <b>uzunlik</b> + <b>burchak</b> yozib Enter (Tab — maydon almashish; burchak yozilmasa yo'nalish kursordan). <b>Orto</b> (F8), <b>Polar 15°</b> (F10); nuqta/o'rta/xona burchaklariga avtomatik <b>yopishadi</b>. Move/Copy/Rotate/Scale/Offset'da ham qiymat yozsa bo'ladi.<br>
+        &bull; Tahrirda <b>Select</b>: tanlangan elementning <b>griplarini</b> (kvadratcha) sudrang; chiziqqa <b>2 marta bosing</b> — uzunlik/burchak tahriri. <b>Buyruq satri</b>: harf bossangiz o'zi tushadi — L, PL, REC, C, M, CO, RO, MI, SC, O, TR, EX, F, E, X (Explode), DI (Masofa), U, Z. <b>Ctrl+A</b> — hammasini tanlash.
       </div>
     </div>
   </div>
@@ -526,6 +546,13 @@ export function mountChizma(root, opts) {
     curWidth: null,        // joriy chiziq qalinligi (null = standart 1.6)
     curLayer: '0',         // joriy qatlam (yangi elementlar shunga tushadi)
     layers: [{ name: '0', visible: true }],  // qatlamlar (nom + ko'rinish)
+    editOrtho: false,      // Tahrir: Orto (F8) — faqat 0/90°
+    editPolar: true,       // Tahrir: Polar 15° (F10)
+    editAngMode: 'abs',    // Tahrir: yozilgan burchak — 'abs' mutlaq | 'rel' oldingi chiziqdan burilish
+    editUnit: 'm',         // Tahrir kiritish qutisi birligi (mm/cm/m)
+    ebox: null,            // Tahrir dinamik kiritish qutisi (uzunlik/burchak) holati
+    egrip: null,           // sudralayotgan grip {ent, kind, idx, last, pushed}
+    editSnap: null,        // yopishgan nuqta belgisi {x,y}
   };
 
   const svg         = q('svg');
@@ -1742,7 +1769,7 @@ export function mountChizma(root, opts) {
      Asboblar: select, line, pline, rect, circle, move, copy, rotate,
      mirror, scale, offset, erase. Hammasi sichqoncha bilan (jonli ko'rinish).
      ============================================================ */
-  const EDIT_TOOLS = ['select', 'line', 'pline', 'rect', 'circle', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'trim', 'extend', 'fillet', 'erase'];
+  const EDIT_TOOLS = ['select', 'line', 'pline', 'rect', 'circle', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'trim', 'extend', 'fillet', 'erase', 'explode', 'measure'];
   let editSel = null;        // select asbobi uchun: {sx,sy,moved,additive,candidate}
   state.cursorW = { x: 0, y: 0 };
 
@@ -1826,13 +1853,112 @@ export function mountChizma(root, opts) {
   function scaleSel(c, f) { for (const e of selectedEnts()) mapEnt(e, (p) => ({ x: c.x + (p.x - c.x) * f, y: c.y + (p.y - c.y) * f }), f); }
   function mirrorSel(A, B) { for (const e of selectedEnts()) mapEnt(e, (p) => reflPt(p, A, B)); }
 
-  // --- Snap: ekran (sx,sy) ga eng yaqin tugunni topib, world nuqtasini qaytaradi.
-  function snapWorld(sx, sy) {
+  // --- Snap (yopishish): ekran (sx,sy) ga eng yaqin tugunni topib, world nuqtasini qaytaradi.
+  //   Tugunlar: tahrir elementlari uchlari/vertexlari/markazlari + SEGMENT O'RTALARI +
+  //   xona konturi (devor/qosh) nuqtalari + koordinata boshi. Topilsa belgi (editSnap) qo'yiladi.
+  //   from berilsa — Orto (F8) / Polar 15° (F10) cheklovi ham qo'llanadi (AutoCAD'dek).
+  function editSnapPoints() {
+    const pts = [{ x: 0, y: 0, eid: 0 }];
+    for (const ent of state.editEntities) {
+      if (!layerVisible(ent.layer)) continue;
+      for (const wp of entSnapPts(ent)) pts.push({ x: wp.x, y: wp.y, eid: ent.id });
+      for (const [a, b] of entSegs(ent)) pts.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, eid: ent.id });
+    }
+    for (const p of state.points) pts.push({ x: p.x, y: p.y, eid: -2 });
+    if (state.toolDraft && state.toolDraft.tool === 'pline') for (const p of state.toolDraft.pts) pts.push({ x: p.x, y: p.y, eid: -1 });
+    return pts;
+  }
+  // Burchak yordamchilari — AutoCAD'dek: 0° = o'ng, 90° = TEPA, soat miliga qarshi musbat
+  const E_D2R = Math.PI / 180, E_R2D = 180 / Math.PI;
+  function eNorm360(a) { a = a % 360; if (a < 0) a += 360; return (Math.abs(a) < 1e-9 || Math.abs(a - 360) < 1e-9) ? 0 : a; }
+  function eNorm180(a) { a = eNorm360(a); return a > 180 ? a - 360 : a; }
+  function eDir(deg) { const r = deg * E_D2R; return { dx: Math.cos(r), dy: -Math.sin(r) }; }
+  function eAng(dx, dy) { return eNorm360(Math.atan2(-dy, dx) * E_R2D); }
+  function eRot(p, c, deg) {
+    const r = deg * E_D2R, cos = Math.cos(r), sin = Math.sin(r), x = p.x - c.x, y = p.y - c.y;
+    return { x: c.x + x * cos + y * sin, y: c.y - x * sin + y * cos };
+  }
+  function eConstrain(from, w) {
+    const dx = w.x - from.x, dy = w.y - from.y, L = Math.hypot(dx, dy);
+    if (L < 1e-9) return w;
+    const step = state.editOrtho ? 90 : (state.editPolar ? 15 : 0);
+    if (!step) return w;
+    const a = eAng(dx, dy), snapped = eNorm360(Math.round(a / step) * step);
+    if (!state.editOrtho) { let d = Math.abs(a - snapped); d = Math.min(d, 360 - d); if (d > 4) return w; }
+    const v = eDir(snapped);
+    return { x: from.x + v.dx * L, y: from.y + v.dy * L };
+  }
+  function snapWorld(sx, sy, from, skip) {
     let best = null, bd = SNAP_PX;
-    const consider = (wp) => { const s = worldToScreen(wp.x, wp.y); const d = Math.hypot(s.x - sx, s.y - sy); if (d <= bd) { bd = d; best = wp; } };
-    for (const ent of state.editEntities) for (const wp of entSnapPts(ent)) consider(wp);
-    if (state.showRef) for (const path of state.refWorld) for (const wp of path) consider(wp);
-    return best ? { x: best.x, y: best.y } : screenToWorld(sx, sy);
+    for (const p of editSnapPoints()) {
+      if (skip && skip(p)) continue;
+      const s = worldToScreen(p.x, p.y);
+      const d = Math.hypot(s.x - sx, s.y - sy);
+      if (d <= bd) { bd = d; best = p; }
+    }
+    if (best) { state.editSnap = { x: best.x, y: best.y }; return { x: best.x, y: best.y }; }
+    state.editSnap = null;
+    let w = screenToWorld(sx, sy);
+    if (from) w = eConstrain(from, w);
+    return w;
+  }
+  // Joriy asbob jarayonining tayanch nuqtasi (orto/polar shu nuqtadan hisoblanadi)
+  function editAnchor() {
+    const d = state.toolDraft; if (!d) return null;
+    if (d.tool === 'line' || d.tool === 'dim' || d.tool === 'measure') return d.p1 || null;
+    if (d.tool === 'pline') return d.pts[d.pts.length - 1];
+    if (['move', 'copy', 'rotate', 'mirror', 'scale'].includes(d.tool)) return d.base || null;
+    return null;
+  }
+
+  /* ---- Tahrir: DINAMIK KIRITISH QUTISI (uzunlik + burchak, AutoCAD uslubi) ----
+     cfg = { anchor:{x,y}, f1:{label,unit:'len'|'ang'|'num',val}|null, f2:{...}|null,
+             pline:bool, onCommit(v1,v2) }. Quti langar nuqtasi yonida turadi. */
+  const editBox = q('editBox'), ef1 = q('ef1'), ef2 = q('ef2');
+  function eU() { return UNITS[state.editUnit] || 1000; }
+  function openEBox(cfg) {
+    state.ebox = cfg;
+    syncEBoxLabels();
+    editBox.classList.add('show');
+    ef1.value = (cfg.f1 && cfg.f1.val != null) ? String(cfg.f1.val) : '';
+    ef2.value = (cfg.f2 && cfg.f2.val != null) ? String(cfg.f2.val) : '';
+    positionEBox();
+    const first = cfg.f1 ? ef1 : ef2;
+    first.focus(); first.select();
+  }
+  function syncEBoxLabels() {
+    const b = state.ebox; if (!b) return;
+    q('ef1Wrap').style.display = b.f1 ? '' : 'none';
+    q('ef2Wrap').style.display = b.f2 ? '' : 'none';
+    const ut = (f) => (f.unit === 'len' ? state.editUnit : (f.unit === 'ang' ? '°' : '×'));
+    if (b.f1) { q('ef1Label').textContent = b.f1.label; q('ef1Unit').textContent = ut(b.f1); ef1.dataset.num = b.f1.unit === 'ang' ? 'neg' : 'pos'; }
+    if (b.f2) { q('ef2Label').textContent = b.f2.label; q('ef2Unit').textContent = ut(b.f2); ef2.dataset.num = b.f2.unit === 'ang' ? 'neg' : 'pos'; }
+    q('ebClose').style.display = b.pline ? '' : 'none';
+    const hasLen = (b.f1 && b.f1.unit === 'len') || (b.f2 && b.f2.unit === 'len');
+    q('eUnitSel').style.display = hasLen ? '' : 'none';
+    q('eUnitSel').value = state.editUnit;
+  }
+  function positionEBox() {
+    const b = state.ebox; if (!b) return;
+    const r = svg.getBoundingClientRect();
+    const s = worldToScreen(b.anchor.x, b.anchor.y);
+    const bw = editBox.offsetWidth || 380, bh = editBox.offsetHeight || 38;
+    editBox.style.left = Math.max(4, Math.min(s.x + 18, r.width - bw - 4)) + 'px';
+    editBox.style.top = Math.max(4, Math.min(s.y + 18, r.height - bh - 4)) + 'px';
+  }
+  function closeEBox() { state.ebox = null; editBox.classList.remove('show'); }
+  // [v1, v2] — bo'sh maydon null (0 dan farqli!)
+  function eboxVals() {
+    const b = state.ebox; if (!b) return [null, null];
+    const v = (inp, f) => { if (!f) return null; const s = inp.value.trim(); return s === '' ? null : sonQiymat(s); };
+    return [v(ef1, b.f1), v(ef2, b.f2)];
+  }
+  function clearEBoxFields() { ef1.value = ''; ef2.value = ''; refocusEBox(true); }
+  function commitEBox() { const b = state.ebox; if (!b) return; const [v1, v2] = eboxVals(); b.onCommit(v1, v2); }
+  function refocusEBox(force) {
+    if (!state.ebox) return;
+    const first = state.ebox.f1 ? ef1 : ef2;
+    if (force || (document.activeElement !== ef1 && document.activeElement !== ef2)) first.focus();
   }
   function evScreen(e) { const r = svg.getBoundingClientRect(); return { sx: e.clientX - r.left, sy: e.clientY - r.top }; }
 
@@ -1861,13 +1987,16 @@ export function mountChizma(root, opts) {
   // ---- Rejim / asbob boshqaruvi ----
   function setEditMode(on) {
     state.editMode = on;
-    if (!on) { state.toolDraft = null; editSel = null; state.selEdit.clear(); }
+    if (!on) { state.toolDraft = null; editSel = null; state.selEdit.clear(); closeEBox(); state.egrip = null; state.editSnap = null; }
     else { closeInput(); state.placingPoint = false; state.removingPoint = false; state.selectedPoints.clear(); state.selectedLines.clear(); syncToggleButtons(); }
     syncEditUI();
     render();
   }
   function setEditTool(t) {
     if (!EDIT_TOOLS.includes(t)) return;
+    // Chizilayotgan polyline bo'lsa — saqlab tugatamiz; kiritish qutisi yopiladi.
+    if (state.toolDraft && state.toolDraft.tool === 'pline' && state.toolDraft.pts.length >= 2) finishPline();
+    closeEBox(); state.egrip = null; state.editSnap = null;
     // Modify asboblari tanlovni talab qiladi.
     state.tool = t;
     state.toolDraft = null;
@@ -1896,6 +2025,8 @@ export function mountChizma(root, opts) {
       extend: 'Extend: chiziqning cho\'ziladigan uchi tomonidan bosing',
       fillet: 'Fillet: 1-chiziq → 2-chiziqni bosing (burchakda tutashadi)',
       erase: 'Erase: o\'chirish uchun element ustiga bosing',
+      explode: 'Explode: polyline / to\'rtburchakni bosing — alohida chiziqlarga ajraladi',
+      measure: 'Masofa: 1-nuqta → 2-nuqta (masofa, ΔX, ΔY, burchak ko\'rsatiladi)',
     };
     return m[t] || '';
   }
@@ -1904,6 +2035,9 @@ export function mountChizma(root, opts) {
     const tb = q('editToolbar'); if (tb) tb.style.display = state.editMode ? '' : 'none';
     const be = q('btnEdit'); if (be) be.classList.toggle('active', state.editMode);
     root.querySelectorAll('.etool').forEach((b) => b.classList.toggle('active', b.getAttribute('data-tool') === state.tool));
+    const tO = q('tgEOrtho'); if (tO) tO.classList.toggle('off', !state.editOrtho);
+    const tP = q('tgEPolar'); if (tP) tP.classList.toggle('off', !state.editPolar);
+    const am = q('eAngMode'); if (am) am.value = state.editAngMode;
   }
   // ---- Qatlam (Layers) ----
   function rebuildLayerSelect() {
@@ -1944,27 +2078,51 @@ export function mountChizma(root, opts) {
   // ---- Sichqoncha hodisalari (faqat editMode da, chap tugma) ----
   function editDown(e) {
     const { sx, sy } = evScreen(e);
-    const w = snapWorld(sx, sy);
-    state.cursorW = w;
     const t = state.tool;
-    if (t === 'select') { editSel = { sx, sy, moved: false, additive: e.shiftKey, candidate: entAtScreen(sx, sy) }; return; }
+    if (t === 'select') {
+      // Grip (tanlangan elementning uchi) bosilsa — sudrash boshlanadi
+      const g = editGripAt(sx, sy);
+      if (g) { state.egrip = g; state.editSnap = null; return; }
+      editSel = { sx, sy, moved: false, additive: e.shiftKey, candidate: entAtScreen(sx, sy) };
+      return;
+    }
+    const w = snapWorld(sx, sy, editAnchor());
+    state.cursorW = w;
     if (t === 'erase') { const ent = entAtScreen(sx, sy); if (ent) { pushHistory(); state.editEntities = state.editEntities.filter((x) => x !== ent); state.selEdit.delete(ent.id); render(); } return; }
-    if (t === 'line') return lineClick(w);
-    if (t === 'pline') return plineClick(w);
-    if (t === 'rect') return rectClick(w);
-    if (t === 'circle') return circleClick(w);
-    if (t === 'dim') return dimClick(w);
-    if (t === 'offset') return offsetClick(sx, sy, w);
-    if (t === 'trim') return trimClick(sx, sy, w);
-    if (t === 'extend') return extendClick(sx, sy, w);
-    if (t === 'fillet') return filletClick(sx, sy, w);
-    if (['move', 'copy', 'rotate', 'mirror', 'scale'].includes(t)) return modifyClick(t, w);
+    if (t === 'explode') { explodeAt(sx, sy); return; }
+    if (t === 'measure') { measureClick(w); return; }
+    if (t === 'line') lineClick(w);
+    else if (t === 'pline') plineClick(w);
+    else if (t === 'rect') rectClick(w);
+    else if (t === 'circle') circleClick(w);
+    else if (t === 'dim') dimClick(w);
+    else if (t === 'offset') offsetClick(sx, sy, w);
+    else if (t === 'trim') trimClick(sx, sy, w);
+    else if (t === 'extend') extendClick(sx, sy, w);
+    else if (t === 'fillet') filletClick(sx, sy, w);
+    else if (['move', 'copy', 'rotate', 'mirror', 'scale'].includes(t)) modifyClick(t, w);
+    refocusEBox();
   }
   function editMove(e) {
-    // Faol asbob jarayoni yoki ramka tortish bo'lmasa — bo'sh harakat, ish yo'q.
-    if (!state.toolDraft && !editSel) return;
     const { sx, sy } = evScreen(e);
-    state.cursorW = snapWorld(sx, sy);
+    // Grip sudrash — tanlangan elementning uchini ko'chirish (boshqa nuqtalarga yopishadi)
+    if (state.egrip) {
+      const g = state.egrip;
+      if (!g.pushed) { pushHistory(); g.pushed = true; }
+      applyEditGrip(snapWorld(sx, sy, null, (p) => p.eid === g.ent.id));
+      render(); return;
+    }
+    if (!state.toolDraft && !editSel) {
+      // Bo'sh harakat: chizish asboblarida yopishish belgisi (faqat o'zgarganda chizamiz)
+      if (['line', 'pline', 'rect', 'circle', 'dim', 'measure'].includes(state.tool)) {
+        const prev = state.editSnap;
+        state.cursorW = snapWorld(sx, sy, null);
+        const cur = state.editSnap;
+        if ((prev && !cur) || (!prev && cur) || (prev && cur && (prev.x !== cur.x || prev.y !== cur.y))) render();
+      }
+      return;
+    }
+    state.cursorW = snapWorld(sx, sy, editAnchor());
     if (editSel) {
       if (Math.abs(sx - editSel.sx) > 3 || Math.abs(sy - editSel.sy) > 3) editSel.moved = true;
       if (editSel.moved) {
@@ -1981,6 +2139,7 @@ export function mountChizma(root, opts) {
     render();   // jonli ko'rinish (rubber-band / ramka / ghost)
   }
   function editUp(e) {
+    if (state.egrip) { state.egrip = null; state.editSnap = null; render(); return; }
     if (state.tool !== 'select' || !editSel) { editSel = null; return; }
     const { sx, sy } = evScreen(e);
     if (!editSel.moved) {
@@ -2013,67 +2172,166 @@ export function mountChizma(root, opts) {
     render();
   }
 
-  // ---- Chizish asboblari ----
+  // ---- Chizish asboblari (AutoCAD uslubi: nuqtani bosish YOKI uzunlik + burchak yozish) ----
+  function eLastAbs(pts) { const n = pts.length; if (n >= 2) { const a = pts[n - 2], b = pts[n - 1]; return eAng(b.x - a.x, b.y - a.y); } return null; }
+  // Yozilgan burchak -> mutlaq (nisbiy rejimda oldingi chiziq yo'nalishiga qo'shiladi)
+  function eToAbs(ang, prevAbs) { return (state.editAngMode === 'rel' && prevAbs != null) ? eNorm360(prevAbs + ang) : eNorm360(ang); }
+  function eAngLabel(prevAbs) { return (state.editAngMode === 'rel' && prevAbs != null) ? 'Burilish' : 'Burchak'; }
+  function eBadLen(L) { if (L != null && !(L > 0)) { setEditInfo("Uzunlik 0 dan katta bo'lsin"); return true; } return false; }
+  // from nuqtasidan: kursor + qutidagi yozilgan qiymatlar -> nishon nuqta (jonli ko'rinish va commit bir xil)
+  function eTarget(from, prevAbs) {
+    const c = state.cursorW;
+    const [len, ang] = eboxVals();
+    if (len == null && ang == null) return c;
+    const cd = Math.hypot(c.x - from.x, c.y - from.y);
+    let abs;
+    if (ang == null) abs = cd > 1e-6 ? eAng(c.x - from.x, c.y - from.y) : (prevAbs != null ? prevAbs : 0);
+    else abs = eToAbs(ang, prevAbs);
+    const L = len == null ? cd : len * eU();
+    const v = eDir(abs);
+    return { x: from.x + v.dx * L, y: from.y + v.dy * L };
+  }
+
   function lineClick(w) {
     const d = state.toolDraft;
-    if (!d || d.tool !== 'line') { state.toolDraft = { tool: 'line', p1: w }; return; }
-    if (Math.hypot(w.x - d.p1.x, w.y - d.p1.y) < 1e-6) return;   // nol uzunlik — e'tiborsiz
+    if (!d || d.tool !== 'line') {
+      state.toolDraft = { tool: 'line', p1: w, prevAbs: null };
+      openEBox({ anchor: w, f1: { label: 'Uzunlik', unit: 'len' }, f2: { label: 'Burchak', unit: 'ang' },
+        onCommit: (L, a) => { const dd = state.toolDraft; if (!dd) return; if (L == null && a == null) { editEscape(); return; } if (eBadLen(L)) return; lineAdd(eTarget(dd.p1, dd.prevAbs)); } });
+      setEditInfo('Line: uzunlik + burchak yozib Enter yoki 2-nuqtani bosing (zanjir davom etadi; Esc — tugatish)');
+      return;
+    }
+    lineAdd(eTarget(d.p1, d.prevAbs));
+  }
+  function lineAdd(p2) {
+    const d = state.toolDraft;
+    if (Math.hypot(p2.x - d.p1.x, p2.y - d.p1.y) < 1e-6) return;
     pushHistory();
-    state.editEntities.push(newEnt('line', { x1: d.p1.x, y1: d.p1.y, x2: w.x, y2: w.y }));
-    state.toolDraft = { tool: 'line', p1: w };   // zanjir: keyingi chiziq shu nuqtadan
+    state.editEntities.push(newEnt('line', { x1: d.p1.x, y1: d.p1.y, x2: p2.x, y2: p2.y }));
+    d.prevAbs = eAng(p2.x - d.p1.x, p2.y - d.p1.y);
+    d.p1 = p2;   // zanjir: keyingi chiziq shu nuqtadan
+    if (state.ebox) { state.ebox.anchor = p2; state.ebox.f2.label = eAngLabel(d.prevAbs); syncEBoxLabels(); clearEBoxFields(); }
     render();
   }
   function plineClick(w) {
     const d = state.toolDraft;
-    if (!d || d.tool !== 'pline') { state.toolDraft = { tool: 'pline', pts: [w] }; return; }
-    // Oxirgi nuqtaga juda yaqin bo'lsa (ikki marta bosish) — tugatamiz.
+    if (!d || d.tool !== 'pline') {
+      state.toolDraft = { tool: 'pline', pts: [w] };
+      openEBox({ anchor: w, f1: { label: 'Uzunlik', unit: 'len' }, f2: { label: 'Burchak', unit: 'ang' }, pline: true,
+        onCommit: (L, a) => {
+          const dd = state.toolDraft; if (!dd) return;
+          if (L == null && a == null) { if (dd.pts.length >= 2) finishPline(); else setEditInfo('Uzunlik yozing yoki keyingi nuqtani bosing'); return; }
+          if (eBadLen(L)) return;
+          plineAdd(eTarget(dd.pts[dd.pts.length - 1], eLastAbs(dd.pts)));
+        } });
+      setEditInfo('Polyline: uzunlik + burchak yozib Enter yoki nuqtani bosing; C — yopish, Enter/Esc — tugatish, Backspace — oxirgi nuqta');
+      return;
+    }
     const last = d.pts[d.pts.length - 1];
     const sLast = worldToScreen(last.x, last.y), sNow = worldToScreen(w.x, w.y);
-    if (Math.hypot(sLast.x - sNow.x, sLast.y - sNow.y) < 6) { finishPline(); return; }
-    d.pts.push(w);
+    if (d.pts.length >= 3) { const s0 = worldToScreen(d.pts[0].x, d.pts[0].y); if (Math.hypot(s0.x - sNow.x, s0.y - sNow.y) < 8) { finishPline(true); return; } }
+    if (Math.hypot(sLast.x - sNow.x, sLast.y - sNow.y) < 6) { finishPline(); return; }   // ikki marta bosish — tugatish
+    plineAdd(eTarget(last, eLastAbs(d.pts)));
+  }
+  function plineAdd(t) {
+    const d = state.toolDraft;
+    const last = d.pts[d.pts.length - 1];
+    if (Math.hypot(t.x - last.x, t.y - last.y) < 1e-6) return;
+    d.pts.push(t);
+    if (state.ebox) { state.ebox.anchor = t; state.ebox.f2.label = eAngLabel(eLastAbs(d.pts)); syncEBoxLabels(); clearEBoxFields(); }
     render();
   }
-  function finishPline() {
+  function plineBackspace() {
+    const d = state.toolDraft; if (!d || d.tool !== 'pline' || d.pts.length < 2) return;
+    d.pts.pop();
+    if (state.ebox) { state.ebox.anchor = d.pts[d.pts.length - 1]; state.ebox.f2.label = eAngLabel(eLastAbs(d.pts)); syncEBoxLabels(); positionEBox(); }
+    render();
+  }
+  function finishPline(close) {
     const d = state.toolDraft;
     if (d && d.tool === 'pline' && d.pts.length >= 2) {
       pushHistory();
-      state.editEntities.push(newEnt('polyline', { pts: d.pts.slice(), closed: false }));
+      state.editEntities.push(newEnt('polyline', { pts: d.pts.slice(), closed: !!close && d.pts.length >= 3 }));
     }
-    state.toolDraft = null;
+    state.toolDraft = null; closeEBox(); state.editSnap = null;
     render();
+  }
+  function rectTarget() {
+    const d = state.toolDraft, [a, b] = eboxVals(), c = state.cursorW;
+    return { x: a > 0 ? d.p1.x + a * eU() : c.x, y: b > 0 ? d.p1.y - b * eU() : c.y };
   }
   function rectClick(w) {
     const d = state.toolDraft;
-    if (!d || d.tool !== 'rect') { state.toolDraft = { tool: 'rect', p1: w }; return; }
-    const a = d.p1;
-    if (Math.abs(w.x - a.x) < 1e-6 || Math.abs(w.y - a.y) < 1e-6) { state.toolDraft = null; return; }
+    if (!d || d.tool !== 'rect') {
+      state.toolDraft = { tool: 'rect', p1: w };
+      openEBox({ anchor: w, f1: { label: 'Eni', unit: 'len' }, f2: { label: "Bo'yi", unit: 'len' },
+        onCommit: (a, b) => { const dd = state.toolDraft; if (!dd) return; if (a > 0 && b > 0) makeRect(dd.p1, { x: dd.p1.x + a * eU(), y: dd.p1.y - b * eU() }); else setEditInfo("Eni va bo'yini yozing yoki qarama-qarshi burchakni bosing"); } });
+      setEditInfo("Rectangle: eni va bo'yini yozib Enter yoki qarama-qarshi burchakni bosing");
+      return;
+    }
+    makeRect(d.p1, rectTarget());
+  }
+  function makeRect(a, w) {
+    state.toolDraft = null; closeEBox();
+    if (Math.abs(w.x - a.x) < 1e-6 || Math.abs(w.y - a.y) < 1e-6) { render(); return; }
     pushHistory();
     state.editEntities.push(newEnt('polyline', {
       pts: [{ x: a.x, y: a.y }, { x: w.x, y: a.y }, { x: w.x, y: w.y }, { x: a.x, y: w.y }], closed: true,
     }));
-    state.toolDraft = null;
     render();
   }
+  function circleR() { const d = state.toolDraft, [r] = eboxVals(); return r > 0 ? r * eU() : Math.hypot(state.cursorW.x - d.c.x, state.cursorW.y - d.c.y); }
   function circleClick(w) {
     const d = state.toolDraft;
-    if (!d || d.tool !== 'circle') { state.toolDraft = { tool: 'circle', c: w }; return; }
-    const r = Math.hypot(w.x - d.c.x, w.y - d.c.y);
-    if (r > 0) { pushHistory(); state.editEntities.push(newEnt('circle', { cx: d.c.x, cy: d.c.y, r })); }
-    state.toolDraft = null;
+    if (!d || d.tool !== 'circle') {
+      state.toolDraft = { tool: 'circle', c: w };
+      openEBox({ anchor: w, f1: { label: 'Radius', unit: 'len' }, f2: null,
+        onCommit: (r) => { const dd = state.toolDraft; if (!dd) return; if (r > 0) makeCircle(dd.c, r * eU()); else setEditInfo('Radius yozing yoki aylana ustidagi nuqtani bosing'); } });
+      setEditInfo('Circle: radiusni yozib Enter yoki aylana ustidagi nuqtani bosing');
+      return;
+    }
+    makeCircle(d.c, circleR());
+  }
+  function makeCircle(c, r) {
+    state.toolDraft = null; closeEBox();
+    if (r > 0) { pushHistory(); state.editEntities.push(newEnt('circle', { cx: c.x, cy: c.y, r })); }
     render();
   }
   // O'lcham (Dimension) — ikki nuqta orasini o'lchab, razmer chizig'i + yozuv qo'yadi.
   function dimClick(w) {
     const d = state.toolDraft;
-    if (!d || d.tool !== 'dim') { state.toolDraft = { tool: 'dim', p1: w }; return; }
+    if (!d || d.tool !== 'dim') { state.toolDraft = { tool: 'dim', p1: w }; setEditInfo("O'lcham: 2-nuqtani bosing"); return; }
     if (Math.hypot(w.x - d.p1.x, w.y - d.p1.y) < 1e-6) return;
     pushHistory();
     state.editEntities.push(newEnt('dim', { x1: d.p1.x, y1: d.p1.y, x2: w.x, y2: w.y, unit: state.unit }));
     state.toolDraft = null;
     render();
   }
+  // Masofa (DI) — ikki nuqta orasidagi masofa/burchakni o'lchash; chizmaga tushmaydi
+  function measureClick(w) {
+    const d = state.toolDraft;
+    if (!d || d.tool !== 'measure') { state.toolDraft = { tool: 'measure', p1: w }; setEditInfo('Masofa: 2-nuqtani bosing'); render(); return; }
+    const dx = w.x - d.p1.x, dy = w.y - d.p1.y, L = Math.hypot(dx, dy);
+    state.toolDraft = null;
+    setEditInfo(`Masofa: ${fmt(L, state.editUnit)} · ΔX ${fmt(dx, state.editUnit)} · ΔY ${fmt(-dy, state.editUnit)} · burchak ${Math.round(eAng(dx, dy) * 10) / 10}°`);
+    render();
+  }
+  // Explode — polyline/to'rtburchakni alohida chiziqlarga ajratish (Trim/Extend/Fillet uchun)
+  function explodeAt(sx, sy) {
+    const hit = entAtScreen(sx, sy);
+    const targets = (hit && hit.type === 'polyline') ? [hit] : selectedEnts().filter((e) => e.type === 'polyline');
+    if (!targets.length) { setEditInfo("Explode: polyline yoki to'rtburchakni bosing (yoki avval tanlang)"); return; }
+    pushHistory();
+    for (const t of targets) {
+      const lines = entSegs(t).map(([a, b]) => { const l = newEnt('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y }); l.layer = t.layer; l.color = t.color; l.width = t.width; return l; });
+      state.editEntities.splice(state.editEntities.indexOf(t), 1, ...lines);
+      state.selEdit.delete(t.id);
+    }
+    setEditInfo(`${targets.length} ta polyline chiziqlarga ajratildi`);
+    render();
+  }
 
-  // ---- Modify asboblari (tanlanganlarga) ----
+  // ---- Modify asboblari (tanlanganlarga) — nuqtani bosish YOKI qiymat yozish ----
   // Tanlangan elementlarning `base` dan eng uzoq nuqtagacha masofasi —
   // Scale uchun ma'noli tayanch (kursor shu masofada bo'lsa masshtab = 1).
   function selMaxDist(base) {
@@ -2081,56 +2339,220 @@ export function mountChizma(root, opts) {
     for (const e of selectedEnts()) for (const p of entVerts(e)) m = Math.max(m, Math.hypot(p.x - base.x, p.y - base.y));
     return m;
   }
+  function openEModifyBox(t, w) {
+    if (t === 'move' || t === 'copy') {
+      openEBox({ anchor: w, f1: { label: 'Masofa', unit: 'len' }, f2: { label: 'Burchak', unit: 'ang' },
+        onCommit: (L, a) => { if (L > 0) { const v = eDir(eNorm360(a || 0)); applyEModify(t, { x: w.x + v.dx * L * eU(), y: w.y + v.dy * L * eU() }); } else setEditInfo('Masofa (+ burchak) yozing yoki yangi joyni bosing'); } });
+      setEditInfo((t === 'move' ? 'Move' : 'Copy') + ': masofa + burchak yozib Enter yoki yangi joyni bosing');
+    } else if (t === 'rotate') {
+      openEBox({ anchor: w, f1: null, f2: { label: 'Burchak', unit: 'ang' },
+        onCommit: (_, a) => { if (a != null) applyEModify(t, null, a); else setEditInfo("Burchak yozing yoki yo'nalishni bosing"); } });
+      setEditInfo("Rotate: burchakni (gradus; + soat miliga qarshi) yozib Enter yoki yo'nalishni bosing");
+    } else if (t === 'scale') {
+      openEBox({ anchor: w, f1: { label: 'Koeffitsient', unit: 'num' }, f2: null,
+        onCommit: (f) => { if (f > 0) applyEModify(t, null, f); else setEditInfo('Koeffitsient yozing (masalan 2 yoki 0.5)'); } });
+      setEditInfo('Scale: koeffitsientni yozib Enter yoki masofani bosing');
+    } else setEditInfo("Mirror: o'qning 2-nuqtasini bosing (asl nusxa qoladi — kerak bo'lmasa Delete bilan o'chiring)");
+  }
   function modifyClick(t, w) {
     if (state.selEdit.size === 0) { setEditInfo('Avval element(lar)ni tanlang (Select)'); return; }
     const d = state.toolDraft;
     if (!d || d.tool !== t) {
-      // 1-bosish — tayanch. Scale uchun ma'lumotli masofa (d0) shu zahoti olinadi.
       const draft = { tool: t, base: w };
       if (t === 'scale') { const m = selMaxDist(w); draft.d0 = m > 1e-6 ? m : 1; }
       state.toolDraft = draft;
+      openEModifyBox(t, w);
+      render();
       return;
     }
-    // 2-bosish — amalni yakunlaymiz.
+    if (t === 'rotate') applyEModify(t, null, eAng(w.x - d.base.x, w.y - d.base.y));
+    else if (t === 'scale') applyEModify(t, null, d.d0 ? Math.hypot(w.x - d.base.x, w.y - d.base.y) / d.d0 : 1);
+    else applyEModify(t, w);
+  }
+  function applyEModify(t, target, val) {
+    const d = state.toolDraft; if (!d) return;
     const base = d.base;
     pushHistory();
-    if (t === 'move') translateSel(w.x - base.x, w.y - base.y);
+    if (t === 'move') translateSel(target.x - base.x, target.y - base.y);
     else if (t === 'copy') {
       const clones = selectedEnts().map(cloneEnt);
-      for (const c of clones) mapEnt(c, (p) => ({ x: p.x + (w.x - base.x), y: p.y + (w.y - base.y) }));
+      for (const c of clones) mapEnt(c, (p) => ({ x: p.x + (target.x - base.x), y: p.y + (target.y - base.y) }));
       state.editEntities.push(...clones);
-    } else if (t === 'rotate') { rotateSel(base, Math.atan2(w.y - base.y, w.x - base.x)); }
-    else if (t === 'scale') { const f = d.d0 ? Math.hypot(w.x - base.x, w.y - base.y) / d.d0 : 1; if (f > 0) scaleSel(base, f); }
-    else if (t === 'mirror') { mirrorSel(base, w); }
-    if (t === 'copy') { state.toolDraft = { tool: 'copy', base: w }; }  // davom etadi
-    else state.toolDraft = null;
+    } else if (t === 'rotate') { for (const e of selectedEnts()) mapEnt(e, (p) => eRot(p, base, val)); }
+    else if (t === 'scale') { if (val > 0) scaleSel(base, val); }
+    else if (t === 'mirror') {
+      const clones = selectedEnts().map(cloneEnt);
+      for (const c of clones) mapEnt(c, (p) => reflPt(p, base, target));
+      state.editEntities.push(...clones);
+    }
+    state.toolDraft = null; closeEBox();
+    if (t === 'copy') { state.toolDraft = { tool: 'copy', base: target }; openEModifyBox('copy', target); setEditInfo("Copy: yana nusxa — joyni bosing yoki masofa + burchak; Esc — to'xtatish"); }
     render();
+  }
+  // Polyline'ni parallel ko'chirish: har segment o'z normali bo'ylab suriladi,
+  // qo'shni segmentlar kesishish nuqtasida tutashadi (miter). Tomon — bosilgan nuqtadan.
+  function offsetPlineE(ent, w, distMm) {
+    const segs = entSegs(ent); if (!segs.length) return null;
+    let near = segs[0], nd = Infinity;
+    for (const s of segs) { const dd = distToSeg(w.x, w.y, s[0].x, s[0].y, s[1].x, s[1].y); if (dd < nd) { nd = dd; near = s; } }
+    const ndx = near[1].x - near[0].x, ndy = near[1].y - near[0].y;
+    const side = Math.sign((w.x - near[0].x) * (-ndy) + (w.y - near[0].y) * ndx) || 1;
+    const D = (distMm != null ? distMm : nd) * side;
+    const off = segs.map(([a, b]) => {
+      let nx = -(b.y - a.y), ny = b.x - a.x; const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
+      return { a: { x: a.x + nx * D, y: a.y + ny * D }, b: { x: b.x + nx * D, y: b.y + ny * D } };
+    });
+    const li = (p1, p2, p3, p4) => { const r = lineInt(p1, p2, p3, p4); return r ? { x: r.x, y: r.y } : null; };
+    const out = [];
+    if (ent.closed && ent.pts.length > 2) {
+      for (let i = 0; i < off.length; i++) { const prev = off[(i - 1 + off.length) % off.length], cur = off[i]; out.push(li(prev.a, prev.b, cur.a, cur.b) || cur.a); }
+    } else {
+      out.push(off[0].a);
+      for (let i = 1; i < off.length; i++) out.push(li(off[i - 1].a, off[i - 1].b, off[i].a, off[i].b) || off[i].a);
+      out.push(off[off.length - 1].b);
+    }
+    return out;
   }
   function offsetClick(sx, sy, w) {
     const d = state.toolDraft;
     if (!d || d.tool !== 'offset') {
       const ent = entAtScreen(sx, sy);
-      if (ent) state.toolDraft = { tool: 'offset', ent };
-      return;
+      if (!ent || ent.type === 'dim') { setEditInfo('Offset: chiziq, polyline yoki aylanani bosing'); return; }
+      state.toolDraft = { tool: 'offset', ent, dist: null };
+      openEBox({ anchor: w, f1: { label: 'Masofa', unit: 'len' }, f2: null,
+        onCommit: (v) => { const dd = state.toolDraft; if (!dd) return; if (v > 0) { dd.dist = v * eU(); setEditInfo("Offset: qaysi tomonga — o'sha tomonni bosing"); } else setEditInfo("Masofani yozing, so'ng tomonni bosing"); } });
+      setEditInfo("Offset: masofani yozing (Enter), so'ng tomonni bosing — yoki to'g'ridan-to'g'ri tomonni bosing");
+      render(); return;
     }
-    const ent = d.ent;
-    if (ent.type === 'polyline') {
-      setEditInfo('Offset hozircha faqat line/circle uchun'); state.toolDraft = null; return;
-    }
+    const ent = d.ent, raw = screenToWorld(sx, sy);
+    const [typed] = eboxVals();
+    const D = typed > 0 ? typed * eU() : d.dist;
     pushHistory();
+    const inherit = (e) => { e.layer = ent.layer; e.color = ent.color; e.width = ent.width; return e; };
     if (ent.type === 'line') {
       let nx = -(ent.y2 - ent.y1), ny = ent.x2 - ent.x1; const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
       const mx = (ent.x1 + ent.x2) / 2, my = (ent.y1 + ent.y2) / 2;
-      const sign = ((w.x - mx) * nx + (w.y - my) * ny) >= 0 ? 1 : -1;
-      const dist = Math.abs((w.x - mx) * nx + (w.y - my) * ny);
-      state.editEntities.push(newEnt('line', { x1: ent.x1 + nx * dist * sign, y1: ent.y1 + ny * dist * sign, x2: ent.x2 + nx * dist * sign, y2: ent.y2 + ny * dist * sign }));
+      const sd = (raw.x - mx) * nx + (raw.y - my) * ny;
+      const sign = sd >= 0 ? 1 : -1, dist = D != null ? D : Math.abs(sd);
+      state.editEntities.push(inherit(newEnt('line', { x1: ent.x1 + nx * dist * sign, y1: ent.y1 + ny * dist * sign, x2: ent.x2 + nx * dist * sign, y2: ent.y2 + ny * dist * sign })));
     } else if (ent.type === 'circle') {
-      const dr = Math.hypot(w.x - ent.cx, w.y - ent.cy) - ent.r;
-      const nr = ent.r + dr;
-      if (nr > 0) state.editEntities.push(newEnt('circle', { cx: ent.cx, cy: ent.cy, r: nr }));
+      const dr = Math.hypot(raw.x - ent.cx, raw.y - ent.cy) - ent.r;
+      const nr = ent.r + (D != null ? Math.sign(dr || 1) * D : dr);
+      if (nr > 0) state.editEntities.push(inherit(newEnt('circle', { cx: ent.cx, cy: ent.cy, r: nr })));
+    } else if (ent.type === 'polyline') {
+      const res = offsetPlineE(ent, raw, D);
+      if (res) state.editEntities.push(inherit(newEnt('polyline', { pts: res, closed: ent.closed })));
     }
-    state.toolDraft = null;
+    state.toolDraft = null; closeEBox();
     render();
+  }
+
+  // ---- Chiziq/segmentni 2 marta bosib tahrirlash: uzunlik + burchak (keyingi nuqtalar birga suriladi) ----
+  function eSetSegment(pts, i, lenMm, absAng) {
+    const n = pts.length; if (i < 0 || i + 1 >= n) return;
+    const a = pts[i], b = pts[i + 1];
+    const oldAng = eAng(b.x - a.x, b.y - a.y);
+    const newAng = absAng == null ? oldAng : eNorm360(absAng);
+    if (state.editAngMode === 'rel' && absAng != null && Math.abs(eNorm180(newAng - oldAng)) > 1e-9) {
+      const dA = eNorm180(newAng - oldAng);
+      for (let k = i + 1; k < n; k++) pts[k] = eRot(pts[k], a, dA);   // keyingi qism birga buriladi
+    }
+    const v = eDir(newAng);
+    const L = lenMm == null ? Math.hypot(pts[i + 1].x - a.x, pts[i + 1].y - a.y) : Math.max(0.01, lenMm);
+    const nb = { x: a.x + v.dx * L, y: a.y + v.dy * L };
+    const dx = nb.x - pts[i + 1].x, dy = nb.y - pts[i + 1].y;
+    for (let k = i + 1; k < n; k++) pts[k] = { x: pts[k].x + dx, y: pts[k].y + dy };
+  }
+  function eSegShown(pts, i) {
+    const a = pts[i], b = pts[i + 1], abs = eAng(b.x - a.x, b.y - a.y);
+    if (state.editAngMode === 'rel' && i > 0) { const p = pts[i - 1]; return eNorm180(abs - eAng(a.x - p.x, a.y - p.y)); }
+    return abs;
+  }
+  function eShownToAbs(pts, i, val) {
+    if (state.editAngMode === 'rel' && i > 0) { const p = pts[i - 1], a = pts[i]; return eNorm360(eAng(a.x - p.x, a.y - p.y) + val); }
+    return eNorm360(val);
+  }
+  function openESegEdit(ent, w) {
+    const r1 = (v) => Math.round(v * 100) / 100, r2 = (v) => Math.round(v * 10) / 10;
+    if (ent.type === 'circle') {
+      state.selEdit.clear(); state.selEdit.add(ent.id);
+      openEBox({ anchor: { x: ent.cx, y: ent.cy }, f1: { label: 'Radius', unit: 'len', val: r1(ent.r / eU()) }, f2: null,
+        onCommit: (r) => { if (r > 0) { pushHistory(); ent.r = r * eU(); closeEBox(); render(); } } });
+      render(); return;
+    }
+    let pts, i;
+    if (ent.type === 'line') { pts = [{ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }]; i = 0; }
+    else if (ent.type === 'polyline') {
+      pts = ent.pts; i = -1; let bd = Infinity;
+      const segs = entSegs(ent);
+      for (let k = 0; k < segs.length; k++) { const dd = distToSeg(w.x, w.y, segs[k][0].x, segs[k][0].y, segs[k][1].x, segs[k][1].y); if (dd < bd) { bd = dd; i = k; } }
+      if (i < 0 || i + 1 >= pts.length) { setEditInfo('Yopuvchi segment tahrirlanmaydi — boshqa segmentni bosing'); return; }
+    } else return;
+    const a = pts[i], b = pts[i + 1];
+    state.selEdit.clear(); state.selEdit.add(ent.id);
+    openEBox({
+      anchor: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      f1: { label: 'Uzunlik', unit: 'len', val: r1(Math.hypot(b.x - a.x, b.y - a.y) / eU()) },
+      f2: { label: (state.editAngMode === 'rel' && i > 0) ? 'Burilish' : 'Burchak', unit: 'ang', val: r2(eSegShown(pts, i)) },
+      onCommit: (L, ang) => {
+        if (eBadLen(L)) return;
+        pushHistory();
+        eSetSegment(pts, i, L == null ? null : L * eU(), ang == null ? null : eShownToAbs(pts, i, ang));
+        if (ent.type === 'line') { ent.x2 = pts[1].x; ent.y2 = pts[1].y; }
+        closeEBox(); render();
+      },
+    });
+    setEditInfo("Uzunlik / burchakni o'zgartirib Enter (Esc — bekor)"); render();
+  }
+
+  // ---- Griplar: tanlangan elementning uchlari (sudrab o'zgartiriladi, boshqa nuqtalarga yopishadi) ----
+  function editGripsOf(e) {
+    if (e.type === 'line') return [{ x: e.x1, y: e.y1, kind: 'p1' }, { x: e.x2, y: e.y2, kind: 'p2' }, { x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2, kind: 'mid' }];
+    if (e.type === 'polyline') return e.pts.map((p, i) => ({ x: p.x, y: p.y, kind: 'v', idx: i }));
+    if (e.type === 'circle') return [{ x: e.cx, y: e.cy, kind: 'c' }, { x: e.cx + e.r, y: e.cy, kind: 'r' }];
+    if (e.type === 'dim') return [{ x: e.x1, y: e.y1, kind: 'p1' }, { x: e.x2, y: e.y2, kind: 'p2' }];
+    return [];
+  }
+  function editGripAt(sx, sy) {
+    for (const e of selectedEnts()) for (const g of editGripsOf(e)) {
+      const s = worldToScreen(g.x, g.y);
+      if (Math.abs(s.x - sx) <= 7 && Math.abs(s.y - sy) <= 7) return { ent: e, kind: g.kind, idx: g.idx, last: { x: g.x, y: g.y }, pushed: false };
+    }
+    return null;
+  }
+  function applyEditGrip(w) {
+    const g = state.egrip, e = g.ent;
+    if (g.kind === 'v') e.pts[g.idx] = { x: w.x, y: w.y };
+    else if (g.kind === 'p1') { e.x1 = w.x; e.y1 = w.y; }
+    else if (g.kind === 'p2') { e.x2 = w.x; e.y2 = w.y; }
+    else if (g.kind === 'mid') { const dx = w.x - g.last.x, dy = w.y - g.last.y; e.x1 += dx; e.y1 += dy; e.x2 += dx; e.y2 += dy; g.last = { x: w.x, y: w.y }; }
+    else if (g.kind === 'c') { e.cx = w.x; e.cy = w.y; }
+    else if (g.kind === 'r') e.r = Math.max(0.1, Math.hypot(w.x - e.cx, w.y - e.cy));
+  }
+
+  // ---- AutoCAD buyruq satri (qisqartmalar): L, PL, REC, C, DIM, M, CO, RO, MI, SC, O, TR, EX, F, E, X, DI, U, Z ----
+  const CMD_ALIASES = {
+    L: 'line', LINE: 'line', PL: 'pline', PLINE: 'pline', POLYLINE: 'pline',
+    REC: 'rect', RECT: 'rect', RECTANGLE: 'rect', C: 'circle', CIRCLE: 'circle',
+    DIM: 'dim', DLI: 'dim', DAL: 'dim', M: 'move', MOVE: 'move', CO: 'copy', CP: 'copy', COPY: 'copy',
+    RO: 'rotate', ROTATE: 'rotate', MI: 'mirror', MIRROR: 'mirror', SC: 'scale', SCALE: 'scale',
+    O: 'offset', OFFSET: 'offset', TR: 'trim', TRIM: 'trim', EX: 'extend', EXTEND: 'extend',
+    F: 'fillet', FILLET: 'fillet', E: 'erase', ERASE: 'erase', DEL: 'erase',
+    X: 'explode', EXPLODE: 'explode', DI: 'measure', DIST: 'measure', MEASURE: 'measure',
+    S: 'select', SEL: 'select', SELECT: 'select',
+  };
+  function runCommand(s) {
+    const k = String(s || '').trim().toUpperCase();
+    if (!k) return;
+    if (k === 'U' || k === 'UNDO') { undo(); return; }
+    if (k === 'Y' || k === 'REDO') { redo(); return; }
+    if (k === 'Z' || k === 'ZE' || k === 'ZOOM') { centerView(); return; }
+    if (k === 'F8' || k === 'ORTHO') { state.editOrtho = !state.editOrtho; syncEditUI(); render(); return; }
+    if (k === 'F10' || k === 'POLAR') { state.editPolar = !state.editPolar; syncEditUI(); render(); return; }
+    if (k === 'ALL') { for (const en of state.editEntities) if (layerVisible(en.layer)) state.selEdit.add(en.id); render(); return; }
+    const t = CMD_ALIASES[k];
+    if (t) { setEditTool(t); return; }
+    setEditInfo(`Noma'lum buyruq: ${k} (L, PL, REC, C, DIM, M, CO, RO, MI, SC, O, TR, EX, F, E, X, DI, U, Z)`);
   }
 
   // ---- Trim / Extend / Fillet uchun geometriya ----
@@ -2240,7 +2662,9 @@ export function mountChizma(root, opts) {
   }
   function editEscape() {
     if (state.toolDraft && state.toolDraft.tool === 'pline' && state.toolDraft.pts.length >= 2) { finishPline(); return; }
-    state.toolDraft = null; editSel = null; render();
+    state.toolDraft = null; editSel = null; state.egrip = null; state.editSnap = null; closeEBox();
+    setEditInfo(toolHint(state.tool));
+    render();
   }
 
   // ---- Tahrir qatlami chizilishi ----
@@ -2293,33 +2717,82 @@ export function mountChizma(root, opts) {
     g.appendChild(t);
     svg.appendChild(g);
   }
+  // Yozuv (fon bilan) — jonli o'lchov / o'lcham uchun
+  function eLabel(x, y, text, col, bold) {
+    const w = text.length * 6.6 + 8;
+    svg.appendChild(svgEl('rect', { x: x - w / 2, y: y - 10, width: w, height: 16, rx: 3, fill: P.labelBg, 'pointer-events': 'none' }));
+    const t = svgEl('text', { x, y: y + 2, fill: col, 'font-size': 11, 'font-weight': bold ? 700 : 600, 'text-anchor': 'middle', 'pointer-events': 'none' });
+    t.textContent = text;
+    svg.appendChild(t);
+  }
   function renderEditPreview() {
     if (!state.editMode) return;
     const d = state.toolDraft, cur = state.cursorW;
     const ghost = (el) => { if (el) { el.setAttribute('opacity', '0.85'); el.setAttribute('pointer-events', 'none'); svg.appendChild(el); } };
     const dash = { stroke: P.edit, 'stroke-width': 1.4, 'stroke-dasharray': '5 4', fill: 'none' };
-    if (d && d.tool === 'line') ghost(entSvg({ type: 'line', x1: d.p1.x, y1: d.p1.y, x2: cur.x, y2: cur.y }, dash));
-    else if (d && d.tool === 'pline') ghost(entSvg({ type: 'polyline', pts: d.pts.concat([cur]), closed: false }, dash));
-    else if (d && d.tool === 'rect') { const a = d.p1; ghost(entSvg({ type: 'polyline', pts: [{ x: a.x, y: a.y }, { x: cur.x, y: a.y }, { x: cur.x, y: cur.y }, { x: a.x, y: cur.y }], closed: true }, dash)); }
-    else if (d && d.tool === 'circle') ghost(entSvg({ type: 'circle', cx: d.c.x, cy: d.c.y, r: Math.hypot(cur.x - d.c.x, cur.y - d.c.y) }, dash));
-    else if (d && d.tool === 'dim') ghost(entSvg({ type: 'line', x1: d.p1.x, y1: d.p1.y, x2: cur.x, y2: cur.y }, dash));
-    else if (d && ['move', 'copy', 'rotate', 'scale', 'mirror'].includes(d.tool)) {
-      const base = d.base;
+    // Jonli uzunlik + burchak yozuvi (rubber-band uchida) — AutoCAD dinamik kiritish kabi
+    const live = (from, to, prevAbs) => {
+      const L = Math.hypot(to.x - from.x, to.y - from.y); if (L < 1e-6) return;
+      const abs = eAng(to.x - from.x, to.y - from.y);
+      const shown = (state.editAngMode === 'rel' && prevAbs != null) ? eNorm180(abs - prevAbs) : abs;
+      const s = worldToScreen(to.x, to.y);
+      eLabel(s.x + 34, s.y - 20, fmt(L, state.editUnit) + '   ∠ ' + (Math.round(shown * 10) / 10) + '°', P.edit, true);
+    };
+    if (d && d.tool === 'line') {
+      const t = eTarget(d.p1, d.prevAbs);
+      ghost(entSvg({ type: 'line', x1: d.p1.x, y1: d.p1.y, x2: t.x, y2: t.y }, dash));
+      live(d.p1, t, d.prevAbs);
+    } else if (d && d.tool === 'pline') {
+      const last = d.pts[d.pts.length - 1], t = eTarget(last, eLastAbs(d.pts));
+      ghost(entSvg({ type: 'polyline', pts: d.pts.concat([t]), closed: false }, dash));
+      live(last, t, eLastAbs(d.pts));
+      const s0 = worldToScreen(d.pts[0].x, d.pts[0].y);
+      svg.appendChild(svgEl('circle', { cx: s0.x, cy: s0.y, r: 4, fill: 'none', stroke: P.edit, 'stroke-width': 1.5, 'pointer-events': 'none' }));
+    } else if (d && d.tool === 'rect') {
+      const a = d.p1, b = rectTarget();
+      ghost(entSvg({ type: 'polyline', pts: [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }], closed: true }, dash));
+      const s = worldToScreen(b.x, b.y);
+      eLabel(s.x + 36, s.y - 18, fmt(Math.abs(b.x - a.x), state.editUnit) + ' × ' + fmt(Math.abs(b.y - a.y), state.editUnit), P.edit, true);
+    } else if (d && d.tool === 'circle') {
+      const r = circleR();
+      ghost(entSvg({ type: 'circle', cx: d.c.x, cy: d.c.y, r }, dash));
+      const c = worldToScreen(d.c.x, d.c.y);
+      eLabel(c.x, c.y - r * state.scale - 12, 'R ' + fmt(r, state.editUnit), P.edit, true);
+    } else if (d && (d.tool === 'dim' || d.tool === 'measure')) {
+      ghost(entSvg({ type: 'line', x1: d.p1.x, y1: d.p1.y, x2: cur.x, y2: cur.y }, dash));
+      live(d.p1, cur, null);
+    } else if (d && ['move', 'copy', 'rotate', 'scale', 'mirror'].includes(d.tool)) {
+      const base = d.base, [v1, v2] = eboxVals();
+      let tgt = cur;
+      if ((d.tool === 'move' || d.tool === 'copy') && v1 > 0) { const v = eDir(eNorm360(v2 || 0)); tgt = { x: base.x + v.dx * v1 * eU(), y: base.y + v.dy * v1 * eU() }; }
       for (const e of selectedEnts()) {
         const g = JSON.parse(JSON.stringify(e));
-        if (d.tool === 'move' || d.tool === 'copy') mapEnt(g, (p) => ({ x: p.x + (cur.x - base.x), y: p.y + (cur.y - base.y) }));
-        else if (d.tool === 'rotate') { const ang = Math.atan2(cur.y - base.y, cur.x - base.x); mapEnt(g, (p) => rotPt(p, base, ang)); }
-        else if (d.tool === 'scale') { const f = d.d0 ? Math.hypot(cur.x - base.x, cur.y - base.y) / d.d0 : 1; mapEnt(g, (p) => ({ x: base.x + (p.x - base.x) * f, y: base.y + (p.y - base.y) * f }), f); }
+        if (d.tool === 'move' || d.tool === 'copy') mapEnt(g, (p) => ({ x: p.x + (tgt.x - base.x), y: p.y + (tgt.y - base.y) }));
+        else if (d.tool === 'rotate') { const ang = v2 != null ? v2 : eAng(cur.x - base.x, cur.y - base.y); mapEnt(g, (p) => eRot(p, base, ang)); }
+        else if (d.tool === 'scale') { const f = v1 > 0 ? v1 : (d.d0 ? Math.hypot(cur.x - base.x, cur.y - base.y) / d.d0 : 1); mapEnt(g, (p) => ({ x: base.x + (p.x - base.x) * f, y: base.y + (p.y - base.y) * f }), f); }
         else if (d.tool === 'mirror') mapEnt(g, (p) => reflPt(p, base, cur));
-        ghost(entSvg(g, { stroke: P.accent, 'stroke-width': 1.6, 'stroke-dasharray': '4 3', fill: 'none' }));
+        if (g.type === 'dim') drawDim(g, true);
+        else ghost(entSvg(g, { stroke: P.accent, 'stroke-width': 1.6, 'stroke-dasharray': '4 3', fill: 'none' }));
       }
       if (d.tool === 'mirror') { const s1 = worldToScreen(base.x, base.y), s2 = worldToScreen(cur.x, cur.y); ghost(svgEl('line', { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y, stroke: P.accent, 'stroke-width': 1, 'stroke-dasharray': '2 3' })); }
+      if (d.tool === 'move' || d.tool === 'copy') live(base, tgt, null);
     } else if (d && d.tool === 'offset' && d.ent) {
-      ghost(entSvg(d.ent, { stroke: P.accent, 'stroke-width': 2.6, fill: 'none' }));
+      if (d.ent.type === 'dim') drawDim(d.ent, true);
+      else ghost(entSvg(d.ent, { stroke: P.accent, 'stroke-width': 2.6, fill: 'none' }));
     } else if (d && d.tool === 'fillet' && d.ent1) {
       ghost(entSvg(d.ent1, { stroke: P.accent, 'stroke-width': 2.6, fill: 'none' }));
     }
-    if (d && d.base) { const s = worldToScreen(d.base.x, d.base.y); svg.appendChild(svgEl('circle', { cx: s.x, cy: s.y, r: 3, fill: P.accent })); }
+    if (d && d.base) { const s = worldToScreen(d.base.x, d.base.y); svg.appendChild(svgEl('circle', { cx: s.x, cy: s.y, r: 3, fill: P.accent, 'pointer-events': 'none' })); }
+    // Griplar (Select asbobida, tanlangan elementlarning uchlari)
+    if (state.tool === 'select') for (const e of selectedEnts()) for (const g of editGripsOf(e)) {
+      const s = worldToScreen(g.x, g.y);
+      svg.appendChild(svgEl('rect', { x: s.x - 4, y: s.y - 4, width: 8, height: 8, fill: P.accentSoft, stroke: P.accent, 'stroke-width': 1.4, 'pointer-events': 'none' }));
+    }
+    // Yopishish belgisi (snap marker)
+    if (state.editSnap && !state.egrip) {
+      const s = worldToScreen(state.editSnap.x, state.editSnap.y);
+      svg.appendChild(svgEl('rect', { x: s.x - 5, y: s.y - 5, width: 10, height: 10, fill: 'none', stroke: P.accent, 'stroke-width': 1.6, 'pointer-events': 'none' }));
+    }
   }
 
   /* ---------------- UZUNLIK QUTISI ---------------- */
@@ -3265,6 +3738,7 @@ export function mountChizma(root, opts) {
     }
 
     repositionInput();   // pan/zoom paytida kiritish qutisi chizma bilan birga ko'chadi
+    positionEBox();      // Tahrir kiritish qutisi ham langariga yopishib yuradi
     updatePanel();
     updateScaleInfo();
     syncHistoryButtons();
@@ -3493,6 +3967,7 @@ export function mountChizma(root, opts) {
         points: state.points, lines: state.lines,
         ents: state.editEntities, ne: state.nextEntId,
         layers: state.layers, curLayer: state.curLayer, curColor: state.curColor, curWidth: state.curWidth,
+        editOrtho: state.editOrtho, editPolar: state.editPolar, editAngMode: state.editAngMode, editUnit: state.editUnit,
         np: state.nextPointId, nl: state.nextLineId,
         color: state.color, unit: state.unit,
         unitDevor: state.unitDevor, unitQosh: state.unitQosh,
@@ -3534,6 +4009,10 @@ export function mountChizma(root, opts) {
       if (typeof o.curLayer === 'string') state.curLayer = o.curLayer;
       state.curColor = o.curColor || null;
       state.curWidth = o.curWidth || null;
+      state.editOrtho = !!o.editOrtho;
+      state.editPolar = o.editPolar !== false;
+      state.editAngMode = o.editAngMode === 'rel' ? 'rel' : 'abs';
+      state.editUnit = UNITS[o.editUnit] ? o.editUnit : 'm';
       state.nextPointId = o.np || (Math.max(0, ...state.points.map((p) => p.id)) + 1);
       state.nextLineId = o.nl || (Math.max(0, ...state.lines.map((l) => l.id)) + 1);
       state.nextEntId = o.ne || (Math.max(0, ...state.editEntities.map((e) => e.id)) + 1);
@@ -3646,7 +4125,7 @@ export function mountChizma(root, opts) {
   on(canvasWrap, 'contextmenu', (e) => e.preventDefault());
 
   on(canvasWrap, 'mousedown', (e) => {
-    if (inputBox.contains(e.target)) return;
+    if (inputBox.contains(e.target) || editBox.contains(e.target)) return;
     if (state.activeInput && state.activeInput.mode === 'draw' && e.button === 0) {
       e.preventDefault();
       finalizeDraw();
@@ -3764,10 +4243,25 @@ export function mountChizma(root, opts) {
     // "Nuqta o'chirish" rejimi — Esc bilan bekor qilinadi.
     if (state.removingPoint && e.key === 'Escape') { e.preventDefault(); setRemovingPoint(false); return; }
     // TAHRIR rejimi qisqartmalari (Ctrl+Z/Y/E pastda umumiy ishlayveradi).
+    if (state.editMode && (e.key === 'F8' || e.key === 'F10')) {
+      e.preventDefault();
+      if (e.key === 'F8') state.editOrtho = !state.editOrtho; else state.editPolar = !state.editPolar;
+      syncEditUI(); render(); return;
+    }
+    const tgt0 = e.target;
+    const inField = tgt0 && (tgt0.tagName === 'INPUT' || tgt0.tagName === 'TEXTAREA' || tgt0.tagName === 'SELECT' || tgt0.isContentEditable);
+    if (state.editMode && inField) return;   // kiritish qutisi / buyruq satri o'zi hal qiladi
     if (state.editMode) {
       if (e.key === 'Escape') { e.preventDefault(); editEscape(); return; }
       if (e.key === 'Enter') { e.preventDefault(); finishPline(); return; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && state.selEdit.size > 0) { e.preventDefault(); eraseSelectedEnts(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); for (const en of state.editEntities) if (layerVisible(en.layer)) state.selEdit.add(en.id); render(); return; }
+      // Harf bosilsa — AutoCAD buyruq satriga tushadi (L, PL, C, M ...)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-zA-Z]$/.test(e.key)) {
+        const ci = q('cmdInput');
+        if (ci) { e.preventDefault(); ci.focus(); ci.value = e.key.toUpperCase(); }
+        return;
+      }
     }
     // Boshqa input/textarea fokusta bo'lsa aralashmaymiz (zakas formasi).
     const t = e.target;
@@ -3824,6 +4318,68 @@ export function mountChizma(root, opts) {
   // TAHRIR rejimi tugmalari.
   on(q('btnEdit'), 'click', () => setEditMode(!state.editMode));
   root.querySelectorAll('.etool').forEach((b) => on(b, 'click', () => setEditTool(b.getAttribute('data-tool'))));
+  // ---- Tahrir: dinamik kiritish qutisi (uzunlik/burchak), buyruq satri, Orto/Polar, birlik ----
+  function eboxKey(e) {
+    const b = state.ebox; if (!b) return;
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); commitEBox(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); editEscape(); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const other = e.target === ef1 ? ef2 : ef1;
+      if (other.parentElement.style.display !== 'none') { other.focus(); other.select(); }
+      return;
+    }
+    if (b.pline && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); finishPline(true); return; }
+    if (b.pline && e.key === 'Backspace' && e.target === ef1 && ef1.value === '') { e.preventDefault(); plineBackspace(); }
+  }
+  const eTozala = (s, neg) => {
+    s = String(s).replace(/,/g, '.').replace(neg ? /[^\d.-]/g : /[^\d.]/g, '');
+    if (neg) s = s.replace(/(?!^)-/g, '');
+    const i = s.indexOf('.');
+    return i < 0 ? s : s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '');
+  };
+  for (const inp of [ef1, ef2]) {
+    on(inp, 'keydown', eboxKey);
+    on(inp, 'input', () => {
+      const neg = inp.dataset.num === 'neg', xom = inp.value;
+      const v = sonMatn(xom, { manfiy: neg });
+      const yangi = (v === null) ? eTozala(xom, neg) : v;
+      if (yangi !== xom) {
+        const p = inp.selectionStart, farq = xom.length - yangi.length;
+        inp.value = yangi;
+        try { inp.setSelectionRange(Math.max(0, p - farq), Math.max(0, p - farq)); } catch (err) { /* noop */ }
+      }
+      if (state.toolDraft) render();   // yozilgan uzunlik/burchak jonli ko'rinsin
+    });
+  }
+  on(q('ebOk'), 'click', () => { commitEBox(); refocusEBox(); });
+  on(q('ebClose'), 'click', () => finishPline(true));
+  on(q('ebEnd'), 'click', () => editEscape());
+  on(q('eUnitSel'), 'change', (e) => { state.editUnit = UNITS[e.target.value] ? e.target.value : 'm'; syncEBoxLabels(); refocusEBox(true); render(); });
+  on(q('tgEOrtho'), 'click', () => { state.editOrtho = !state.editOrtho; syncEditUI(); render(); });
+  on(q('tgEPolar'), 'click', () => { state.editPolar = !state.editPolar; syncEditUI(); render(); });
+  on(q('eAngMode'), 'change', (e) => {
+    state.editAngMode = e.target.value === 'rel' ? 'rel' : 'abs';
+    const d = state.toolDraft;
+    if (state.ebox && state.ebox.f2 && state.ebox.f2.unit === 'ang' && d) {
+      const prev = d.tool === 'line' ? d.prevAbs : (d.tool === 'pline' ? eLastAbs(d.pts) : null);
+      state.ebox.f2.label = eAngLabel(prev); syncEBoxLabels();
+    }
+    render();
+  });
+  on(q('cmdInput'), 'keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); const s = e.target.value; e.target.value = ''; runCommand(s); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.target.value = ''; e.target.blur(); editEscape(); }
+  });
+  // Tahrir + Select: chiziq/segment/aylanaga 2 marta bosilsa — uzunlik/burchak (radius) tahriri
+  on(canvasWrap, 'dblclick', (e) => {
+    if (!state.editMode || state.tool !== 'select' || !svg.contains(e.target)) return;
+    e.preventDefault();
+    const { sx, sy } = evScreen(e);
+    const ent = entAtScreen(sx, sy);
+    if (ent) openESegEdit(ent, screenToWorld(sx, sy));
+  });
+
   // Xossa (rang/qalinlik) — joriy qiymatga o'rnatadi va tanlangan(lar)ga qo'llaydi.
   on(q('entColor'), 'change', (e) => { state.curColor = e.target.value; applyToSel('color', e.target.value); });
   on(q('entWidth'), 'change', (e) => { state.curWidth = parseFloat(e.target.value); applyToSel('width', parseFloat(e.target.value)); });
