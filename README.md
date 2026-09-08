@@ -216,3 +216,24 @@ nuqta/o'rta/xona burchaklariga yopishish (belgi bilan), tanlangan elementning
 **Explode** (polyline → chiziqlar), **Masofa** (DI) o'lchash, **Ctrl+A**,
 **buyruq satri** (harf bossangiz o'zi tushadi): L, PL, REC, C, DIM, M, CO, RO,
 MI, SC, O, TR, EX, F, E, X, DI, U, Z.
+
+### Magnitlar (OSNAP) va holat paneli — ikkala chizma uchun umumiy
+
+`src/lib/osnap.js` (sof geometriya, `npm run test:osnap`) va `src/lib/cadStatusBar.js`
+(holat paneli) — Xona konturi Tahrir rejimi ham, Detal chizish ham shu moduldan
+foydalanadi; sozlamalar localStorage `cad-snap-v1` kalitida umumiy.
+
+- **OSNAP** (F3, menyu ▾): uch nuqta (END), o'rta (MID), markaz (CEN), tugun
+  (NOD — xona burchaklari, (0,0)), kvadrant (QUA), kesishma (INT), davomi (EXT),
+  perpendikulyar (PER), tangens (TAN), eng yaqin (NEA). Belgi shakli AutoCAD'dek
+  (kvadrat, uchburchak, aylana, romb, ×, ⊥ ...), yonida nomi; magnit radiusi
+  sozlanadi. Bir nechta nomzod bo'lsa kursorga eng yaqini ustunlik bilan tanlanadi
+  (END/INT kuchli, NEA eng kuchsiz). Xona konturida devor/qosh chiziqlari va
+  burchaklariga ham yopishadi.
+- **ORTHO** (F8) / **POLAR** (F10, qadam 5…90°) — polar nur punktir chiziq bilan
+  ko'rsatiladi; ikkalasi bir vaqtda yonmaydi.
+- **OTRACK** (F11): yopishgan nuqta ustida ~0.25 s turilsa nuqta "olinadi" (+ belgi),
+  undan gorizontal/vertikal/polar kuzatish chiziqlari chiqadi; ikki chiziq (yoki
+  chiziq × polar nur) kesishmasiga yopishadi. Nuqta belgilangach olinganlar tozalanadi.
+- **SNAP** (F9) — to'r tugunlariga; **GRID** (F7, qadam ▾ avto/1 mm…1 m); **DYN** (F12)
+  — uzunlik/burchak kiritish qutisi. Chapda kursor koordinatasi (Y yuqoriga).

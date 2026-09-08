@@ -1297,3 +1297,62 @@ html.themed .dtl-closed { color: var(--c-t2); }
 .chz-cmd::placeholder { text-transform: none; font-weight: 500; color: #94a3b8; }
 .chz-cmd:focus { outline: none; border-color: var(--chz-edit); box-shadow: 0 0 0 2px color-mix(in srgb, var(--chz-edit) 25%, transparent); }
 html.themed .chz-cmd { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+
+/* ============================================================
+   CAD HOLAT PANELI (AutoCAD pastki tugmalari) — cadStatusBar.js
+   Chizma maydoni (.chz-canvas) pastida: koordinata + SNAP/GRID/ORTHO/POLAR/OSNAP/OTRACK/DYN
+   ============================================================ */
+.cad-status {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 8; height: 28px;
+  display: flex; align-items: center; gap: 2px; padding: 0 6px;
+  background: rgba(248, 250, 252, .94); border-top: 1px solid #e2e8f0;
+  font-size: 10.5px; color: #334155; user-select: none; cursor: default;
+  /* Tor ekranda (telefon) tugmalar kesilib qolmasin — gorizontal aylantiriladi */
+  overflow-x: auto; overflow-y: visible; scrollbar-width: thin;
+}
+.cad-status::-webkit-scrollbar { height: 4px; }
+.cad-status::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+.cad-status > *, .cad-status .cad-dd { flex: none; }
+html.themed .cad-status { background: color-mix(in srgb, var(--c-surface2) 92%, transparent); border-color: var(--c-line); color: var(--c-t2); }
+.cad-coords { margin-right: auto; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; color: #475569; white-space: nowrap; }
+html.themed .cad-coords { color: var(--c-t3); }
+.cad-status > button, .cad-dd > button {
+  padding: 2px 7px; border: 1px solid transparent; border-radius: 4px; background: transparent;
+  color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: .3px; cursor: pointer; line-height: 1.3;
+}
+.cad-status > button:hover, .cad-dd > button:hover { border-color: #cbd5e1; color: #0f172a; }
+.cad-status button.on { background: color-mix(in srgb, var(--chz-accent) 16%, #fff); color: var(--chz-accent); border-color: var(--chz-accent); }
+html.themed .cad-status > button, html.themed .cad-dd > button { color: var(--c-t3); }
+html.themed .cad-status > button:hover, html.themed .cad-dd > button:hover { border-color: var(--c-line); color: var(--c-t1); }
+html.themed .cad-status button.on { background: color-mix(in srgb, var(--chz-accent) 22%, var(--c-surface)); }
+.cad-dd { position: relative; display: inline-flex; align-items: center; }
+.cad-dd > button.cad-ddbtn { padding: 2px 3px; margin-left: -3px; font-size: 9px; }
+.cad-menu {
+  display: none; position: absolute; right: 0; bottom: calc(100% + 5px); z-index: 30; min-width: 190px;
+  padding: 8px 9px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, .18); font-size: 11px; color: #334155; text-align: left;
+  /* Past chizma maydonida menyu yuqoridan kesilmasin */
+  max-height: 62vh; overflow-y: auto; overscroll-behavior: contain;
+}
+.cad-menu.show { display: block; }
+.cad-menu-wide { min-width: 250px; }
+html.themed .cad-menu { background: var(--c-surface); border-color: var(--c-line); color: var(--c-t2); box-shadow: 0 6px 22px rgba(0, 0, 0, .6); }
+.cad-menu-title { font-weight: 800; font-size: 11px; color: #0f172a; margin-bottom: 5px; }
+html.themed .cad-menu-title { color: var(--c-t1); }
+.cad-menu label { display: flex; align-items: center; gap: 6px; padding: 2px 2px; cursor: pointer; white-space: nowrap; border-radius: 4px; }
+.cad-menu label:hover { background: color-mix(in srgb, var(--chz-accent) 8%, transparent); }
+.cad-menu label b { margin-left: auto; font-size: 9.5px; color: #94a3b8; font-weight: 700; }
+.cad-menu input[type="checkbox"], .cad-menu input[type="radio"] { margin: 0; accent-color: var(--chz-accent); }
+.cad-ico { display: inline-flex; color: var(--chz-accent); }
+.cad-menu-btns { display: flex; align-items: center; gap: 5px; margin-top: 7px; padding-top: 6px; border-top: 1px solid #e2e8f0; flex-wrap: wrap; }
+html.themed .cad-menu-btns { border-color: var(--c-line); }
+.cad-menu-btns > button { padding: 3px 8px; font-size: 10.5px; font-weight: 700; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #334155; cursor: pointer; }
+.cad-menu-btns > button:hover { border-color: var(--chz-accent); color: var(--chz-accent); }
+html.themed .cad-menu-btns > button { background: var(--c-chip); color: var(--c-t2); border-color: var(--c-line); }
+.cad-menu-inline { margin-left: auto; font-size: 10.5px; color: #64748b; gap: 4px; }
+.cad-menu-inline select { font-size: 10.5px; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #0f172a; }
+html.themed .cad-menu-inline select { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+/* Holat paneli chizma maydonining pastini egallaydi — yon panel bilan tenglashsin */
+.chz-canvas { padding-bottom: 0; }
+/* Tor ekranda koordinata yozuvi tugmalarni siqib qo'ymasin */
+@media (max-width: 700px) { .cad-coords { display: none; } }

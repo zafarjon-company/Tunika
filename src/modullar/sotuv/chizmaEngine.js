@@ -13,6 +13,8 @@
 // ============================================================
 
 import { sonMatn, sonQiymat } from '../../lib/helpers.js';
+import { loadSnap, saveSnap, buildGeom, resolveSnap, updateAcquire, gridStepFor, snapMarkerShapes } from '../../lib/osnap.js';
+import { mountStatusBar } from '../../lib/cadStatusBar.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PLUS_OFFSET = 26;   // yashil "+" (chizish) nuqtadan necha piksel narida
@@ -351,8 +353,6 @@ const TEMPLATE = `
     <button type="button" class="tool etool" data-chz="etExplode" data-tool="explode" title="Explode (X) — polyline/to'rtburchakni alohida chiziqlarga ajratish (Trim/Extend/Fillet uchun)">Explode</button>
     <button type="button" class="tool etool" data-chz="etMeasure" data-tool="measure" title="Masofa (DI) — ikki nuqta orasidagi masofa va burchakni o'lchash (chizmaga tushmaydi)">Masofa</button>
     <span class="sep"></span>
-    <button type="button" class="tool tg" data-chz="tgEOrtho" title="Orto (F8) — kursor faqat 0°/90°/180°/270° ga yuradi">Orto</button>
-    <button type="button" class="tool tg" data-chz="tgEPolar" title="Polar (F10) — kursor 15° qadamlarga yopishadi">Polar 15°</button>
     <select class="rowUnit" data-chz="eAngMode" title="Yozilgan burchak: mutlaq (0° o'ng, 90° tepa — AutoCAD) yoki nisbiy (oldingi chiziqdan burilish: + chapga, − o'ngga)">
       <option value="abs">mutlaq °</option><option value="rel">nisbiy °</option>
     </select>
@@ -468,7 +468,7 @@ const TEMPLATE = `
         &bull; <b>Surish (pan)</b>: o'rta yoki o'ng tugmani bosib torting. G'ildirak — zoom.<br>
         &bull; Birlik: chizish — <b>default m</b>, offset — <b>default cm</b>. Panelda har detal o'z birligi.<br>
         &bull; <b>Ctrl+Z/Ctrl+Y</b> — orqaga/oldinga; <b>Markazga (Ctrl+E)</b> — chiziqlar chegarasigacha avtozoom.<br>
-        &bull; <span style="color:var(--chz-edit)"><b>Tahrir (AutoCAD)</b></span>: Line/Polyline'da nuqtani bosgach chiqqan qutiga <b>uzunlik</b> + <b>burchak</b> yozib Enter (Tab — maydon almashish; burchak yozilmasa yo'nalish kursordan). <b>Orto</b> (F8), <b>Polar 15°</b> (F10); nuqta/o'rta/xona burchaklariga avtomatik <b>yopishadi</b>. Move/Copy/Rotate/Scale/Offset'da ham qiymat yozsa bo'ladi.<br>
+        &bull; <span style="color:var(--chz-edit)"><b>Tahrir (AutoCAD)</b></span>: Line/Polyline'da nuqtani bosgach chiqqan qutiga <b>uzunlik</b> + <b>burchak</b> yozib Enter (Tab — maydon almashish; burchak yozilmasa yo'nalish kursordan). Pastdagi <b>holat paneli</b> AutoCAD'dek: SNAP (F9), GRID (F7), ORTHO (F8), POLAR (F10, qadam ▾), <b>OSNAP</b> (F3, magnit rejimlari ▾ — uch nuqta, o'rta, markaz, kvadrant, kesishma, perpendikulyar, tangens, eng yaqin; xona burchaklari/devorlariga ham yopishadi), OTRACK (F11 — nuqta ustida biroz turing, kuzatish chiziqlari chiqadi), DYN (F12). Move/Copy/Rotate/Scale/Offset'da ham qiymat yozsa bo'ladi.<br>
         &bull; Tahrirda <b>Select</b>: tanlangan elementning <b>griplarini</b> (kvadratcha) sudrang; chiziqqa <b>2 marta bosing</b> — uzunlik/burchak tahriri. <b>Buyruq satri</b>: harf bossangiz o'zi tushadi — L, PL, REC, C, M, CO, RO, MI, SC, O, TR, EX, F, E, X (Explode), DI (Masofa), U, Z. <b>Ctrl+A</b> — hammasini tanlash.
       </div>
     </div>
@@ -546,8 +546,9 @@ export function mountChizma(root, opts) {
     curWidth: null,        // joriy chiziq qalinligi (null = standart 1.6)
     curLayer: '0',         // joriy qatlam (yangi elementlar shunga tushadi)
     layers: [{ name: '0', visible: true }],  // qatlamlar (nom + ko'rinish)
-    editOrtho: false,      // Tahrir: Orto (F8) — faqat 0/90°
-    editPolar: true,       // Tahrir: Polar 15° (F10)
+    snapSet: loadSnap(),   // AutoCAD OSNAP/ORTHO/POLAR/OTRACK/GRID/DYN sozlamalari (Detal chizish bilan umumiy)
+    track: { hover: null, acq: [] },   // OTRACK: olingan nuqtalar
+    editSnapRes: null,     // oxirgi resolveSnap natijasi (belgi / kuzatish chiziqlari / maslahat)
     editAngMode: 'abs',    // Tahrir: yozilgan burchak — 'abs' mutlaq | 'rel' oldingi chiziqdan burilish
     editUnit: 'm',         // Tahrir kiritish qutisi birligi (mm/cm/m)
     ebox: null,            // Tahrir dinamik kiritish qutisi (uzunlik/burchak) holati
@@ -561,6 +562,14 @@ export function mountChizma(root, opts) {
   const lengthInput = q('lengthInput');
   const unitSelect  = q('unitSelect');
   const selBoxEl    = q('selBox');
+
+  // AutoCAD holat paneli (chizma maydoni pastida): SNAP/GRID/ORTHO/POLAR/OSNAP/OTRACK/DYN + koordinata
+  function onSnapChange(key) {
+    saveSnap(state.snapSet);
+    if (key === 'dyn' && state.ebox) { if (state.snapSet.dyn) { editBox.classList.add('show'); positionEBox(); } else editBox.classList.remove('show'); }
+    render();
+  }
+  const statusBar = mountStatusBar(canvasWrap, { settings: state.snapSet, onChange: onSnapChange });
 
   /* ---------------- YO'NALISH YORDAMCHILARI ---------------- */
   const DIRS = {
@@ -1853,21 +1862,6 @@ export function mountChizma(root, opts) {
   function scaleSel(c, f) { for (const e of selectedEnts()) mapEnt(e, (p) => ({ x: c.x + (p.x - c.x) * f, y: c.y + (p.y - c.y) * f }), f); }
   function mirrorSel(A, B) { for (const e of selectedEnts()) mapEnt(e, (p) => reflPt(p, A, B)); }
 
-  // --- Snap (yopishish): ekran (sx,sy) ga eng yaqin tugunni topib, world nuqtasini qaytaradi.
-  //   Tugunlar: tahrir elementlari uchlari/vertexlari/markazlari + SEGMENT O'RTALARI +
-  //   xona konturi (devor/qosh) nuqtalari + koordinata boshi. Topilsa belgi (editSnap) qo'yiladi.
-  //   from berilsa — Orto (F8) / Polar 15° (F10) cheklovi ham qo'llanadi (AutoCAD'dek).
-  function editSnapPoints() {
-    const pts = [{ x: 0, y: 0, eid: 0 }];
-    for (const ent of state.editEntities) {
-      if (!layerVisible(ent.layer)) continue;
-      for (const wp of entSnapPts(ent)) pts.push({ x: wp.x, y: wp.y, eid: ent.id });
-      for (const [a, b] of entSegs(ent)) pts.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, eid: ent.id });
-    }
-    for (const p of state.points) pts.push({ x: p.x, y: p.y, eid: -2 });
-    if (state.toolDraft && state.toolDraft.tool === 'pline') for (const p of state.toolDraft.pts) pts.push({ x: p.x, y: p.y, eid: -1 });
-    return pts;
-  }
   // Burchak yordamchilari — AutoCAD'dek: 0° = o'ng, 90° = TEPA, soat miliga qarshi musbat
   const E_D2R = Math.PI / 180, E_R2D = 180 / Math.PI;
   function eNorm360(a) { a = a % 360; if (a < 0) a += 360; return (Math.abs(a) < 1e-9 || Math.abs(a - 360) < 1e-9) ? 0 : a; }
@@ -1878,30 +1872,31 @@ export function mountChizma(root, opts) {
     const r = deg * E_D2R, cos = Math.cos(r), sin = Math.sin(r), x = p.x - c.x, y = p.y - c.y;
     return { x: c.x + x * cos + y * sin, y: c.y - x * sin + y * cos };
   }
-  function eConstrain(from, w) {
-    const dx = w.x - from.x, dy = w.y - from.y, L = Math.hypot(dx, dy);
-    if (L < 1e-9) return w;
-    const step = state.editOrtho ? 90 : (state.editPolar ? 15 : 0);
-    if (!step) return w;
-    const a = eAng(dx, dy), snapped = eNorm360(Math.round(a / step) * step);
-    if (!state.editOrtho) { let d = Math.abs(a - snapped); d = Math.min(d, 360 - d); if (d > 4) return w; }
-    const v = eDir(snapped);
-    return { x: from.x + v.dx * L, y: from.y + v.dy * L };
-  }
-  function snapWorld(sx, sy, from, skip) {
-    let best = null, bd = SNAP_PX;
-    for (const p of editSnapPoints()) {
-      if (skip && skip(p)) continue;
-      const s = worldToScreen(p.x, p.y);
-      const d = Math.hypot(s.x - sx, s.y - sy);
-      if (d <= bd) { bd = d; best = p; }
+  // --- Snap (yopishish) — AutoCAD OSNAP (osnap.js): tahrir elementlari + XONA KONTURI
+  //   (devor/qosh chiziqlari va burchaklari) + (0,0) + chizilayotgan polyline. Uchlar, o'rtalar,
+  //   markaz/kvadrant, kesishma, perpendikulyar/tangens (tayanchdan), eng yaqin. from berilsa —
+  //   ORTHO/POLAR nurlari va OTRACK kuzatish chiziqlari (olingan nuqtalardan) ham qo'llanadi.
+  function snapGeom(skipEid) {
+    const nodes = [{ x: 0, y: 0, eid: 0 }], segs = [];
+    for (const p of state.points) nodes.push({ x: p.x, y: p.y, eid: -2 });
+    for (const ln of state.lines) { const a = getPoint(ln.a), b = getPoint(ln.b); if (a && b) segs.push({ a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, eid: -2 }); }
+    const d = state.toolDraft;
+    if (d && d.tool === 'pline') {
+      for (const p of d.pts) nodes.push({ x: p.x, y: p.y, eid: -1 });
+      for (let i = 0; i + 1 < d.pts.length; i++) segs.push({ a: d.pts[i], b: d.pts[i + 1], eid: -1 });
     }
-    if (best) { state.editSnap = { x: best.x, y: best.y }; return { x: best.x, y: best.y }; }
-    state.editSnap = null;
-    let w = screenToWorld(sx, sy);
-    if (from) w = eConstrain(from, w);
-    return w;
+    return buildGeom(state.editEntities, { skip: (e) => !layerVisible(e.layer) || (skipEid != null && e.id === skipEid), nodes, segs });
   }
+  function snapWorld(sx, sy, from, skipEid) {
+    const geom = snapGeom(skipEid);
+    const res = resolveSnap({ geom, cur: screenToWorld(sx, sy), scale: state.scale, settings: state.snapSet, from, skipEid, acquired: state.track.acq, gridStep: gridStepFor(state.snapSet, state.scale) });
+    state.editSnapRes = res;
+    state.editSnap = res.snap ? { x: res.snap.x, y: res.snap.y, kind: res.snap.kind } : null;
+    updateAcquire(state.track, res, Date.now(), geom, state.snapSet);
+    return { x: res.x, y: res.y };
+  }
+  // Nuqta belgilangach olingan (OTRACK) nuqtalar tozalanadi — AutoCAD'dek
+  function clearAcq() { state.track.acq = []; state.track.hover = null; }
   // Joriy asbob jarayonining tayanch nuqtasi (orto/polar shu nuqtadan hisoblanadi)
   function editAnchor() {
     const d = state.toolDraft; if (!d) return null;
@@ -1919,6 +1914,7 @@ export function mountChizma(root, opts) {
   function openEBox(cfg) {
     state.ebox = cfg;
     syncEBoxLabels();
+    if (!state.snapSet.dyn) { editBox.classList.remove('show'); return; }   // DYN o'chiq — faqat sichqoncha bilan
     editBox.classList.add('show');
     ef1.value = (cfg.f1 && cfg.f1.val != null) ? String(cfg.f1.val) : '';
     ef2.value = (cfg.f2 && cfg.f2.val != null) ? String(cfg.f2.val) : '';
@@ -1954,7 +1950,7 @@ export function mountChizma(root, opts) {
     return [v(ef1, b.f1), v(ef2, b.f2)];
   }
   function clearEBoxFields() { ef1.value = ''; ef2.value = ''; refocusEBox(true); }
-  function commitEBox() { const b = state.ebox; if (!b) return; const [v1, v2] = eboxVals(); b.onCommit(v1, v2); }
+  function commitEBox() { const b = state.ebox; if (!b) return; const [v1, v2] = eboxVals(); b.onCommit(v1, v2); clearAcq(); }
   function refocusEBox(force) {
     if (!state.ebox) return;
     const first = state.ebox.f1 ? ef1 : ef2;
@@ -2035,8 +2031,6 @@ export function mountChizma(root, opts) {
     const tb = q('editToolbar'); if (tb) tb.style.display = state.editMode ? '' : 'none';
     const be = q('btnEdit'); if (be) be.classList.toggle('active', state.editMode);
     root.querySelectorAll('.etool').forEach((b) => b.classList.toggle('active', b.getAttribute('data-tool') === state.tool));
-    const tO = q('tgEOrtho'); if (tO) tO.classList.toggle('off', !state.editOrtho);
-    const tP = q('tgEPolar'); if (tP) tP.classList.toggle('off', !state.editPolar);
     const am = q('eAngMode'); if (am) am.value = state.editAngMode;
   }
   // ---- Qatlam (Layers) ----
@@ -2101,6 +2095,7 @@ export function mountChizma(root, opts) {
     else if (t === 'extend') extendClick(sx, sy, w);
     else if (t === 'fillet') filletClick(sx, sy, w);
     else if (['move', 'copy', 'rotate', 'mirror', 'scale'].includes(t)) modifyClick(t, w);
+    clearAcq();
     refocusEBox();
   }
   function editMove(e) {
@@ -2109,7 +2104,7 @@ export function mountChizma(root, opts) {
     if (state.egrip) {
       const g = state.egrip;
       if (!g.pushed) { pushHistory(); g.pushed = true; }
-      applyEditGrip(snapWorld(sx, sy, null, (p) => p.eid === g.ent.id));
+      applyEditGrip(snapWorld(sx, sy, null, g.ent.id));
       render(); return;
     }
     if (!state.toolDraft && !editSel) {
@@ -2547,8 +2542,11 @@ export function mountChizma(root, opts) {
     if (k === 'U' || k === 'UNDO') { undo(); return; }
     if (k === 'Y' || k === 'REDO') { redo(); return; }
     if (k === 'Z' || k === 'ZE' || k === 'ZOOM') { centerView(); return; }
-    if (k === 'F8' || k === 'ORTHO') { state.editOrtho = !state.editOrtho; syncEditUI(); render(); return; }
-    if (k === 'F10' || k === 'POLAR') { state.editPolar = !state.editPolar; syncEditUI(); render(); return; }
+    if (k === 'F8' || k === 'ORTHO') { state.snapSet.ortho = !state.snapSet.ortho; if (state.snapSet.ortho) state.snapSet.polar = false; statusBar.sync(); onSnapChange('ortho'); return; }
+    if (k === 'F10' || k === 'POLAR') { state.snapSet.polar = !state.snapSet.polar; if (state.snapSet.polar) state.snapSet.ortho = false; statusBar.sync(); onSnapChange('polar'); return; }
+    if (k === 'F3' || k === 'OSNAP' || k === 'OS') { state.snapSet.osnap = !state.snapSet.osnap; statusBar.sync(); onSnapChange('osnap'); return; }
+    if (k === 'F11' || k === 'OTRACK') { state.snapSet.otrack = !state.snapSet.otrack; statusBar.sync(); onSnapChange('otrack'); return; }
+    if (k === 'F7' || k === 'GRID') { state.snapSet.grid = !state.snapSet.grid; statusBar.sync(); onSnapChange('grid'); return; }
     if (k === 'ALL') { for (const en of state.editEntities) if (layerVisible(en.layer)) state.selEdit.add(en.id); render(); return; }
     const t = CMD_ALIASES[k];
     if (t) { setEditTool(t); return; }
@@ -2788,11 +2786,40 @@ export function mountChizma(root, opts) {
       const s = worldToScreen(g.x, g.y);
       svg.appendChild(svgEl('rect', { x: s.x - 4, y: s.y - 4, width: 8, height: 8, fill: P.accentSoft, stroke: P.accent, 'stroke-width': 1.4, 'pointer-events': 'none' }));
     }
-    // Yopishish belgisi (snap marker)
-    if (state.editSnap && !state.egrip) {
-      const s = worldToScreen(state.editSnap.x, state.editSnap.y);
-      svg.appendChild(svgEl('rect', { x: s.x - 5, y: s.y - 5, width: 10, height: 10, fill: 'none', stroke: P.accent, 'stroke-width': 1.6, 'pointer-events': 'none' }));
+    // AutoCAD yopishish belgisi (rejimga qarab shakl) + OTRACK/polar kuzatish chiziqlari + maslahat
+    if (state.editSnapRes) paintSnapOverlayE(state.editSnapRes);
+  }
+  function paintSnapOverlayE(res) {
+    const r = svg.getBoundingClientRect(), ext = Math.max(r.width, r.height) * 2;
+    for (const t of res.tracks || []) {
+      const a = worldToScreen(t.from.x, t.from.y), b = worldToScreen(t.to.x, t.to.y);
+      let dx = b.x - a.x, dy = b.y - a.y; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+      const p1 = t.polar ? a : { x: a.x - dx * ext, y: a.y - dy * ext };
+      const p2 = { x: a.x + dx * ext, y: a.y + dy * ext };
+      svg.appendChild(svgEl('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: P.accent, 'stroke-width': 1, 'stroke-dasharray': '4 4', opacity: 0.75, 'pointer-events': 'none' }));
     }
+    for (const A of state.track.acq) {
+      const s = worldToScreen(A.x, A.y);
+      svg.appendChild(svgEl('line', { x1: s.x - 5, y1: s.y, x2: s.x + 5, y2: s.y, stroke: P.accent, 'stroke-width': 1.2, 'pointer-events': 'none' }));
+      svg.appendChild(svgEl('line', { x1: s.x, y1: s.y - 5, x2: s.x, y2: s.y + 5, stroke: P.accent, 'stroke-width': 1.2, 'pointer-events': 'none' }));
+    }
+    if (res.snap) { const s = worldToScreen(res.snap.x, res.snap.y); for (const sh of snapMarkerShapes(res.snap.kind, s.x, s.y, P.accent, 6)) svg.appendChild(svgEl(sh.tag, sh.attrs)); }
+    else if (res.kind !== 'raw' && res.kind !== 'grid') { const s = worldToScreen(res.x, res.y); for (const sh of snapMarkerShapes(res.kind, s.x, s.y, P.accent, 5)) svg.appendChild(svgEl(sh.tag, sh.attrs)); }
+    if (res.tip) { const s = worldToScreen(res.x, res.y); eLabel(s.x + 18 + res.tip.length * 3.2, s.y + 24, res.tip, P.accent, false); }
+  }
+  // To'r (GRID, F7) — holat panelidan; qadam avto yoki tanlangan
+  function paintGridE() {
+    const r = svg.getBoundingClientRect(), W = r.width, H = r.height;
+    if (!W || !H) return;
+    const g = gridStepFor(state.snapSet, state.scale);
+    const wx0 = -state.panX / state.scale, wx1 = (W - state.panX) / state.scale;
+    const wy0 = -state.panY / state.scale, wy1 = (H - state.panY) / state.scale;
+    const x0 = Math.floor(wx0 / g) * g, x1 = Math.ceil(wx1 / g) * g, y0 = Math.floor(wy0 / g) * g, y1 = Math.ceil(wy1 / g) * g;
+    if ((x1 - x0) / g + (y1 - y0) / g > 900) return;
+    const grp = svgEl('g', { 'pointer-events': 'none' });
+    for (let x = x0; x <= x1 + 1e-9; x += g) { const k = Math.round(x / g), sx = x * state.scale + state.panX; grp.appendChild(svgEl('line', { x1: sx, y1: 0, x2: sx, y2: H, stroke: P.ref, 'stroke-width': k === 0 ? 1.3 : 1, opacity: k === 0 ? 0.7 : (k % 5 === 0 ? 0.36 : 0.14) })); }
+    for (let y = y0; y <= y1 + 1e-9; y += g) { const k = Math.round(y / g), sy = y * state.scale + state.panY; grp.appendChild(svgEl('line', { x1: 0, y1: sy, x2: W, y2: sy, stroke: P.ref, 'stroke-width': k === 0 ? 1.3 : 1, opacity: k === 0 ? 0.7 : (k % 5 === 0 ? 0.36 : 0.14) })); }
+    svg.appendChild(grp);
   }
 
   /* ---------------- UZUNLIK QUTISI ---------------- */
@@ -3458,6 +3485,7 @@ export function mountChizma(root, opts) {
 
   function render() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
+    if (state.snapSet.grid) paintGridE();   // GRID (F7) — eng pastki qatlam
 
     // 0) DXF FON NAMUNA — eng pastki qatlam, kulrang, bosib bo'lmaydi
     //    (pointer-events yo'q — bosish ostidagi maydonga o'tadi).
@@ -3967,7 +3995,7 @@ export function mountChizma(root, opts) {
         points: state.points, lines: state.lines,
         ents: state.editEntities, ne: state.nextEntId,
         layers: state.layers, curLayer: state.curLayer, curColor: state.curColor, curWidth: state.curWidth,
-        editOrtho: state.editOrtho, editPolar: state.editPolar, editAngMode: state.editAngMode, editUnit: state.editUnit,
+        editAngMode: state.editAngMode, editUnit: state.editUnit,
         np: state.nextPointId, nl: state.nextLineId,
         color: state.color, unit: state.unit,
         unitDevor: state.unitDevor, unitQosh: state.unitQosh,
@@ -4009,8 +4037,6 @@ export function mountChizma(root, opts) {
       if (typeof o.curLayer === 'string') state.curLayer = o.curLayer;
       state.curColor = o.curColor || null;
       state.curWidth = o.curWidth || null;
-      state.editOrtho = !!o.editOrtho;
-      state.editPolar = o.editPolar !== false;
       state.editAngMode = o.editAngMode === 'rel' ? 'rel' : 'abs';
       state.editUnit = UNITS[o.editUnit] ? o.editUnit : 'm';
       state.nextPointId = o.np || (Math.max(0, ...state.points.map((p) => p.id)) + 1);
@@ -4172,6 +4198,7 @@ export function mountChizma(root, opts) {
   });
 
   on(window, 'mousemove', (e) => {
+    { const r0 = svg.getBoundingClientRect(); const w0 = screenToWorld(e.clientX - r0.left, e.clientY - r0.top); statusBar.setCoords('X ' + fmt(w0.x, state.editUnit) + '   Y ' + fmt(-w0.y, state.editUnit)); }
     if (panning) {
       state.panX = panStart.panX + (e.clientX - panStart.x);
       state.panY = panStart.panY + (e.clientY - panStart.y);
@@ -4243,11 +4270,7 @@ export function mountChizma(root, opts) {
     // "Nuqta o'chirish" rejimi — Esc bilan bekor qilinadi.
     if (state.removingPoint && e.key === 'Escape') { e.preventDefault(); setRemovingPoint(false); return; }
     // TAHRIR rejimi qisqartmalari (Ctrl+Z/Y/E pastda umumiy ishlayveradi).
-    if (state.editMode && (e.key === 'F8' || e.key === 'F10')) {
-      e.preventDefault();
-      if (e.key === 'F8') state.editOrtho = !state.editOrtho; else state.editPolar = !state.editPolar;
-      syncEditUI(); render(); return;
-    }
+    if (statusBar.handleKey(e)) { e.preventDefault(); onSnapChange(e.key); return; }
     const tgt0 = e.target;
     const inField = tgt0 && (tgt0.tagName === 'INPUT' || tgt0.tagName === 'TEXTAREA' || tgt0.tagName === 'SELECT' || tgt0.isContentEditable);
     if (state.editMode && inField) return;   // kiritish qutisi / buyruq satri o'zi hal qiladi
@@ -4356,8 +4379,6 @@ export function mountChizma(root, opts) {
   on(q('ebClose'), 'click', () => finishPline(true));
   on(q('ebEnd'), 'click', () => editEscape());
   on(q('eUnitSel'), 'change', (e) => { state.editUnit = UNITS[e.target.value] ? e.target.value : 'm'; syncEBoxLabels(); refocusEBox(true); render(); });
-  on(q('tgEOrtho'), 'click', () => { state.editOrtho = !state.editOrtho; syncEditUI(); render(); });
-  on(q('tgEPolar'), 'click', () => { state.editPolar = !state.editPolar; syncEditUI(); render(); });
   on(q('eAngMode'), 'change', (e) => {
     state.editAngMode = e.target.value === 'rel' ? 'rel' : 'abs';
     const d = state.toolDraft;
@@ -4537,6 +4558,7 @@ export function mountChizma(root, opts) {
     },
     destroy() {
       flushSaveLS();   // kutilayotgan saqlash bo'lsa — bekor qilmay darhol yozamiz
+      statusBar.destroy();
       themeObs.disconnect();
       resizeObs.disconnect();
       cleanups.forEach((fn) => fn());

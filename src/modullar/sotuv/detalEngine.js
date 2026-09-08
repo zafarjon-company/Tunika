@@ -18,6 +18,8 @@
 import { sonMatn, sonQiymat } from '../../lib/helpers.js';
 import { computePalette } from './chizmaEngine.js';
 import { safeFileName, downloadDxf } from '../../lib/dxfExport.js';
+import { loadSnap, saveSnap, buildGeom, resolveSnap, updateAcquire, gridStepFor, snapMarkerShapes } from '../../lib/osnap.js';
+import { mountStatusBar } from '../../lib/cadStatusBar.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const UNITS = { mm: 1, cm: 10 };
@@ -132,10 +134,6 @@ const TEMPLATE = `
       <option value="rel">nisbiy (oldingi chiziqdan burilish)</option>
     </select>
     <span class="sep"></span>
-    <button type="button" class="tool tg" data-dtl="tgOrtho" title="Orto (F8) — kursor faqat 0°/90°/180°/270° ga yuradi">Orto</button>
-    <button type="button" class="tool tg" data-dtl="tgPolar" title="Polar (F10) — kursor 15° qadamlarga yopishadi">Polar 15°</button>
-    <button type="button" class="tool tg" data-dtl="tgGrid" title="To'r (setka) ko'rinishi">To'r</button>
-    <button type="button" class="tool tg" data-dtl="tgGridSnap" title="Kursor to'r tugunlariga yopishadi">To'rga yopish</button>
     <button type="button" class="tool tg" data-dtl="tgLen" title="Chiziqlardagi uzunlik yozuvlari">Uzunliklar</button>
     <button type="button" class="tool tg" data-dtl="tgAng" title="Uchlardagi gradus yozuvlari">Burchaklar</button>
     <span class="sep"></span>
@@ -196,7 +194,7 @@ const TEMPLATE = `
         &bull; <b>C</b> — konturni yopish; <b>Esc</b> — tugatish (chizilganlar qoladi); <b>Backspace</b> (bo'sh maydonda) — oxirgi nuqtani qaytarish.<br>
         &bull; <b>Tanlash</b>: chiziqqa <b>2 marta bosing</b> — uzunlik/burchakni o'zgartirish (keyingi nuqtalar birga suriladi). Uchlarni (kvadratcha) sudrab ham o'zgartirsa bo'ladi. <b>Delete</b> — o'chirish.<br>
         &bull; <b>Segmentlar jadvali</b>da har segmentning uzunligi/burchagini yozib Enter bosing — kontur qayta quriladi. <b>Nisbiy</b> rejimda burchak o'zgarsa keyingi qism birga buriladi (qayirma burchagi o'zgargandek).<br>
-        &bull; <b>Orto</b> (F8) — faqat 0/90°; <b>Polar</b> (F10) — 15° qadam; <b>To'rga yopish</b> — kursor to'r tuguniga tushadi. Nuqtalar, o'rtalar va (0,0) ga avtomatik yopishadi.<br>
+        &bull; <b>Holat paneli</b> (pastda, AutoCAD'dek): <b>SNAP</b> (F9) — to'r tugunlariga; <b>GRID</b> (F7, qadam ▾); <b>ORTHO</b> (F8); <b>POLAR</b> (F10, burchak qadami ▾); <b>OSNAP</b> (F3, magnit rejimlari ▾: uch nuqta, o'rta, markaz, kvadrant, kesishma, perpendikulyar, tangens, eng yaqin, davomi — belgi shakli AutoCAD'dek); <b>OTRACK</b> (F11) — nuqta ustida biroz turing, undan gorizontal/vertikal/polar kuzatish chiziqlari chiqadi, ikki chiziq kesishmasiga ham yopishadi; <b>DYN</b> (F12) — kiritish qutisi.<br>
         &bull; <b>Yoyilma</b> — barcha segmentlar yig'indisi (profil uchun list eni). <b>Surish</b>: o'rta/o'ng tugma; g'ildirak — zoom; <b>Ctrl+E</b> — markazga.<br>
         &bull; <b>Saqlash</b> — nomlab kutubxonaga (patalok, qosh...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
       </div>
@@ -235,7 +233,10 @@ export function mountDetal(root) {
     sel: new Set(),        // tanlangan element id'lari
     scale: 4,              // px / mm  (1 sm = 40 px)
     panX: 0, panY: 0,
-    ortho: false, polar: true, showGrid: true, gridSnap: false, showLen: true, showAng: true,
+    showLen: true, showAng: true,
+    snapSet: loadSnap(),              // AutoCAD OSNAP/ORTHO/POLAR/OTRACK/GRID/DYN sozlamalari (Xona konturi bilan umumiy)
+    track: { hover: null, acq: [] },  // OTRACK: nuqta ustida turib "olingan" nuqtalar
+    snapRes: null,                    // oxirgi resolveSnap natijasi (belgi, kuzatish chiziqlari, maslahat)
     name: '',
     lib: [],               // saqlangan detallar [{id,name,ents,t}]
     cursor: { x: 0, y: 0 },   // world (snap/cheklov qo'llangan)
@@ -251,6 +252,14 @@ export function mountDetal(root) {
   const inputBox = q('inputBox');
   const in1 = q('f1'), in2 = q('f2');
   const selBoxEl = q('selBox');
+
+  // AutoCAD holat paneli (chizma maydoni pastida): SNAP/GRID/ORTHO/POLAR/OSNAP/OTRACK/DYN + koordinata
+  function onSnapChange(key) {
+    saveSnap(state.snapSet);
+    if (key === 'dyn' && state.box) { if (state.snapSet.dyn) { inputBox.classList.add('show'); positionBox(); } else inputBox.classList.remove('show'); }
+    syncButtons(); render();
+  }
+  const statusBar = mountStatusBar(canvasWrap, { settings: state.snapSet, onChange: onSnapChange });
 
   function U() { return UNITS[state.unit]; }
   function fmtLen(mm) { return fmtNum(mm / U(), 2) + ' ' + UNIT_LABEL[state.unit]; }
@@ -331,64 +340,31 @@ export function mountDetal(root) {
     return { minX, minY, maxX, maxY };
   }
 
-  /* ---------------- YOPISHISH (snap) va CHEKLOV (orto/polar) ---------------- */
-  function snapPoints() {
-    const pts = [{ x: 0, y: 0, kind: 'origin', eid: 0 }];
-    for (const e of state.ents) {
-      if (e.type === 'pline') {
-        for (const p of e.pts) pts.push({ x: p.x, y: p.y, kind: 'vertex', eid: e.id });
-        for (const s of plineSegs(e)) pts.push({ x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2, kind: 'mid', eid: e.id });
-      } else if (e.type === 'circle') {
-        pts.push({ x: e.cx, y: e.cy, kind: 'center', eid: e.id });
-        for (const p of entVerts(e)) pts.push({ x: p.x, y: p.y, kind: 'quad', eid: e.id });
-      } else if (e.type === 'dim') {
-        pts.push({ x: e.x1, y: e.y1, kind: 'vertex', eid: e.id }, { x: e.x2, y: e.y2, kind: 'vertex', eid: e.id });
-      }
+  /* ---------------- YOPISHISH (AutoCAD OSNAP) va KUZATISH — osnap.js ----------------
+     Magnit nuqtalari: elementlarning uchlari, o'rtalari, markaz/kvadrantlar, kesishmalar,
+     perpendikulyar/tangens (tayanch nuqtadan), eng yaqin, (0,0) va chizilayotgan chiziq.
+     from berilsa — ORTHO/POLAR nurlari va OTRACK (olingan nuqtalardan) kuzatish chiziqlari. */
+  function gridStep() { return gridStepFor(state.snapSet, state.scale); }
+  function snapGeom(skipEid) {
+    const nodes = [{ x: 0, y: 0, eid: 0 }], segs = [];
+    const d = state.draft;
+    if (d && d.tool === 'pline') {
+      for (const p of d.pts) nodes.push({ x: p.x, y: p.y, eid: -1 });
+      for (let i = 0; i + 1 < d.pts.length; i++) segs.push({ a: d.pts[i], b: d.pts[i + 1], eid: -1 });
     }
-    if (state.draft && state.draft.tool === 'pline') for (const p of state.draft.pts) pts.push({ x: p.x, y: p.y, kind: 'vertex', eid: -1 });
-    return pts;
+    return buildGeom(state.ents, { skip: (e) => skipEid != null && e.id === skipEid, nodes, segs });
   }
-  // To'r qadami (mm) — ekranda kamida 22 px bo'lsin
-  function gridStep() {
-    const cand = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
-    return cand.find((c) => c * state.scale >= 22) || 1000;
+  // Ekran nuqtasini world nuqtaga: OSNAP > kuzatish kesishmasi > polar/orto > kuzatish > to'r > xom
+  function resolveCursor(sx, sy, from, skipEid) {
+    const geom = snapGeom(skipEid);
+    const res = resolveSnap({ geom, cur: screenToWorld(sx, sy), scale: state.scale, settings: state.snapSet, from, skipEid, acquired: state.track.acq, gridStep: gridStep() });
+    state.snapRes = res;
+    state.snapHit = res.snap ? { x: res.snap.x, y: res.snap.y, kind: res.snap.kind } : null;
+    updateAcquire(state.track, res, Date.now(), geom, state.snapSet);
+    return { x: res.x, y: res.y };
   }
-  // Orto / polar cheklovi: from -> w yo'nalishini yaqin burchakka tekislaydi
-  function constrain(from, w) {
-    const dx = w.x - from.x, dy = w.y - from.y, L = Math.hypot(dx, dy);
-    if (L < 1e-9) return w;
-    const step = state.ortho ? 90 : (state.polar ? 15 : 0);
-    if (!step) return w;
-    const a = vecAng(dx, dy);
-    const snapped = norm360(Math.round(a / step) * step);
-    if (!state.ortho) { let d = Math.abs(a - snapped); d = Math.min(d, 360 - d); if (d > 4) return w; }
-    const v = dirVec(snapped);
-    return { x: from.x + v.dx * L, y: from.y + v.dy * L, ang: snapped };
-  }
-  // Ekran nuqtasini world nuqtaga: avval nuqtaga yopishish, so'ng orto/polar, so'ng to'r
-  function resolveCursor(sx, sy, from, skip) {
-    let best = null, bd = SNAP_PX;
-    for (const p of snapPoints()) {
-      if (skip && skip(p)) continue;
-      const s = worldToScreen(p.x, p.y);
-      const d = Math.hypot(s.x - sx, s.y - sy);
-      if (d <= bd) { bd = d; best = p; }
-    }
-    if (best) { state.snapHit = { x: best.x, y: best.y, kind: best.kind }; return { x: best.x, y: best.y }; }
-    state.snapHit = null;
-    let w = screenToWorld(sx, sy);
-    let constrained = false;
-    if (from) { const r = constrain(from, w); if (r !== w) { w = r; constrained = true; } }
-    if (state.gridSnap) {
-      const g = gridStep();
-      if (!constrained) w = { x: Math.round(w.x / g) * g, y: Math.round(w.y / g) * g };
-      else if (state.ortho) {
-        if (Math.abs(w.y - from.y) < 1e-6) w = { x: Math.round(w.x / g) * g, y: w.y };
-        else if (Math.abs(w.x - from.x) < 1e-6) w = { x: w.x, y: Math.round(w.y / g) * g };
-      }
-    }
-    return w;
-  }
+  // Nuqta belgilangach olingan (OTRACK) nuqtalar tozalanadi — AutoCAD'dek
+  function clearAcq() { state.track.acq = []; state.track.hover = null; }
   // Joriy asbob uchun cheklov tayanch nuqtasi (rubber-band boshi)
   function anchorPoint() {
     const d = state.draft;
@@ -445,6 +421,7 @@ export function mountDetal(root) {
   function openBox(cfg) {
     state.box = cfg;
     syncBoxLabels();
+    if (!state.snapSet.dyn) { inputBox.classList.remove('show'); return; }   // DYN o'chiq — faqat sichqoncha bilan
     inputBox.classList.add('show');
     in1.value = (cfg.f1 && cfg.f1.val != null) ? String(cfg.f1.val) : '';
     in2.value = (cfg.f2 && cfg.f2.val != null) ? String(cfg.f2.val) : '';
@@ -479,7 +456,7 @@ export function mountDetal(root) {
     return [v(in1, b.f1), v(in2, b.f2)];
   }
   function clearBoxFields() { in1.value = ''; in2.value = ''; refocusBox(true); }
-  function commitBox() { const b = state.box; if (!b) return; const [v1, v2] = boxVals(); b.onCommit(v1, v2); }
+  function commitBox() { const b = state.box; if (!b) return; const [v1, v2] = boxVals(); b.onCommit(v1, v2); clearAcq(); }
   function refocusBox(force) {
     if (!state.box) return;
     const first = state.box.f1 ? in1 : in2;
@@ -998,13 +975,32 @@ export function mountDetal(root) {
       else target.appendChild(svgEl(e.closed && e.pts.length > 2 ? 'polygon' : 'polyline', Object.assign({ points: ptsAttr(e.pts, w2s) }, hi)));
     }
   }
+  // Yopishish belgisi (rejimga qarab shakl), OTRACK/polar kuzatish chiziqlari, olingan nuqtalar, maslahat
+  function paintSnapOverlay(target, w2s, res, W, H, PP) {
+    const ext = Math.max(W, H) * 2;
+    for (const t of res.tracks || []) {
+      const a = w2s(t.from.x, t.from.y), b = w2s(t.to.x, t.to.y);
+      let dx = b.x - a.x, dy = b.y - a.y; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+      const p1 = t.polar ? a : { x: a.x - dx * ext, y: a.y - dy * ext };   // polar nur faqat oldinga, kuzatish chizig'i ikki tomonga
+      const p2 = { x: a.x + dx * ext, y: a.y + dy * ext };
+      target.appendChild(svgEl('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: PP.accent, 'stroke-width': 1, 'stroke-dasharray': '4 4', opacity: 0.75, 'pointer-events': 'none' }));
+    }
+    for (const A of state.track.acq) {
+      const s = w2s(A.x, A.y);
+      target.appendChild(svgEl('line', { x1: s.x - 5, y1: s.y, x2: s.x + 5, y2: s.y, stroke: PP.accent, 'stroke-width': 1.2, 'pointer-events': 'none' }));
+      target.appendChild(svgEl('line', { x1: s.x, y1: s.y - 5, x2: s.x, y2: s.y + 5, stroke: PP.accent, 'stroke-width': 1.2, 'pointer-events': 'none' }));
+    }
+    if (res.snap) { const s = w2s(res.snap.x, res.snap.y); for (const sh of snapMarkerShapes(res.snap.kind, s.x, s.y, PP.accent, 6)) target.appendChild(svgEl(sh.tag, sh.attrs)); }
+    else if (res.kind !== 'raw' && res.kind !== 'grid') { const s = w2s(res.x, res.y); for (const sh of snapMarkerShapes(res.kind, s.x, s.y, PP.accent, 5)) target.appendChild(svgEl(sh.tag, sh.attrs)); }
+    if (res.tip && state.cursorS) label(target, state.cursorS.sx + 16 + res.tip.length * 3.2, state.cursorS.sy + 24, res.tip, PP.accent, 10.5, PP);
+  }
   function paint(target, view, W, H, exportMode) {
     const PP = exportMode ? EXPORT_P : P;
     const m = PP.fs || 1;
     const w2s = (x, y) => ({ x: x * view.scale + view.panX, y: y * view.scale + view.panY });
     while (target.firstChild) target.removeChild(target.firstChild);
     if (exportMode) target.appendChild(svgEl('rect', { x: 0, y: 0, width: W, height: H, fill: '#ffffff' }));
-    else if (state.showGrid) paintGrid(target, view, W, H);
+    else if (state.snapSet.grid) paintGrid(target, view, W, H);
     // 1) elementlar
     for (const e of state.ents) {
       const sel = !exportMode && state.sel.has(e.id);
@@ -1033,11 +1029,8 @@ export function mountDetal(root) {
       const s = w2s(g.x, g.y);
       target.appendChild(svgEl('rect', { x: s.x - GRIP_PX, y: s.y - GRIP_PX, width: GRIP_PX * 2, height: GRIP_PX * 2, fill: PP.accentSoft || '#fff', stroke: PP.accent, 'stroke-width': 1.4, 'pointer-events': 'none' }));
     }
-    // 5) yopishish belgisi
-    if (state.snapHit && !state.grip) {
-      const s = w2s(state.snapHit.x, state.snapHit.y);
-      target.appendChild(svgEl('rect', { x: s.x - 5, y: s.y - 5, width: 10, height: 10, fill: 'none', stroke: PP.accent, 'stroke-width': 1.6, 'pointer-events': 'none' }));
-    }
+    // 5) AutoCAD yopishish belgisi + kuzatish chiziqlari + maslahat
+    if (state.snapRes) paintSnapOverlay(target, w2s, state.snapRes, W, H, PP);
     // 6) koordinata boshi (0,0)
     const o = w2s(0, 0);
     target.appendChild(svgEl('circle', { cx: o.x, cy: o.y, r: 3, fill: 'none', stroke: PP.ref, 'stroke-width': 1.2, 'pointer-events': 'none' }));
@@ -1225,7 +1218,7 @@ export function mountDetal(root) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         ents: state.ents, nextId: state.nextId, unit: state.unit, angMode: state.angMode, tool: state.tool,
-        ortho: state.ortho, polar: state.polar, showGrid: state.showGrid, gridSnap: state.gridSnap, showLen: state.showLen, showAng: state.showAng,
+        showLen: state.showLen, showAng: state.showAng,
         scale: state.scale, panX: state.panX, panY: state.panY, name: state.name,
       }));
     } catch (e) { /* noop */ }
@@ -1241,8 +1234,7 @@ export function mountDetal(root) {
       if (UNITS[o.unit]) state.unit = o.unit;
       state.angMode = o.angMode === 'rel' ? 'rel' : 'abs';
       if (TOOLS.includes(o.tool)) state.tool = o.tool;
-      state.ortho = !!o.ortho; state.polar = o.polar !== false; state.showGrid = o.showGrid !== false;
-      state.gridSnap = !!o.gridSnap; state.showLen = o.showLen !== false; state.showAng = o.showAng !== false;
+      state.showLen = o.showLen !== false; state.showAng = o.showAng !== false;
       if (o.scale > 0) state.scale = o.scale;
       if (typeof o.panX === 'number') state.panX = o.panX;
       if (typeof o.panY === 'number') state.panY = o.panY;
@@ -1255,8 +1247,7 @@ export function mountDetal(root) {
   function syncButtons() {
     root.querySelectorAll('.etool').forEach((b) => b.classList.toggle('active', b.getAttribute('data-tool') === state.tool));
     const tg = (n, onv) => { const b = q(n); if (b) b.classList.toggle('off', !onv); };
-    tg('tgOrtho', state.ortho); tg('tgPolar', state.polar); tg('tgGrid', state.showGrid);
-    tg('tgGridSnap', state.gridSnap); tg('tgLen', state.showLen); tg('tgAng', state.showAng);
+    tg('tgLen', state.showLen); tg('tgAng', state.showAng);
     q('btnUndo').disabled = !state.hist.length;
     q('btnRedo').disabled = !state.redo.length;
     q('btnStart0').style.display = (state.draft && state.draft.tool === 'pline') ? 'none' : '';
@@ -1356,6 +1347,7 @@ export function mountDetal(root) {
     const w = resolveCursor(sx, sy, anchorPoint());
     state.cursor = w; state.cursorS = { sx, sy };
     toolClick(sx, sy, w);
+    clearAcq();
     refocusBox();
   });
   on(window, 'mousemove', (e) => {
@@ -1368,7 +1360,7 @@ export function mountDetal(root) {
     if (state.grip) {
       const g = state.grip;
       if (!g.pushed) { pushHistory(); g.pushed = true; }
-      applyGrip(resolveCursor(sx, sy, null, (p) => p.eid === g.ent.id));
+      applyGrip(resolveCursor(sx, sy, null, g.ent.id));
       render(); return;
     }
     if (boxSel) {
@@ -1386,7 +1378,8 @@ export function mountDetal(root) {
     }
     state.cursor = resolveCursor(sx, sy, anchorPoint());
     state.cursorS = { sx, sy };
-    if (state.tool === 'select' || state.tool === 'erase') state.snapHit = null;
+    if (state.tool === 'select' || state.tool === 'erase') { state.snapHit = null; state.snapRes = null; }
+    statusBar.setCoords('X ' + fmtNum(state.cursor.x / U(), 2) + '   Y ' + fmtNum(-state.cursor.y / U(), 2) + '  ' + UNIT_LABEL[state.unit]);
     if (state.draft || ['pline', 'rect', 'circle', 'dim', 'offset'].includes(state.tool) || MODIFY.includes(state.tool)) render();
   });
   on(window, 'mouseup', (e) => {
@@ -1429,8 +1422,7 @@ export function mountDetal(root) {
 
   // Klaviatura
   on(window, 'keydown', (e) => {
-    if (e.key === 'F8') { e.preventDefault(); state.ortho = !state.ortho; syncButtons(); render(); return; }
-    if (e.key === 'F10') { e.preventDefault(); state.polar = !state.polar; syncButtons(); render(); return; }
+    if (statusBar.handleKey(e)) { e.preventDefault(); onSnapChange(e.key); return; }
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
     if (e.key === 'Escape') {
@@ -1465,8 +1457,7 @@ export function mountDetal(root) {
     afterChange();
   });
   const toggle = (name, key) => on(q(name), 'click', () => { state[key] = !state[key]; syncButtons(); render(); });
-  toggle('tgOrtho', 'ortho'); toggle('tgPolar', 'polar'); toggle('tgGrid', 'showGrid');
-  toggle('tgGridSnap', 'gridSnap'); toggle('tgLen', 'showLen'); toggle('tgAng', 'showAng');
+  toggle('tgLen', 'showLen'); toggle('tgAng', 'showAng');
   on(q('btnImport'), 'click', () => q('fileInput').click());
   on(q('fileInput'), 'change', (e) => { const f = e.target.files && e.target.files[0]; handleFile(f); e.target.value = ''; });
   on(canvasWrap, 'dragover', (e) => { e.preventDefault(); canvasWrap.classList.add('chz-dragover'); });
@@ -1533,6 +1524,7 @@ export function mountDetal(root) {
       flushSaveLS();
       themeObs.disconnect();
       resizeObs.disconnect();
+      statusBar.destroy();
       cleanups.forEach((fn) => fn());
       root.innerHTML = '';
       root.classList.remove('chz', 'dtl');

@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:ombor": "node src/lib/omborHisob.test.mjs",
-    "test:maosh": "node src/lib/maosh.test.mjs"
+    "test:maosh": "node src/lib/maosh.test.mjs",
+    "test:osnap": "node src/lib/osnap.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",
