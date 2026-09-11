@@ -171,7 +171,20 @@ const TEMPLATE = `
         </button>
       </div>
       <div class="dtl-lib" data-dtl="libList" style="display:none"></div>
-      <h3 class="dtl-h3">Hisob</h3>
+      <h3 class="dtl-h3">Proyeksiyalar</h3>
+      <label class="dtl-closed"><input type="checkbox" data-dtl="projOn" /> 3 ta proyeksiya: old (V) &middot; ustdan (H) &middot; yon (W)</label>
+      <div class="dtl-proj" data-dtl="projBody" style="display:none">
+        <div class="dtl-projinfo" data-dtl="projInfo"></div>
+        <div class="dtl-projbtns">
+          <button type="button" class="dtl-btn" data-dtl="genV" title="Ustdan (H) va yon (W) dan old ko'rinishni hosil qilish">&#8592; Old (V) ni hosil qilish (H + W dan)</button>
+          <button type="button" class="dtl-btn" data-dtl="genH" title="Old (V) va yon (W) dan ustdan ko'rinishni hosil qilish">&#8595; Ustdan (H) ni hosil qilish (V + W dan)</button>
+          <button type="button" class="dtl-btn" data-dtl="genW" title="Old (V) va ustdan (H) dan yon ko'rinishni hosil qilish">&#8594; Yon (W) ni hosil qilish (V + H dan)</button>
+        </div>
+        <label class="dtl-closed"><input type="checkbox" data-dtl="projGuides" checked /> Bog'lanish chiziqlari &mdash; magnit</label>
+        <label class="dtl-closed"><input type="checkbox" data-dtl="projLinks" checked /> Tanlanganning proyeksiya chiziqlari</label>
+        <label class="dtl-gap">Proyeksiyalar oralig'i <input data-dtl="projGap" type="text" inputmode="decimal" data-num="pos" /> <i data-dtl="projGapUnit">sm</i></label>
+      </div>
+      <h3 class="dtl-h3">Hisob <span class="dtl-cnt" data-dtl="stScope"></span></h3>
       <div class="chz-stat lines"><span class="lbl">Yoyilma (umumiy uzunlik):</span><span class="val" data-dtl="stTotal">&mdash;</span></div>
       <div class="chz-stat kazirok"><span class="lbl">Gabarit (eni &times; bo'yi):</span><span class="val" data-dtl="stBox">&mdash;</span></div>
       <div class="chz-stat qozon"><span class="lbl">Qayirmalar (burchaklar):</span><span class="val" data-dtl="stBends">0</span></div>
@@ -196,6 +209,7 @@ const TEMPLATE = `
         &bull; <b>Segmentlar jadvali</b>da har segmentning uzunligi/burchagini yozib Enter bosing — kontur qayta quriladi. <b>Nisbiy</b> rejimda burchak o'zgarsa keyingi qism birga buriladi (qayirma burchagi o'zgargandek).<br>
         &bull; <b>Holat paneli</b> (pastda, AutoCAD'dek): <b>SNAP</b> (F9) — to'r tugunlariga; <b>GRID</b> (F7, qadam ▾); <b>ORTHO</b> (F8); <b>POLAR</b> (F10, burchak qadami ▾); <b>OSNAP</b> (F3, magnit rejimlari ▾: uch nuqta, o'rta, markaz, kvadrant, kesishma, perpendikulyar, tangens, eng yaqin, davomi — belgi shakli AutoCAD'dek); <b>OTRACK</b> (F11) — nuqta ustida biroz turing, undan gorizontal/vertikal/polar kuzatish chiziqlari chiqadi, ikki chiziq kesishmasiga ham yopishadi; <b>DYN</b> (F12) — kiritish qutisi.<br>
         &bull; <b>Yoyilma</b> — barcha segmentlar yig'indisi (profil uchun list eni). <b>Surish</b>: o'rta/o'ng tugma; g'ildirak — zoom; <b>Ctrl+E</b> — markazga.<br>
+        &bull; <b>3 proyeksiya</b> (chizma geometriya): yoqilsa maydon <b>OLD (V)</b> chap-yuqori, <b>USTDAN (H)</b> chap-past, <b>YON (W)</b> o'ng-yuqori kvadrantlarga bo'linadi; 45° buklash chizig'i H↔W chuqurligini bog'laydi. Ikkita proyeksiyani chizing (masalan H da 15 sm, W da 25 sm kesma) — <b>hosil qilish</b> tugmasi uchinchisini (15×25 to'rtburchak, qayirma chiziqlari bilan) chizadi; keyin uni oddiy chizmadek tahrirlang. Chizganda kursor boshqa proyeksiyalardagi uchlarning <b>bog'lanish chiziqlariga</b> yopishadi ("Proyeksiya" maslahati). Burchakdagi kvadratchani sudrab proyeksiyalarni suring.<br>
         &bull; <b>Saqlash</b> — nomlab kutubxonaga (patalok, qosh...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
       </div>
     </div>
@@ -237,6 +251,7 @@ export function mountDetal(root) {
     snapSet: loadSnap(),              // AutoCAD OSNAP/ORTHO/POLAR/OTRACK/GRID/DYN sozlamalari (Xona konturi bilan umumiy)
     track: { hover: null, acq: [] },  // OTRACK: nuqta ustida turib "olingan" nuqtalar
     snapRes: null,                    // oxirgi resolveSnap natijasi (belgi, kuzatish chiziqlari, maslahat)
+    proj: { on: false, sepX: 300, sepY: 300, gap: 100, guides: true, links: true },   // 3 proyeksiya (V old · H ustdan · W yon)
     name: '',
     lib: [],               // saqlangan detallar [{id,name,ents,t}]
     cursor: { x: 0, y: 0 },   // world (snap/cheklov qo'llangan)
@@ -327,18 +342,20 @@ export function mountDetal(root) {
     let dx = e.x2 - e.x1, dy = e.y2 - e.y1; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
     return { x: dy, y: -dx };
   }
-  // Barcha elementlar (+ chizilayotgan) chegarasi
-  function bounds() {
+  // Elementlar chegarasi (withDraft — chizilayotgan ham; withFrames — proyeksiya ajratgichlari ham)
+  function boundsOf(ents, withDraft, withFrames) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     const add = (p) => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); };
-    for (const e of state.ents) {
+    for (const e of ents) {
       for (const p of entVerts(e)) add(p);
       if (e.type === 'dim') { const n = dimNormal(e); add({ x: e.x1 + n.x * e.off, y: e.y1 + n.y * e.off }); add({ x: e.x2 + n.x * e.off, y: e.y2 + n.y * e.off }); }
     }
-    if (state.draft && state.draft.pts) for (const p of state.draft.pts) add(p);
+    if (withDraft && state.draft && state.draft.pts) for (const p of state.draft.pts) add(p);
+    if (withFrames && state.proj.on) { add({ x: state.proj.sepX, y: state.proj.sepY }); add({ x: state.proj.sepX + state.proj.gap, y: state.proj.sepY + state.proj.gap }); }
     if (minX === Infinity) return null;
     return { minX, minY, maxX, maxY };
   }
+  function bounds(withFrames) { return boundsOf(state.ents, true, withFrames); }
 
   /* ---------------- YOPISHISH (AutoCAD OSNAP) va KUZATISH — osnap.js ----------------
      Magnit nuqtalari: elementlarning uchlari, o'rtalari, markaz/kvadrantlar, kesishmalar,
@@ -357,7 +374,8 @@ export function mountDetal(root) {
   // Ekran nuqtasini world nuqtaga: OSNAP > kuzatish kesishmasi > polar/orto > kuzatish > to'r > xom
   function resolveCursor(sx, sy, from, skipEid) {
     const geom = snapGeom(skipEid);
-    const res = resolveSnap({ geom, cur: screenToWorld(sx, sy), scale: state.scale, settings: state.snapSet, from, skipEid, acquired: state.track.acq, gridStep: gridStep() });
+    const cur = screenToWorld(sx, sy);
+    const res = resolveSnap({ geom, cur, scale: state.scale, settings: state.snapSet, from, skipEid, acquired: state.track.acq, gridStep: gridStep(), guides: projGuides(cur) });
     state.snapRes = res;
     state.snapHit = res.snap ? { x: res.snap.x, y: res.snap.y, kind: res.snap.kind } : null;
     updateAcquire(state.track, res, Date.now(), geom, state.snapSet);
@@ -365,6 +383,154 @@ export function mountDetal(root) {
   }
   // Nuqta belgilangach olingan (OTRACK) nuqtalar tozalanadi — AutoCAD'dek
   function clearAcq() { state.track.acq = []; state.track.hover = null; }
+
+  /* ---------------- 3 PROYEKSIYA (chizma geometriya: V old · H ustdan · W yon) ----------------
+     Maydon ikki ajratgich (sepX, sepY) bilan 4 kvadrantga bo'linadi (Monge usuli):
+       V — chap-yuqori (x, z): x o'ngga, z tepaga (world y manfiy)
+       H — chap-past (x, y): x o'ngga, chuqurlik y PASTGA; chuqurlik 0 → world y = hy
+       W — o'ng-yuqori (y, z): chuqurlik y O'NGGA; chuqurlik 0 → world x = wx
+     hy = sepY + gap/2, wx = sepX + gap/2 — 45° buklash chizig'i (sepX, sepY) dan o'tadi, shuning
+     uchun H dagi chuqurlik W dagiga aynan mos keladi. V↔H umumiy x, V↔W umumiy z (world y).
+     Element qaysi proyeksiyaga tegishli ekani markazi turgan kvadrantdan aniqlanadi.
+     Uchinchi proyeksiya qolgan ikkitasining uchlaridan hosil qilinadi: kontur — ekstentlar
+     to'rtburchagi, ichki chiziqlar — boshqa proyeksiyalardagi ORALIQ uch koordinatalari
+     (qayirma/bukilish chiziqlari). Natija oddiy chiziqlar — grip, jadval bilan tahrirlanadi. */
+  const VIEW_NOMI = { V: 'OLD (V)', H: 'USTDAN (H)', W: 'YON (W)' };
+  const PROJ_DEF = { on: false, sepX: 300, sepY: 300, gap: 100, guides: true, links: true };
+  function sanitizeProj(o) {
+    const p = Object.assign({}, PROJ_DEF);
+    if (!o || typeof o !== 'object') return p;
+    p.on = !!o.on; p.guides = o.guides !== false; p.links = o.links !== false;
+    if (Number.isFinite(o.sepX)) p.sepX = o.sepX;
+    if (Number.isFinite(o.sepY)) p.sepY = o.sepY;
+    if (Number.isFinite(o.gap) && o.gap >= 0) p.gap = o.gap;
+    return p;
+  }
+  function projP() { const p = state.proj; return { sepX: p.sepX, sepY: p.sepY, hy: p.sepY + p.gap / 2, wx: p.sepX + p.gap / 2 }; }
+  function viewAt(pt) {
+    if (!state.proj.on) return null;
+    const P = projP();
+    if (pt.x < P.sepX) return pt.y < P.sepY ? 'V' : 'H';
+    return pt.y < P.sepY ? 'W' : null;
+  }
+  function entCenter(e) {
+    const vs = entVerts(e); if (!vs.length) return { x: 0, y: 0 };
+    let x = 0, y = 0; for (const p of vs) { x += p.x; y += p.y; }
+    return { x: x / vs.length, y: y / vs.length };
+  }
+  function viewOf(e) { return viewAt(entCenter(e)); }
+  function vertsOf(view) { const out = []; for (const e of state.ents) if (viewOf(e) === view) for (const p of entVerts(e)) out.push(p); return out; }
+  function projCounts() { const c = { V: 0, H: 0, W: 0 }; for (const e of state.ents) { const v = viewOf(e); if (v) c[v]++; } return c; }
+  // Boshqa proyeksiyalardagi uchlardan BOG'LANISH chiziqlari — magnit (osnap guides)
+  function projGuides(cur) {
+    if (!state.proj.on || !state.proj.guides) return [];
+    const view = viewAt(cur); if (!view) return [];
+    const P = projP(), out = [], seen = new Set();
+    const add = (x, y, ang) => { const k = ang + ':' + Math.round((ang === 90 ? x : y) * 100); if (seen.has(k)) return; seen.add(k); out.push({ x, y, ang }); };
+    for (const e of state.ents) {
+      const ev = viewOf(e); if (!ev || ev === view) continue;
+      for (const p of entVerts(e)) {
+        if (view === 'V') { if (ev === 'H') add(p.x, 0, 90); else add(0, p.y, 0); }
+        else if (view === 'H') { if (ev === 'V') add(p.x, 0, 90); else add(0, P.hy + (p.x - P.wx), 0); }
+        else { if (ev === 'V') add(0, p.y, 0); else add(P.wx + (p.y - P.hy), 0, 90); }
+      }
+    }
+    return out;
+  }
+  function distinctVals(arr) {
+    const s = arr.slice().sort((a, b) => a - b), out = [];
+    for (const v of s) if (!out.length || v - out[out.length - 1] > 0.05) out.push(v);
+    return out;
+  }
+  // Uchinchi proyeksiyani qolgan ikkitasidan hosil qilish (target: 'V'|'H'|'W')
+  function genView(target) {
+    const P = projP();
+    let xs, ys, srcA, srcB;
+    if (target === 'V') { srcA = 'H'; srcB = 'W'; xs = vertsOf('H').map((p) => p.x); ys = vertsOf('W').map((p) => p.y); }
+    else if (target === 'H') { srcA = 'V'; srcB = 'W'; xs = vertsOf('V').map((p) => p.x); ys = vertsOf('W').map((p) => P.hy + (p.x - P.wx)); }
+    else { srcA = 'H'; srcB = 'V'; xs = vertsOf('H').map((p) => P.wx + (p.y - P.hy)); ys = vertsOf('V').map((p) => p.y); }
+    const X = distinctVals(xs), Y = distinctVals(ys);
+    if (!X.length || !Y.length || (X.length < 2 && Y.length < 2)) { setInfo(VIEW_NOMI[target] + ' uchun ' + VIEW_NOMI[srcA] + ' va ' + VIEW_NOMI[srcB] + " da chiziqlar bo'lishi kerak (kamida bittasida kesma)"); return false; }
+    const x0 = X[0], x1 = X[X.length - 1], y0 = Y[0], y1 = Y[Y.length - 1];
+    cancelDraft(false);
+    pushHistory();
+    state.ents = state.ents.filter((e) => viewOf(e) !== target);
+    const mk = (pts, closed) => { const e = newEnt('pline', { pts, closed }); state.ents.push(e); return e; };
+    let outline, inner = 0, msg;
+    if (X.length < 2 || Y.length < 2) {
+      // Tekis detal (yassi list) — bu proyeksiyada faqat QIRRASI ko'rinadi: kesma
+      outline = mk([{ x: x0, y: y0 }, { x: x1, y: y1 }], false);
+      msg = VIEW_NOMI[target] + ' hosil qilindi: ' + fmtLen(Math.hypot(x1 - x0, y1 - y0)) + ' kesma (detal bu tomondan qirrasi bilan ko\'rinadi)';
+    } else {
+      outline = mk([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true);
+      for (const x of X.slice(1, -1)) { mk([{ x, y: y0 }, { x, y: y1 }], false); inner++; }
+      for (const y of Y.slice(1, -1)) { mk([{ x: x0, y }, { x: x1, y }], false); inner++; }
+      msg = VIEW_NOMI[target] + ' hosil qilindi: ' + fmtLen(x1 - x0) + ' × ' + fmtLen(y1 - y0) + (inner ? ', ichki chiziqlar: ' + inner : '') + ' — endi tahrirlang (grip, jadval, chiziq asboblari)';
+    }
+    state.sel.clear(); state.sel.add(outline.id);
+    afterChange();
+    setInfo(msg);
+    return true;
+  }
+  function clearView(v) {
+    if (!state.ents.some((e) => viewOf(e) === v)) return;
+    cancelDraft(false); pushHistory();
+    state.ents = state.ents.filter((e) => viewOf(e) !== v);
+    state.sel.clear(); afterChange();
+    setInfo(VIEW_NOMI[v] + ' tozalandi');
+  }
+  function setProjOn(on) {
+    cancelDraft(false);
+    if (on && !state.proj.on) {
+      // Mavjud chizma OLD (V) bo'lib qoladi — ajratgichlar uning o'ng-pastiga qo'yiladi
+      const b = boundsOf(state.ents, false, false);
+      if (b) { state.proj.sepX = Math.max(b.maxX + 60, 100); state.proj.sepY = Math.max(b.maxY + 60, 100); }
+    }
+    state.proj.on = !!on;
+    afterChange(); centerView();
+    setInfo(on ? "3 proyeksiya: chap-yuqori OLD (V), chap-past USTDAN (H), o'ng-yuqori YON (W). Ikkitasini chizing, uchinchisini tugma bilan hosil qiling. Burchakdagi kvadratchani sudrab proyeksiyalarni suring" : 'Oddiy rejim');
+  }
+  // Oraliq o'zgarsa H/W elementlari chuqurlik saqlangan holda suriladi (hy, wx = ajratgich + oraliq/2)
+  function setProjGap(gMm) {
+    const g = Math.max(0, gMm), d = (g - state.proj.gap) / 2;
+    if (Math.abs(d) < 1e-9) return;
+    pushHistory();
+    const views = state.ents.map((e) => viewOf(e));
+    state.ents.forEach((e, i) => { if (views[i] === 'H') mapEnt(e, (p) => ({ x: p.x, y: p.y + d })); else if (views[i] === 'W') mapEnt(e, (p) => ({ x: p.x + d, y: p.y })); });
+    state.proj.gap = g;
+    afterChange();
+  }
+  // Ajratgich burchagi (buklash chizig'i boshi) sudralsa — H pastga/yuqoriga, W o'ngga/chapga birga
+  function moveProjCorner(x, y) {
+    const dx = x - state.proj.sepX, dy = y - state.proj.sepY;
+    if (!dx && !dy) return;
+    const views = state.ents.map((e) => viewOf(e));
+    state.ents.forEach((e, i) => { if (views[i] === 'H') mapEnt(e, (p) => ({ x: p.x, y: p.y + dy })); else if (views[i] === 'W') mapEnt(e, (p) => ({ x: p.x + dx, y: p.y })); });
+    state.proj.sepX = x; state.proj.sepY = y;
+  }
+  function genClick(target, btn) {
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    const c = projCounts();
+    if (c[target] && btn.dataset.arm !== '1') {
+      btn.dataset.arm = '1'; btn.classList.add('arm');
+      btn.textContent = VIEW_NOMI[target] + ' bor — almashtirish? (yana bosing)';
+      setTimeout(() => { if (btn.isConnected) { btn.dataset.arm = ''; btn.classList.remove('arm'); btn.textContent = btn.dataset.label; } }, 3500);
+      return;
+    }
+    btn.dataset.arm = ''; btn.classList.remove('arm'); btn.textContent = btn.dataset.label;
+    genView(target);
+  }
+  function syncProjUI() {
+    const p = state.proj;
+    q('projOn').checked = p.on;
+    q('projBody').style.display = p.on ? '' : 'none';
+    q('projGuides').checked = p.guides; q('projLinks').checked = p.links;
+    if (document.activeElement !== q('projGap')) q('projGap').value = fmtNum(p.gap / U(), 2);
+    q('projGapUnit').textContent = UNIT_LABEL[state.unit];
+    const c = projCounts();
+    q('projInfo').innerHTML = ['V', 'H', 'W'].map((v) => '<span><b>' + VIEW_NOMI[v] + '</b>: ' + c[v] + (c[v] ? ' <button type="button" data-act="clear" data-view="' + v + '" title="' + VIEW_NOMI[v] + ' ni tozalash">&#10005;</button>' : '') + '</span>').join('');
+    q('genV').disabled = !(c.H && c.W); q('genH').disabled = !(c.V && c.W); q('genW').disabled = !(c.V && c.H);
+  }
   // Joriy asbob uchun cheklov tayanch nuqtasi (rubber-band boshi)
   function anchorPoint() {
     const d = state.draft;
@@ -809,10 +975,15 @@ export function mountDetal(root) {
       const s = worldToScreen(g.x, g.y);
       if (Math.abs(s.x - sx) <= GRIP_PX + 3 && Math.abs(s.y - sy) <= GRIP_PX + 3) return { ent: e, kind: g.kind, idx: g.idx, pushed: false };
     }
+    if (state.proj.on) {   // proyeksiya ajratgichlari burchagi — sudrab proyeksiyalarni surish
+      const s = worldToScreen(state.proj.sepX, state.proj.sepY);
+      if (Math.abs(s.x - sx) <= GRIP_PX + 3 && Math.abs(s.y - sy) <= GRIP_PX + 3) return { ent: null, kind: 'projCorner', pushed: false };
+    }
     return null;
   }
   function applyGrip(w) {
     const g = state.grip, e = g.ent;
+    if (g.kind === 'projCorner') { moveProjCorner(w.x, w.y); return; }
     if (g.kind === 'v') e.pts[g.idx] = { x: w.x, y: w.y };
     else if (g.kind === 'c') { e.cx = w.x; e.cy = w.y; }
     else if (g.kind === 'r') e.r = Math.max(0.1, dist(w, { x: e.cx, y: e.cy }));
@@ -994,6 +1165,31 @@ export function mountDetal(root) {
     else if (res.kind !== 'raw' && res.kind !== 'grid') { const s = w2s(res.x, res.y); for (const sh of snapMarkerShapes(res.kind, s.x, s.y, PP.accent, 5)) target.appendChild(svgEl(sh.tag, sh.attrs)); }
     if (res.tip && state.cursorS) label(target, state.cursorS.sx + 16 + res.tip.length * 3.2, state.cursorS.sy + 24, res.tip, PP.accent, 10.5, PP);
   }
+  // Proyeksiya ajratgichlari, 45° buklash chizig'i, nomlar (+ Tanlashda burchak gripi)
+  function paintProjFrames(target, w2s, W, H, PP, exportMode) {
+    const P = projP(), c = w2s(P.sepX, P.sepY), m = PP.fs || 1;
+    const ln = (x1, y1, x2, y2, dash) => target.appendChild(svgEl('line', { x1, y1, x2, y2, stroke: PP.ref, 'stroke-width': 1 * m, 'stroke-dasharray': dash, opacity: 0.9, 'pointer-events': 'none' }));
+    ln(c.x, -10, c.x, H + 10, '12 6'); ln(-10, c.y, W + 10, c.y, '12 6');
+    const ext = Math.max(W, H) * 2; ln(c.x, c.y, c.x + ext, c.y + ext, '4 4');
+    const lbl = (x, y, txt, anchor) => { const t = svgEl('text', { x, y, fill: PP.text, opacity: 0.55, 'font-size': 11 * m, 'font-weight': 800, 'text-anchor': anchor, 'font-family': 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', 'pointer-events': 'none' }); t.textContent = txt; target.appendChild(t); };
+    lbl(c.x - 8 * m, c.y - 8 * m, VIEW_NOMI.V, 'end'); lbl(c.x - 8 * m, c.y + 16 * m, VIEW_NOMI.H, 'end'); lbl(c.x + 8 * m, c.y - 8 * m, VIEW_NOMI.W, 'start');
+    if (!exportMode && state.tool === 'select') target.appendChild(svgEl('rect', { x: c.x - 5, y: c.y - 5, width: 10, height: 10, fill: PP.accentSoft || '#fff', stroke: PP.accent, 'stroke-width': 1.4, 'pointer-events': 'none' }));
+  }
+  // Tanlangan elementning uchlaridan boshqa proyeksiyalarga bog'lanish chiziqlari (45° orqali)
+  function paintProjLinks(target, w2s, W, H, PP) {
+    const P = projP(), seen = new Set();
+    const dot = (a, b) => target.appendChild(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: PP.accent, 'stroke-width': 0.9, 'stroke-dasharray': '2 4', opacity: 0.55, 'pointer-events': 'none' }));
+    for (const e of selectedEnts()) {
+      const v = viewOf(e); if (!v) continue;
+      for (const p of entVerts(e)) {
+        const k = v + Math.round(p.x * 10) + ':' + Math.round(p.y * 10); if (seen.has(k)) continue; seen.add(k);
+        const s = w2s(p.x, p.y);
+        if (v === 'V') { dot(s, { x: s.x, y: H + 10 }); dot(s, { x: W + 10, y: s.y }); }
+        else if (v === 'H') { dot(s, { x: s.x, y: -10 }); const f = w2s(P.wx + (p.y - P.hy), p.y); dot(s, f); dot(f, { x: f.x, y: -10 }); }
+        else { dot(s, { x: -10, y: s.y }); const f = w2s(p.x, P.hy + (p.x - P.wx)); dot(s, f); dot(f, { x: -10, y: f.y }); }
+      }
+    }
+  }
   function paint(target, view, W, H, exportMode) {
     const PP = exportMode ? EXPORT_P : P;
     const m = PP.fs || 1;
@@ -1001,6 +1197,7 @@ export function mountDetal(root) {
     while (target.firstChild) target.removeChild(target.firstChild);
     if (exportMode) target.appendChild(svgEl('rect', { x: 0, y: 0, width: W, height: H, fill: '#ffffff' }));
     else if (state.snapSet.grid) paintGrid(target, view, W, H);
+    if (state.proj.on) paintProjFrames(target, w2s, W, H, PP, exportMode);
     // 1) elementlar
     for (const e of state.ents) {
       const sel = !exportMode && state.sel.has(e.id);
@@ -1022,6 +1219,7 @@ export function mountDetal(root) {
       else if (e.type === 'circle' && state.showLen) { const c = w2s(e.cx, e.cy); label(target, c.x, c.y - e.r * view.scale - 12 * m, 'R ' + fmtLen(e.r), PP.text, 11, PP); }
     }
     if (exportMode) return;
+    if (state.proj.on && state.proj.links) paintProjLinks(target, w2s, W, H, PP);
     // 3) chizilayotgan (jonli)
     if (state.draft) paintDraft(target, w2s, view, PP);
     // 4) griplar (Tanlash asbobida, tanlanganlarga)
@@ -1052,7 +1250,12 @@ export function mountDetal(root) {
   }
   function updatePanel() {
     let total = 0, segs = 0, bends = 0;
-    for (const e of state.ents) if (e.type === 'pline') {
+    // 3 proyeksiya rejimida hisob faol chiziq turgan proyeksiya bo'yicha (yoyilma bir proyeksiyaniki)
+    const apv = activePline();
+    const scope = (state.proj.on && apv && !apv.draft) ? viewOf(apv) : null;
+    q('stScope').textContent = scope ? '— ' + VIEW_NOMI[scope] : '';
+    const scoped = scope ? state.ents.filter((e) => viewOf(e) === scope) : state.ents;
+    for (const e of scoped) if (e.type === 'pline') {
       for (const s of plineSegs(e)) { total += dist(s.a, s.b); segs++; }
       const n = e.pts.length, cyc = e.closed && n > 2;
       for (let k = 0; k < n; k++) {
@@ -1061,11 +1264,11 @@ export function mountDetal(root) {
       }
     }
     q('stTotal').textContent = segs ? fmtLen(total) : '—';
-    const b = bounds();
+    const b = scope ? boundsOf(scoped, false, false) : bounds();
     q('stBox').textContent = b ? fmtNum((b.maxX - b.minX) / U(), 2) + ' × ' + fmtNum((b.maxY - b.minY) / U(), 2) + ' ' + UNIT_LABEL[state.unit] : '—';
     q('stBends').textContent = String(bends);
     q('stSegs').textContent = String(segs);
-    renderTable(); renderLib(); syncButtons();
+    renderTable(); renderLib(); syncButtons(); syncProjUI();
   }
   function renderTable() {
     const el = q('segTable'), ap = activePline();
@@ -1108,7 +1311,7 @@ export function mountDetal(root) {
     if (!state.ents.length) { setInfo("Chizma bo'sh — saqlash uchun avval chizing"); return; }
     if (!name) { name = 'Detal ' + (state.lib.length + 1); q('nameInput').value = name; }
     state.name = name;
-    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), t: Date.now() };
+    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), proj: JSON.parse(JSON.stringify(state.proj)), t: Date.now() };
     const idx = state.lib.findIndex((x) => String(x.name).toLowerCase() === name.toLowerCase());
     if (idx >= 0) { item.id = state.lib[idx].id; state.lib[idx] = item; } else state.lib.unshift(item);
     saveLib(); renderLib(); saveLS();
@@ -1120,6 +1323,7 @@ export function mountDetal(root) {
     state.ents = JSON.parse(JSON.stringify(it.ents || []));
     state.nextId = Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1;
     state.name = it.name; q('nameInput').value = it.name;
+    if (it.proj) state.proj = sanitizeProj(it.proj);
     state.sel.clear();
     afterChange(); centerView();
     setInfo(`«${it.name}» ochildi`);
@@ -1149,7 +1353,7 @@ export function mountDetal(root) {
     setInfo('DXF yuklab olindi (mm, Y yuqoriga)');
   }
   async function exportPng() {
-    const b = bounds(); if (!b) { setInfo("Chizma bo'sh"); return; }
+    const b = bounds(true); if (!b) { setInfo("Chizma bo'sh"); return; }
     const pad = 70, top = 60, W = 1600;
     const w = Math.max(b.maxX - b.minX, 1), h = Math.max(b.maxY - b.minY, 1);
     let sc = (W - 2 * pad) / w; if (h * sc > 2400) sc = 2400 / h;
@@ -1220,6 +1424,7 @@ export function mountDetal(root) {
         ents: state.ents, nextId: state.nextId, unit: state.unit, angMode: state.angMode, tool: state.tool,
         showLen: state.showLen, showAng: state.showAng,
         scale: state.scale, panX: state.panX, panY: state.panY, name: state.name,
+        proj: state.proj,
       }));
     } catch (e) { /* noop */ }
   }
@@ -1239,6 +1444,7 @@ export function mountDetal(root) {
       if (typeof o.panX === 'number') state.panX = o.panX;
       if (typeof o.panY === 'number') state.panY = o.panY;
       state.name = o.name || '';
+      state.proj = sanitizeProj(o.proj);
       return true;
     } catch (e) { return false; }
   }
@@ -1257,7 +1463,7 @@ export function mountDetal(root) {
   function updateScaleInfo() { const el = q('scaleInfo'); if (el) el.textContent = '1 sm = ' + fmtNum(10 * state.scale, 1) + ' px'; }
   function centerView() {
     const r = svg.getBoundingClientRect(); if (!r.width || !r.height) return;
-    const b = bounds();
+    const b = bounds(true);
     if (!b) { state.scale = 4; state.panX = r.width * 0.3; state.panY = r.height * 0.62; render(); return; }
     const w = b.maxX - b.minX, h = b.maxY - b.minY, pad = 70;
     let s = Math.min((r.width - 2 * pad) / Math.max(w, 1), (r.height - 2 * pad) / Math.max(h, 1));
@@ -1360,7 +1566,7 @@ export function mountDetal(root) {
     if (state.grip) {
       const g = state.grip;
       if (!g.pushed) { pushHistory(); g.pushed = true; }
-      applyGrip(resolveCursor(sx, sy, null, g.ent.id));
+      applyGrip(g.ent ? resolveCursor(sx, sy, null, g.ent.id) : screenToWorld(sx, sy));
       render(); return;
     }
     if (boxSel) {
@@ -1471,6 +1677,14 @@ export function mountDetal(root) {
   on(q('nameInput'), 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveToLib(); } });
   on(q('btnSave'), 'click', saveToLib);
   on(q('btnNew'), 'click', newDrawing);
+  // 3 proyeksiya
+  on(q('projOn'), 'change', (e) => setProjOn(e.target.checked));
+  on(q('projGuides'), 'change', (e) => { state.proj.guides = e.target.checked; saveLS(); render(); });
+  on(q('projLinks'), 'change', (e) => { state.proj.links = e.target.checked; saveLS(); render(); });
+  on(q('projGap'), 'change', (e) => { const v = sonQiymat(e.target.value); if (v >= 0) setProjGap(v * U()); else syncProjUI(); });
+  on(q('projGap'), 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+  for (const v of ['V', 'H', 'W']) on(q('gen' + v), 'click', (e) => genClick(v, e.currentTarget));
+  on(q('projInfo'), 'click', (e) => { const b = e.target.closest('button[data-act="clear"]'); if (b) clearView(b.dataset.view); });
   on(q('libList'), 'click', (e) => {
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const id = +b.dataset.id;

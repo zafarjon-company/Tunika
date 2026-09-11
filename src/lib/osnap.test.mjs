@@ -1204,6 +1204,50 @@ test('modeName: rejim nomlari va kuzatish turlari; noma\'lum → ""', () => {
   assert.equal(modeName('raw'), '');
   assert.equal(modeName(undefined), '');
   for (const m of SNAP_MODES) assert.equal(modeName(m.key), m.nomi);
+  assert.equal(modeName('proj'), 'Proyeksiya');
+  assert.equal(modeName('proj-int'), 'Proyeksiya kesishmasi');
+});
+
+/* ============================================================ */
+console.log('\n=== 20) Bog\'lanish (proyeksiya) chiziqlari — guides ===\n');
+
+const SG = (extra = {}) => ({ ...klon(DEFAULT_SNAP), ...extra });
+const G0 = { segs: [], circles: [], nodes: [] };
+test('Bitta vertikal bog\'lanish chizig\'i (x=50): kursor (52,30) → proj (50,30), tip "Proyeksiya 90°"', () => {
+  const r = resolveSnap({ geom: G0, cur: P(52, 30), scale: 1, settings: SG(), guides: [{ x: 50, y: 0, ang: 90 }] });
+  assert.equal(r.kind, 'proj'); nearPt(r, 50, 30); assert.equal(r.tip, 'Proyeksiya 90°');
+  assert.equal(r.tracks.length, 1); assert.equal(r.tracks[0].guide, true); assert.equal(r.tracks[0].ang, 90);
+});
+test('Ikki bog\'lanish chizig\'i kesishmasi → proj-int (50,30), "Proyeksiya kesishmasi"', () => {
+  const r = resolveSnap({ geom: G0, cur: P(52, 31), scale: 1, settings: SG(), guides: [{ x: 50, y: 0, ang: 90 }, { x: 0, y: 30, ang: 0 }] });
+  assert.equal(r.kind, 'proj-int'); nearPt(r, 50, 30); assert.equal(r.tip, 'Proyeksiya kesishmasi');
+  assert.equal(r.tracks.length, 2);
+});
+test('Bog\'lanish chizig\'i × polar nur kesishmasi → otrack-int (60,-60)', () => {
+  const r = resolveSnap({ geom: G0, cur: P(61, -59), scale: 1, settings: SG({ polarInc: 45 }), from: P(0, 0), guides: [{ x: 60, y: 0, ang: 90 }] });
+  assert.equal(r.kind, 'otrack-int'); nearPt(r, 60, -60);
+  assert.ok(r.tracks.some((t) => t.guide) && r.tracks.some((t) => t.polar));
+});
+test('OTRACK o\'chiq va olingan nuqta yo\'q bo\'lsa ham bog\'lanish chizig\'i ishlaydi', () => {
+  const r = resolveSnap({ geom: G0, cur: P(3, 80), scale: 1, settings: SG({ otrack: false }), guides: [{ x: 0, y: 0, ang: 90 }] });
+  assert.equal(r.kind, 'proj'); nearPt(r, 0, 80);
+});
+test('Tolerans tashqarisida (perp 15 px > 12) → raw; scale 0.5 bilan 7.5 px → proj', () => {
+  assert.equal(resolveSnap({ geom: G0, cur: P(65, 80), scale: 1, settings: SG(), guides: [{ x: 50, y: 0, ang: 90 }] }).kind, 'raw');
+  assert.equal(resolveSnap({ geom: G0, cur: P(65, 80), scale: 0.5, settings: SG(), guides: [{ x: 50, y: 0, ang: 90 }] }).kind, 'proj');
+});
+test('OSNAP nuqtasi bog\'lanish chizig\'idan ustun: END (50,30) apertura ichida → END', () => {
+  const geom = buildGeom([{ id: 'l', type: 'line', x1: 50, y1: 30, x2: 50, y2: 200 }]);
+  const r = resolveSnap({ geom, cur: P(52, 31), scale: 1, settings: SG(), guides: [{ x: 0, y: 31, ang: 0 }] });
+  assert.equal(r.kind, 'END'); nearPt(r, 50, 30);
+});
+test('Polar nur ustida, kesishma uzoq → polar (bog\'lanish chizig\'i yutmaydi)', () => {
+  const r = resolveSnap({ geom: G0, cur: P(80, -1), scale: 1, settings: SG(), from: P(0, 0), guides: [{ x: 0, y: -1, ang: 0 }] });
+  assert.equal(r.kind, 'polar'); nearPt(r, 80, 0);
+});
+test('Buzuq guide (NaN) e\'tiborsiz qoldiriladi', () => {
+  const r = resolveSnap({ geom: G0, cur: P(52, 30), scale: 1, settings: SG(), guides: [{ x: NaN, y: 0, ang: 90 }, null, { x: 50, y: 0, ang: 90 }] });
+  assert.equal(r.kind, 'proj'); nearPt(r, 50, 30);
 });
 
 /* ============================================================ */

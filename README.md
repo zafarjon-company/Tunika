@@ -237,3 +237,19 @@ foydalanadi; sozlamalar localStorage `cad-snap-v1` kalitida umumiy.
   chiziq × polar nur) kesishmasiga yopishadi. Nuqta belgilangach olinganlar tozalanadi.
 - **SNAP** (F9) — to'r tugunlariga; **GRID** (F7, qadam ▾ avto/1 mm…1 m); **DYN** (F12)
   — uzunlik/burchak kiritish qutisi. Chapda kursor koordinatasi (Y yuqoriga).
+
+### Detal chizish → 3 proyeksiya (chizma geometriya)
+
+Yon paneldagi **«3 ta proyeksiya»** yoqilsa maydon Monge usulida to'rt kvadrantga
+bo'linadi: **OLD (V)** chap-yuqori (x, z), **USTDAN (H)** chap-past (x, chuqurlik
+pastga), **YON (W)** o'ng-yuqori (chuqurlik o'ngga, z); 45° buklash chizig'i H↔W
+chuqurligini bog'laydi. Element qaysi kvadrantda turgan bo'lsa o'sha proyeksiyaga
+tegishli. Ikkita proyeksiyani chizib (masalan H da 15 sm, W da 25 sm kesma),
+**«... ni hosil qilish»** tugmasi uchinchisini quradi: kontur — ekstentlar
+to'rtburchagi, ichki chiziqlar — boshqa proyeksiyalardagi oraliq uchlar (qayirma
+chiziqlari); tekis detal uchun kesma. Natija oddiy chiziqlar — grip, jadval va
+asboblar bilan tahrirlanadi (chetidagi mayda detallar). Chizganda kursor boshqa
+proyeksiyalardagi uchlarning **bog'lanish chiziqlariga** yopishadi (osnap.js
+`guides`, maslahat «Proyeksiya»); tanlangan elementning proyeksiya chiziqlari
+45° orqali ko'rsatiladi. Burchakdagi kvadratchani sudrab proyeksiyalar suriladi,
+oraliq sozlanadi. Hisob (yoyilma, gabarit) faol proyeksiya bo'yicha.

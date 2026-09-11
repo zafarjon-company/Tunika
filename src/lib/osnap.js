@@ -64,6 +64,8 @@ export function modeName(kind) {
   if (kind === 'polar') return 'Polar';
   if (kind === 'otrack') return 'Kuzatish';
   if (kind === 'otrack-int') return 'Kuzatish kesishmasi';
+  if (kind === 'proj') return 'Proyeksiya';
+  if (kind === 'proj-int') return 'Proyeksiya kesishmasi';
   if (kind === 'grid') return "To'r";
   const m = MODE_BY_KEY[kind];
   return m ? m.nomi : '';
@@ -330,12 +332,22 @@ export function trackAngles(s) {
    acquired: [{x,y,dirs?:[deg]}] — olingan nuqtalar (dirs — EXT davomi yo'nalishlari).
    polarRes — polarSnap natijasi (from bilan) — kuzatish chizig'i × polar nur kesishmasi uchun.
    Qaytaradi {x,y,kind:'otrack'|'otrack-int',lines:[{A,ang}]} yoki null. */
-export function trackSnap(acquired, cur, s, scale, polarRes, from) {
+export function trackSnap(acquired, cur, s, scale, polarRes, from, guides) {
   const tol = s.aperture || 12, sc = scale || 1;
   const angs = trackAngles(s);
   const extOn = !!(s.modes && s.modes.EXT);
   const otrackOn = s.otrack !== false;   // aniq o'chirilgan bo'lsagina kuzatish burchaklari olinmaydi
   const lines = [];
+  // BOG'LANISH (proyeksiya) chiziqlari — chizma geometriya: boshqa proyeksiyadagi uchdan o'tuvchi
+  // cheksiz gorizontal/vertikal chiziqlar. OTRACK holatiga bog'liq emas, "olish" ham shart emas.
+  for (const gd of guides || []) {
+    if (!gd || !Number.isFinite(gd.x) || !Number.isFinite(gd.y) || !Number.isFinite(gd.ang)) continue;
+    const v = dirVec(gd.ang), dx = cur.x - gd.x, dy = cur.y - gd.y;
+    const perp = Math.abs(dx * v.dy - dy * v.dx) * sc;
+    if (perp > tol) continue;
+    const proj = dx * v.dx + dy * v.dy;
+    lines.push({ A: { x: gd.x, y: gd.y }, ang: norm360(gd.ang), v, x: gd.x + v.dx * proj, y: gd.y + v.dy * proj, perp, guide: true, fwd: false });
+  }
   for (const A of acquired || []) {
     const set = [];
     // OTRACK o'chiq bo'lsa faqat EXT (chiziq davomi) ishlaydi — AutoCAD'da EXT
@@ -365,12 +377,12 @@ export function trackSnap(acquired, cur, s, scale, polarRes, from) {
     const p = lineLineInt(L1.A, { x: L1.A.x + L1.v.dx, y: L1.A.y + L1.v.dy }, L2.A, { x: L2.A.x + L2.v.dx, y: L2.A.y + L2.v.dy });
     if (!p || !onRay(L1, p) || !onRay(L2, p)) continue;
     const d = Math.hypot(p.x - cur.x, p.y - cur.y) * sc;
-    if (d <= tol * 1.5 && (!best || d < best.d)) best = { x: p.x, y: p.y, d, kind: 'otrack-int', lines: [L1, L2] };
+    if (d <= tol * 1.5 && (!best || d < best.d)) best = { x: p.x, y: p.y, d, kind: (L1.guide && L2.guide) ? 'proj-int' : 'otrack-int', lines: [L1, L2] };
   }
   if (best) return best;
   lines.sort((a, b) => a.perp - b.perp);
   const L = lines[0];
-  return { x: L.x, y: L.y, d: L.perp, kind: L.ext ? 'EXT' : 'otrack', lines: [L] };
+  return { x: L.x, y: L.y, d: L.perp, kind: L.guide ? 'proj' : (L.ext ? 'EXT' : 'otrack'), lines: [L] };
 }
 
 /* ---------------- YAKUNIY: resolveSnap ----------------
@@ -387,15 +399,19 @@ export function resolveSnap(ctx) {
     if (best) { res.x = best.x; res.y = best.y; res.kind = best.kind; res.snap = best; res.tip = modeName(best.kind); return res; }
   }
   const polarRes = from ? polarSnap(from, cur, s, scale) : null;
-  const trackOn = (s.otrack || (s.modes && s.modes.EXT)) && ctx.acquired && ctx.acquired.length;
-  const tr = trackOn ? trackSnap(ctx.acquired, cur, s, scale, polarRes, from) : null;
-  // Kuzatish KESISHMASI hammadan ustun; oddiy kuzatish chizig'i esa polar nurdan keyin
+  const guides = Array.isArray(ctx.guides) ? ctx.guides : [];
+  const acq = Array.isArray(ctx.acquired) ? ctx.acquired : [];
+  const trackOn = ((s.otrack || (s.modes && s.modes.EXT)) && acq.length) || guides.length;
+  const tr = trackOn ? trackSnap(acq, cur, s, scale, polarRes, from, guides) : null;
+  // KESISHMA (kuzatish yoki proyeksiya) hammadan ustun; oddiy chiziq esa polar nurdan keyin
   // (AutoCAD: polar nur ustida bo'lsa polar, kesishma bo'lsa kesishma).
-  if (tr && (tr.kind === 'otrack-int' || !polarRes)) {
+  if (tr && (tr.kind === 'otrack-int' || tr.kind === 'proj-int' || !polarRes)) {
     res.x = tr.x; res.y = tr.y; res.kind = tr.kind;
-    res.tracks = tr.lines.map((L) => ({ from: { x: L.A.x, y: L.A.y }, to: { x: tr.x, y: tr.y }, ang: L.ang, polar: !!(L.polar || L.fwd) }));
+    res.tracks = tr.lines.map((L) => ({ from: { x: L.A.x, y: L.A.y }, to: { x: tr.x, y: tr.y }, ang: L.ang, polar: !!(L.polar || L.fwd), guide: !!L.guide }));
     res.tip = tr.kind === 'otrack-int' ? 'Kuzatish kesishmasi'
-      : (tr.kind === 'EXT' ? 'Davomi ' + fmtAng(tr.lines[0].ang) : 'Kuzatish ' + fmtAng(tr.lines[0].ang));
+      : tr.kind === 'proj-int' ? 'Proyeksiya kesishmasi'
+        : tr.kind === 'proj' ? 'Proyeksiya ' + fmtAng(tr.lines[0].ang)
+          : (tr.kind === 'EXT' ? 'Davomi ' + fmtAng(tr.lines[0].ang) : 'Kuzatish ' + fmtAng(tr.lines[0].ang));
     return res;
   }
   if (polarRes) {

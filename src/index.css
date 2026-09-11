@@ -1356,3 +1356,22 @@ html.themed .cad-menu-inline select { background: var(--c-bg); color: var(--c-t1
 .chz-canvas { padding-bottom: 0; }
 /* Tor ekranda koordinata yozuvi tugmalarni siqib qo'ymasin */
 @media (max-width: 700px) { .cad-coords { display: none; } }
+
+/* Detal chizish → 3 proyeksiya (chizma geometriya: V old · H ustdan · W yon) */
+.dtl-proj { margin-top: 4px; }
+.dtl-projbtns { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.dtl-projbtns .dtl-btn { text-align: left; }
+.dtl-projbtns .dtl-btn:disabled { opacity: .45; cursor: default; }
+.dtl-projbtns .dtl-btn.arm { border-color: #ef4444; color: #ef4444; }
+.dtl-gap { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: #334155; }
+.dtl-gap input { width: 56px; padding: 3px 5px; font-size: 11.5px; font-weight: 600; text-align: right; color: #0f172a; background: #fff; border: 1px solid #cbd5e1; border-radius: 5px; }
+.dtl-gap input:focus { outline: none; border-color: var(--chz-accent); }
+.dtl-gap i { font-style: normal; color: #94a3b8; font-size: 10.5px; }
+html.themed .dtl-gap { color: var(--c-t2); }
+html.themed .dtl-gap input { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
+.dtl-projinfo { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: #334155; padding: 2px 0; }
+.dtl-projinfo b { color: var(--chz-accent); }
+.dtl-projinfo button { padding: 0 5px; margin-left: 2px; font-size: 10px; line-height: 15px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; color: #94a3b8; cursor: pointer; }
+.dtl-projinfo button:hover { border-color: #ef4444; color: #ef4444; }
+html.themed .dtl-projinfo { color: var(--c-t2); }
+html.themed .dtl-projinfo button { background: var(--c-surface); border-color: var(--c-line); }
