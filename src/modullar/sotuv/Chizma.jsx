@@ -1,29 +1,43 @@
 // ============================================================
 //  CHIZMA OYNASI (Savdo bo'limi ichida — Usta va Tovarlar orasida)
 // ------------------------------------------------------------
-//  Ikki rejim (tab):
+//  Uch rejim (tab):
 //   • Xona konturi — xonani chizib kazirok/devor/qosh/qozon o'lchovlarini
 //     hisoblash (chizmaEngine.js).
 //   • Detal chizish — alohida detalni (patalok, qosh profili, paloska...)
 //     AutoCAD uslubida sm + gradus bilan chizish (detalEngine.js).
+//   • Gul chizish — gul/naqsh konturini xuddi shu asboblar bilan chizish,
+//     yon panelda «nechta ofset tashlansin» soni (gulEngine.js → detalEngine
+//     variant 'gul').
 //  Bu yerda faqat karta, tab, yig'ish (collapse) va to'liq ekran rejimi
-//  boshqariladi. Ikkala chizma ham avtomatik saqlanadi (localStorage) —
+//  boshqariladi. Barcha chizmalar avtomatik saqlanadi (localStorage) —
 //  yopib-ochilsa yoki rejim almashsa ham yo'qolmaydi.
 // ============================================================
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Maximize2, Minimize2, Ruler, PenTool } from 'lucide-react';
+import { ChevronDown, Maximize2, Minimize2, Ruler, PenTool, Flower2 } from 'lucide-react';
 import { Card, SectionTitle } from '../../components/ui.jsx';
 import { mountChizma } from './chizmaEngine.js';
 import { mountDetal } from './detalEngine.js';
+import { mountGul } from './gulEngine.js';
 
-const MODE_KEY = 'xona-chizma-mode';   // oxirgi tanlangan rejim ('xona' | 'detal')
+const MODE_KEY = 'xona-chizma-mode';   // oxirgi tanlangan rejim ('xona' | 'detal' | 'gul')
 const MODES = [
-  { v: 'xona', label: 'Xona konturi', hint: 'Kazirok · devor · qosh · qozon' },
-  { v: 'detal', label: 'Detal chizish', hint: 'sm + gradus, AutoCAD uslubi' },
+  { v: 'xona', label: 'Xona konturi', hint: 'Kazirok · devor · qosh · qozon', Icon: Ruler },
+  { v: 'detal', label: 'Detal chizish', hint: 'sm + gradus, AutoCAD uslubi', Icon: PenTool },
+  { v: 'gul', label: 'Gul chizish', hint: 'Gul / naqsh konturi, ofsetlar soni bilan', Icon: Flower2 },
 ];
 
 function readMode() {
-  try { return localStorage.getItem(MODE_KEY) === 'detal' ? 'detal' : 'xona'; } catch (e) { return 'xona'; }
+  try {
+    const m = localStorage.getItem(MODE_KEY);
+    return MODES.some((x) => x.v === m) ? m : 'xona';
+  } catch (e) { return 'xona'; }
+}
+
+function mountFor(mode, root, tunikaBaza) {
+  if (mode === 'detal') return mountDetal(root);
+  if (mode === 'gul') return mountGul(root);
+  return mountChizma(root, { tunikaBaza });
 }
 
 export function ChizmaCard({ tunikaBaza = [] }) {
@@ -46,9 +60,7 @@ export function ChizmaCard({ tunikaBaza = [] }) {
   // yopilganda butunlay olib tashlaymiz (holat localStorage'da — hech narsa yo'qolmaydi).
   useEffect(() => {
     if (!open || !rootRef.current) return undefined;
-    const api = mode === 'detal'
-      ? mountDetal(rootRef.current)
-      : mountChizma(rootRef.current, { tunikaBaza: tunikaRef.current });
+    const api = mountFor(mode, rootRef.current, tunikaRef.current);
     apiRef.current = api;
     return () => { api.destroy(); apiRef.current = null; };
   }, [open, mode]);
@@ -86,7 +98,7 @@ export function ChizmaCard({ tunikaBaza = [] }) {
       {MODES.map((m) => (
         <button type="button" key={m.v} role="tab" aria-selected={mode === m.v}
           className={'chz-tab' + (mode === m.v ? ' on' : '')} onClick={() => pickMode(m.v)} title={m.hint}>
-          {m.v === 'detal' ? <PenTool className="w-3.5 h-3.5" /> : <Ruler className="w-3.5 h-3.5" />}
+          <m.Icon className="w-3.5 h-3.5" />
           {m.label}
         </button>
       ))}
@@ -119,15 +131,16 @@ export function ChizmaCard({ tunikaBaza = [] }) {
       {!open && (
         <button type="button" onClick={() => setOpen(true)}
           className="w-full text-left px-3 py-3 rounded-xl border-2 border-dashed border-slate-200 hover:border-slate-400 transition text-sm text-slate-400">
-          Xona konturini chizish (kazirok, devor, qosh, qozon hisobi) yoki alohida detal
-          (patalok, qosh profili) chizish — sm va gradus bilan, AutoCAD uslubida. Ochish uchun bosing
+          Xona konturini chizish (kazirok, devor, qosh, qozon hisobi), alohida detal
+          (patalok, qosh profili) yoki gul / naqsh chizish (ofsetlar soni bilan) — sm va gradus bilan,
+          AutoCAD uslubida. Ochish uchun bosing
         </button>
       )}
 
       {open && (
         <div className={full ? 'chz-full-wrap' : ''}>
           {full ? (
-            <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-slate-200 bg-white">
+            <div className="chz-fullhead flex items-center justify-between gap-2 px-4 py-2 border-b border-slate-200 bg-white">
               <span className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
                 <Ruler className="w-4 h-4" /> Chizma <span className="text-slate-400 font-medium normal-case tracking-normal">· {modeLabel}</span>
               </span>

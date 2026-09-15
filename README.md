@@ -183,9 +183,9 @@ Loyiha GitHub repozitoriysiga ulangan; Vercel `vercel.json` asosida
 avtomatik build qiladi (`npm run build` → `dist/`). `main`/`master`
 branchга push qilinganda Vercel o'zi qayta deploy qiladi.
 
-## Chizma → Detal chizish
+## Chizma → Detal chizish / Gul chizish
 
-Savdo bo'limidagi **Chizma** kartasi ikki rejimda ishlaydi (tab):
+Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
 
 - **Xona konturi** — xona chizmasi, kazirok/devor/qosh/qozon hisobi
   (`src/modullar/sotuv/chizmaEngine.js`).
@@ -203,6 +203,18 @@ Savdo bo'limidagi **Chizma** kartasi ikki rejimda ishlaydi (tab):
   offset/o'chirish, griplar, undo/redo. Nomlangan detallar **kutubxonasi**
   (`detal-chizma-lib-v1`, localStorage), joriy chizma `detal-chizma-v1`.
   **DXF** import (mm/sm/m, $INSUNITS) va eksport (mm, LINE/CIRCLE), **PNG** rasm.
+- **Gul chizish** — gul / naqsh konturini Detal chizish bilan bir xil asboblar
+  bilan chizish (`src/modullar/sotuv/gulEngine.js` → `detalEngine.js`,
+  variant `'gul'`, `VARIANTS` jadvali). Farqi — yon panelda **«Nechta ofset
+  tashlansin»** soni (1…50): **Offset** asbobi bitta masofa bilan shuncha
+  parallel kontur (masofa, 2×, 3×…) tashlaydi, tomonni bosishdan oldin jonli
+  ko'rinadi; aylana radiusi tugasa yoki kontur sig'masa to'xtaydi («qolgani
+  sig'madi»). Geometriya `src/lib/offsetGeom.js` (`npm run test:offset`):
+  AutoCAD kabi ichkariga ofsetda yutilgan (teskari bo'lib qolgan) segmentlar
+  tashlab yuborilib qo'shnilari qayta kesishtiriladi (qisqa faska yo'qoladi),
+  hammasi yutilsa — sig'madi. Proyeksiyalar bo'limi bu rejimda yo'q. localStorage:
+  `gul-chizma-v1` (joriy), `gul-chizma-lib-v1` (kutubxona). Bu boshlanish —
+  gulga xos imkoniyatlar shu rejimga qo'shib boriladi.
 
 ### Xona konturi → Tahrir rejimi (AutoCAD qulayliklari)
 

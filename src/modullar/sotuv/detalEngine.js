@@ -12,7 +12,11 @@
 //    chiziqdan burilish: + chapga, − o'ngga).
 //  - Joriy chizma localStorage'da saqlanadi; nomlangan detallar kutubxonasi ham.
 //  - DXF import/eksport (mm), PNG rasm.
-//  mountDetal(root) — DOM quradi, { destroy, centerView } qaytaradi.
+//  mountDetal(root, { variant }) — DOM quradi, { destroy, centerView } qaytaradi.
+//  variant: 'detal' (asl) yoki 'gul' — Gul chizish rejimi (gulEngine.js): bir xil
+//  asboblar, lekin yon panelda «Nechta ofset tashlansin» soni — Offset asbobi
+//  shuncha parallel kontur tashlaydi (geometriya: src/lib/offsetGeom.js);
+//  proyeksiyalar bo'limi yo'q, alohida localStorage kalitlari (VARIANTS jadvali).
 // ============================================================
 
 import { sonMatn, sonQiymat } from '../../lib/helpers.js';
@@ -20,12 +24,42 @@ import { computePalette } from './chizmaEngine.js';
 import { safeFileName, downloadDxf } from '../../lib/dxfExport.js';
 import { loadSnap, saveSnap, buildGeom, resolveSnap, updateAcquire, gridStepFor, snapMarkerShapes } from '../../lib/osnap.js';
 import { mountStatusBar } from '../../lib/cadStatusBar.js';
+import { offsetSide, offsetSeries } from '../../lib/offsetGeom.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const UNITS = { mm: 1, cm: 10 };
 const UNIT_LABEL = { mm: 'mm', cm: 'sm' };
-const STORAGE_KEY = 'detal-chizma-v1';
-const LIB_KEY = 'detal-chizma-lib-v1';
+const OFF_MAX = 50;          // bir yo'la tashlanadigan ofsetlar soni chegarasi (Gul rejimi)
+// Rejim variantlari — bitta dvigatel, ikki rejim: Detal chizish (asl) va Gul chizish (gulEngine.js).
+// Gulga xos yangi imkoniyatlar shu jadval va V.multiOffset shoxlari orqali qo'shiladi.
+const VARIANTS = {
+  detal: {
+    cls: 'dtl', storageKey: 'detal-chizma-v1', libKey: 'detal-chizma-lib-v1',
+    title: 'Detal', namePh: 'Detal nomi (masalan: Qosh 12 sm)', autoName: 'Detal', saveEx: 'patalok, qosh',
+    libLabel: 'Saqlangan detallar', libEmpty: "Hali saqlangan detal yo'q", libDel: "Detal kutubxonadan o'chirildi",
+    offTitle: 'Offset — parallel nusxa (list qalinligi uchun qulay): elementni bosing, masofani yozing, tomonni bosing',
+    filePrefix: 'detal_', proj: true, multiOffset: false,
+  },
+  gul: {
+    cls: 'gul', storageKey: 'gul-chizma-v1', libKey: 'gul-chizma-lib-v1',
+    title: 'Gul', namePh: 'Gul nomi (masalan: Lola 20 sm)', autoName: 'Gul', saveEx: 'lola, yaproq',
+    libLabel: 'Saqlangan gullar', libEmpty: "Hali saqlangan gul yo'q", libDel: "Gul kutubxonadan o'chirildi",
+    offTitle: "Offset — parallel nusxalar: elementni bosing, masofani yozing, tomonni bosing — yon paneldagi son bo'yicha bir nechta",
+    filePrefix: 'gul_', proj: false, multiOffset: true,
+  },
+};
+// Gul rejimi: yon paneldagi «Nechta ofset tashlansin» bloki va qo'llanma bandi
+const OFFSET_PANEL = '<h3 class="dtl-h3">Ofset</h3>'
+  + '<div class="gul-off">'
+  + '<div class="dtl-gap gul-offrow"><span>Nechta ofset tashlansin</span>'
+  + '<span class="gul-step">'
+  + '<button type="button" data-dtl="offMinus" title="Bitta kam">&minus;</button>'
+  + '<input data-dtl="offCount" type="text" inputmode="numeric" data-num="pos" maxlength="2" title="Offset asbobi shuncha parallel nusxa tashlaydi (1–' + OFF_MAX + ')" />'
+  + "<button type=\"button\" data-dtl=\"offPlus\" title=\"Bitta ko'p\">+</button>"
+  + '</span></div>'
+  + '<div class="gul-offhint">«Offset» asbobi: elementni bosing, masofani yozib Enter, tomonni bosing — shuncha parallel kontur (masofa, 2×, 3×…) tashlanadi.</div>'
+  + '</div>';
+const OFFSET_HINT = "&bull; <b>Ofset soni</b> (yon panel): «Offset» asbobi bilan elementni bosing, masofani yozib Enter, tomonni bosing — <b>shuncha</b> parallel kontur (masofa, 2×, 3×…) tashlanadi; tomonni bosishdan oldin jonli ko'rinadi. Aylana radiusi tugasa to'xtaydi.<br>";
 const SNAP_PX = 12;          // nuqtaga yopishish chegarasi (px)
 const GRIP_PX = 4;           // grip kvadratining yarim tomoni (px)
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
@@ -77,14 +111,6 @@ function distToSeg(px, py, ax, ay, bx, by) {
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
-// Cheksiz to'g'ri chiziqlar kesishishi (p1->p2, p3->p4); parallel bo'lsa null
-function lineInt(p1, p2, p3, p4) {
-  const d1x = p2.x - p1.x, d1y = p2.y - p1.y, d2x = p4.x - p3.x, d2y = p4.y - p3.y;
-  const den = d1x * d2y - d1y * d2x;
-  if (Math.abs(den) < 1e-9) return null;
-  const t = ((p3.x - p1.x) * d2y - (p3.y - p1.y) * d2x) / den;
-  return { x: p1.x + t * d1x, y: p1.y + t * d1y };
-}
 function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function svgEl(tag, attrs) { const el = document.createElementNS(SVG_NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); return el; }
 function downloadBlob(name, blob) {
@@ -101,8 +127,9 @@ function plineSegs(e) {
   return s;
 }
 
-/* ---------------- DOM SHABLONI ---------------- */
-const TEMPLATE = `
+/* ---------------- DOM SHABLONI (V — rejim varianti) ---------------- */
+function buildTemplate(V) {
+  return `
   <div class="chz-toolbar">
     <span class="chz-tglbl">Asbob:</span>
     <button type="button" class="tool etool" data-tool="select" title="Tanlash — bosing yoki ramka torting; uchlarini (grip) sudrab o'zgartiring; chiziqqa 2 marta bosing — uzunlik/burchak tahriri">&#10530; Tanlash</button>
@@ -116,7 +143,7 @@ const TEMPLATE = `
     <button type="button" class="tool etool" data-tool="rotate" title="Burish — tayanch nuqta → burchak (gradus yozing yoki bosing)">Burish</button>
     <button type="button" class="tool etool" data-tool="mirror" title="Aks ettirish — o'qning 2 nuqtasini bosing (asl nusxa qoladi; kerak bo'lmasa Delete)">Aks</button>
     <button type="button" class="tool etool" data-tool="scale" title="Masshtab — tayanch nuqta → koeffitsient (yozing yoki bosing)">Masshtab</button>
-    <button type="button" class="tool etool" data-tool="offset" title="Offset — parallel nusxa (list qalinligi uchun qulay): elementni bosing, masofani yozing, tomonni bosing">Offset</button>
+    <button type="button" class="tool etool" data-tool="offset" title="${V.offTitle}">Offset</button>
     <button type="button" class="tool etool erase" data-tool="erase" title="O'chirish — element ustiga bosing">O'chirish</button>
     <span class="sep"></span>
     <button type="button" class="tool" data-dtl="btnUndo" title="Ctrl+Z">&#8630; Orqaga</button>
@@ -157,20 +184,21 @@ const TEMPLATE = `
       </div>
     </div>
     <div class="chz-panel">
-      <h3>Detal</h3>
+      <h3>${V.title}</h3>
       <div class="dtl-name">
-        <input data-dtl="nameInput" type="text" placeholder="Detal nomi (masalan: Qosh 12 sm)" maxlength="60" />
+        <input data-dtl="nameInput" type="text" placeholder="${V.namePh}" maxlength="60" />
       </div>
       <div class="dtl-libbtns">
         <button type="button" class="dtl-btn on" data-dtl="btnSave" title="Joriy chizmani shu nom bilan kutubxonaga saqlash">&#128190; Saqlash</button>
         <button type="button" class="dtl-btn" data-dtl="btnNew" title="Yangi bo'sh chizma (joriysi Orqaga bilan qaytariladi)">&#10010; Yangi</button>
       </div>
       <div class="chz-listhead">
-        <button type="button" class="chz-listbtn" data-dtl="tgLib" title="Saqlangan detallar ro'yxatini ko'rsatish / yashirish">
-          <span class="chev">&#9656;</span> Saqlangan detallar <span class="dtl-cnt" data-dtl="libCnt"></span>
+        <button type="button" class="chz-listbtn" data-dtl="tgLib" title="${V.libLabel} ro'yxatini ko'rsatish / yashirish">
+          <span class="chev">&#9656;</span> ${V.libLabel} <span class="dtl-cnt" data-dtl="libCnt"></span>
         </button>
       </div>
       <div class="dtl-lib" data-dtl="libList" style="display:none"></div>
+      <div data-dtl="projSect"${V.proj ? '' : ' style="display:none"'}>
       <h3 class="dtl-h3">Proyeksiyalar</h3>
       <label class="dtl-closed"><input type="checkbox" data-dtl="projOn" /> 3 ta proyeksiya: old (V) &middot; ustdan (H) &middot; yon (W)</label>
       <div class="dtl-proj" data-dtl="projBody" style="display:none">
@@ -184,6 +212,8 @@ const TEMPLATE = `
         <label class="dtl-closed"><input type="checkbox" data-dtl="projLinks" checked /> Tanlanganning proyeksiya chiziqlari</label>
         <label class="dtl-gap">Proyeksiyalar oralig'i <input data-dtl="projGap" type="text" inputmode="decimal" data-num="pos" /> <i data-dtl="projGapUnit">sm</i></label>
       </div>
+      </div>
+      ${V.multiOffset ? OFFSET_PANEL : ''}
       <h3 class="dtl-h3">Hisob <span class="dtl-cnt" data-dtl="stScope"></span></h3>
       <div class="chz-stat lines"><span class="lbl">Yoyilma (umumiy uzunlik):</span><span class="val" data-dtl="stTotal">&mdash;</span></div>
       <div class="chz-stat kazirok"><span class="lbl">Gabarit (eni &times; bo'yi):</span><span class="val" data-dtl="stBox">&mdash;</span></div>
@@ -209,16 +239,19 @@ const TEMPLATE = `
         &bull; <b>Segmentlar jadvali</b>da har segmentning uzunligi/burchagini yozib Enter bosing — kontur qayta quriladi. <b>Nisbiy</b> rejimda burchak o'zgarsa keyingi qism birga buriladi (qayirma burchagi o'zgargandek).<br>
         &bull; <b>Holat paneli</b> (pastda, AutoCAD'dek): <b>SNAP</b> (F9) — to'r tugunlariga; <b>GRID</b> (F7, qadam ▾); <b>ORTHO</b> (F8); <b>POLAR</b> (F10, burchak qadami ▾); <b>OSNAP</b> (F3, magnit rejimlari ▾: uch nuqta, o'rta, markaz, kvadrant, kesishma, perpendikulyar, tangens, eng yaqin, davomi — belgi shakli AutoCAD'dek); <b>OTRACK</b> (F11) — nuqta ustida biroz turing, undan gorizontal/vertikal/polar kuzatish chiziqlari chiqadi, ikki chiziq kesishmasiga ham yopishadi; <b>DYN</b> (F12) — kiritish qutisi.<br>
         &bull; <b>Yoyilma</b> — barcha segmentlar yig'indisi (profil uchun list eni). <b>Surish</b>: o'rta/o'ng tugma; g'ildirak — zoom; <b>Ctrl+E</b> — markazga.<br>
-        &bull; <b>3 proyeksiya</b> (chizma geometriya): yoqilsa maydon <b>OLD (V)</b> chap-yuqori, <b>USTDAN (H)</b> chap-past, <b>YON (W)</b> o'ng-yuqori kvadrantlarga bo'linadi; 45° buklash chizig'i H↔W chuqurligini bog'laydi. Ikkita proyeksiyani chizing (masalan H da 15 sm, W da 25 sm kesma) — <b>hosil qilish</b> tugmasi uchinchisini (15×25 to'rtburchak, qayirma chiziqlari bilan) chizadi; keyin uni oddiy chizmadek tahrirlang. Chizganda kursor boshqa proyeksiyalardagi uchlarning <b>bog'lanish chiziqlariga</b> yopishadi ("Proyeksiya" maslahati). Burchakdagi kvadratchani sudrab proyeksiyalarni suring.<br>
-        &bull; <b>Saqlash</b> — nomlab kutubxonaga (patalok, qosh...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
+        <span${V.proj ? '' : ' hidden'}>&bull; <b>3 proyeksiya</b> (chizma geometriya): yoqilsa maydon <b>OLD (V)</b> chap-yuqori, <b>USTDAN (H)</b> chap-past, <b>YON (W)</b> o'ng-yuqori kvadrantlarga bo'linadi; 45° buklash chizig'i H↔W chuqurligini bog'laydi. Ikkita proyeksiyani chizing (masalan H da 15 sm, W da 25 sm kesma) — <b>hosil qilish</b> tugmasi uchinchisini (15×25 to'rtburchak, qayirma chiziqlari bilan) chizadi; keyin uni oddiy chizmadek tahrirlang. Chizganda kursor boshqa proyeksiyalardagi uchlarning <b>bog'lanish chiziqlariga</b> yopishadi ("Proyeksiya" maslahati). Burchakdagi kvadratchani sudrab proyeksiyalarni suring.<br></span>
+        ${V.multiOffset ? OFFSET_HINT : ''}
+        &bull; <b>Saqlash</b> — nomlab kutubxonaga (${V.saveEx}...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
       </div>
     </div>
   </div>
 `;
+}
 
-export function mountDetal(root) {
-  root.classList.add('chz', 'dtl');
-  root.innerHTML = TEMPLATE;
+export function mountDetal(root, opts) {
+  const V = VARIANTS[opts && opts.variant] || VARIANTS.detal;
+  root.classList.add('chz', 'dtl', V.cls);
+  root.innerHTML = buildTemplate(V);
   const q = (name) => root.querySelector(`[data-dtl="${name}"]`);
 
   /* ---------------- PALITRA (mavzudan) ---------------- */
@@ -252,6 +285,7 @@ export function mountDetal(root) {
     track: { hover: null, acq: [] },  // OTRACK: nuqta ustida turib "olingan" nuqtalar
     snapRes: null,                    // oxirgi resolveSnap natijasi (belgi, kuzatish chiziqlari, maslahat)
     proj: { on: false, sepX: 300, sepY: 300, gap: 100, guides: true, links: true },   // 3 proyeksiya (V old · H ustdan · W yon)
+    offN: 1,               // Gul rejimi: Offset asbobi nechta parallel nusxa tashlaydi (yon panel)
     name: '',
     lib: [],               // saqlangan detallar [{id,name,ents,t}]
     cursor: { x: 0, y: 0 },   // world (snap/cheklov qo'llangan)
@@ -531,6 +565,22 @@ export function mountDetal(root) {
     q('projInfo').innerHTML = ['V', 'H', 'W'].map((v) => '<span><b>' + VIEW_NOMI[v] + '</b>: ' + c[v] + (c[v] ? ' <button type="button" data-act="clear" data-view="' + v + '" title="' + VIEW_NOMI[v] + ' ni tozalash">&#10005;</button>' : '') + '</span>').join('');
     q('genV').disabled = !(c.H && c.W); q('genH').disabled = !(c.V && c.W); q('genW').disabled = !(c.V && c.H);
   }
+  /* ---------------- OFSETLAR SONI (Gul rejimi: «Nechta ofset tashlansin») ---------------- */
+  function sanitizeOffN(v) { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(1, Math.min(OFF_MAX, n)) : 1; }
+  function setOffN(v) {
+    state.offN = sanitizeOffN(v);
+    syncOffUI(true); saveLS();
+    if (state.tool === 'offset' && !state.draft) setInfo(toolHint('offset'));
+    render();
+  }
+  // force — maydon fokusda bo'lsa ham qiymat yoziladi (o'zgartirishdan keyin)
+  function syncOffUI(force) {
+    if (!V.multiOffset) return;
+    const inp = q('offCount');
+    if (force || document.activeElement !== inp) inp.value = String(state.offN);
+    q('offMinus').disabled = state.offN <= 1;
+    q('offPlus').disabled = state.offN >= OFF_MAX;
+  }
   // Joriy asbob uchun cheklov tayanch nuqtasi (rubber-band boshi)
   function anchorPoint() {
     const d = state.draft;
@@ -642,7 +692,7 @@ export function mountDetal(root) {
       rotate: 'Burish: tayanch nuqtani bosing',
       mirror: "Aks: o'qning 1-nuqtasini bosing",
       scale: 'Masshtab: tayanch nuqtani bosing',
-      offset: 'Offset: chiziq yoki aylanani bosing',
+      offset: V.multiOffset ? 'Offset: chiziq yoki aylanani bosing — ' + state.offN + ' ta parallel nusxa tashlanadi (soni yon panelda)' : 'Offset: chiziq yoki aylanani bosing',
       erase: "O'chirish: element ustiga bosing",
     };
     return m[t] || '';
@@ -868,27 +918,18 @@ export function mountDetal(root) {
     afterChange();
   }
 
-  /* ---- Offset — parallel nusxa (polyline: segmentlar surilib, burchaklarda tutashadi) ---- */
-  function offsetPline(e, w, distMm) {
-    const segs = plineSegs(e); if (!segs.length) return null;
-    let near = segs[0], nd = Infinity;
-    for (const s of segs) { const dd = distToSeg(w.x, w.y, s.a.x, s.a.y, s.b.x, s.b.y); if (dd < nd) { nd = dd; near = s; } }
-    const ndx = near.b.x - near.a.x, ndy = near.b.y - near.a.y;
-    const side = Math.sign((w.x - near.a.x) * (-ndy) + (w.y - near.a.y) * ndx) || 1;
-    const D = (distMm != null ? distMm : nd) * side;
-    const off = segs.map((s) => {
-      let nx = -(s.b.y - s.a.y), ny = s.b.x - s.a.x; const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
-      return { a: { x: s.a.x + nx * D, y: s.a.y + ny * D }, b: { x: s.b.x + nx * D, y: s.b.y + ny * D } };
-    });
-    const out = [];
-    if (e.closed && e.pts.length > 2) {
-      for (let i = 0; i < off.length; i++) { const prev = off[(i - 1 + off.length) % off.length], cur = off[i]; out.push(lineInt(prev.a, prev.b, cur.a, cur.b) || cur.a); }
-    } else {
-      out.push(off[0].a);
-      for (let i = 1; i < off.length; i++) out.push(lineInt(off[i - 1].a, off[i - 1].b, off[i].a, off[i].b) || off[i].a);
-      out.push(off[off.length - 1].b);
-    }
-    return out;
+  /* ---- Offset — parallel nusxa (geometriya: src/lib/offsetGeom.js) ----
+     Gul rejimida yon paneldagi son bo'yicha N ta nusxa: masofa, 2×masofa, … N×masofa
+     (aylana radiusi tugasa to'xtaydi). Detal rejimida har doim 1 ta. */
+  function offsetCount() { return V.multiOffset ? state.offN : 1; }
+  // Bitta qadam (ishorali, mm) — tomon kursordan (raw — yopishtirilmagan world nuqta);
+  // masofa: qutida yozilgan > Enter bilan kiritilgan > kursorgacha masofa
+  function offsetStep(e, raw) {
+    const s = offsetSide(e, raw); if (!s) return null;
+    const [typed] = boxVals();
+    const d = state.draft;
+    const D = typed > 0 ? typed * U() : (d && d.dist != null ? d.dist : s.nd);
+    return D * s.side;
   }
   function offsetClick(sx, sy, w) {
     const d = state.draft;
@@ -897,23 +938,19 @@ export function mountDetal(root) {
       if (!hit || hit.ent.type === 'dim') { setInfo('Offset uchun chiziq yoki aylanani bosing'); return; }
       state.draft = { tool: 'offset', ent: hit.ent, dist: null };
       openBox({ anchor: w, f1: { label: 'Masofa', unit: 'len' }, f2: null,
-        onCommit: (v) => { if (v > 0) { state.draft.dist = v * U(); setInfo("Qaysi tomonga — o'sha tomonni bosing"); } else setInfo("Masofani yozing, so'ng tomonni bosing"); } });
+        onCommit: (v) => { if (v > 0) { state.draft.dist = v * U(); setInfo("Qaysi tomonga — o'sha tomonni bosing"); render(); } else setInfo("Masofani yozing, so'ng tomonni bosing"); } });
       setInfo("Masofani yozing (Enter), so'ng tomonni bosing — yoki to'g'ridan-to'g'ri tomonni bosing"); render(); return;
     }
-    const e = d.ent, raw = screenToWorld(sx, sy);
-    const [typed] = boxVals();
-    const D = typed > 0 ? typed * U() : d.dist;
+    const e = d.ent, step = offsetStep(e, screenToWorld(sx, sy));
+    if (step == null || !(Math.abs(step) > 1e-9)) { setInfo('Masofani yozing yoki kursorni chiziqdan nariroqqa olib tomonni bosing'); return; }
+    const N = offsetCount();
+    const made = offsetSeries(e, step, N);
+    if (!made.length) { setInfo("Ofset sig'madi — masofani kichraytiring"); return; }
     pushHistory();
-    if (e.type === 'circle') {
-      const dr = dist(raw, { x: e.cx, y: e.cy }) - e.r;
-      const nr = e.r + (D != null ? Math.sign(dr || 1) * D : dr);
-      if (nr > 0) state.ents.push(newEnt('circle', { cx: e.cx, cy: e.cy, r: nr }));
-    } else {
-      const res = offsetPline(e, raw, D);
-      if (res) state.ents.push(newEnt('pline', { pts: res, closed: e.closed }));
-    }
+    for (const o of made) state.ents.push(newEnt(o.type, o));
     state.draft = null; closeBox();
-    afterChange(); setInfo(toolHint('offset'));
+    afterChange();
+    setInfo(N > 1 ? made.length + ' ta ofset tashlandi (qadam ' + fmtLen(Math.abs(step)) + ')' + (made.length < N ? " — qolgani sig'madi" : '') : toolHint('offset'));
   }
 
   function toolClick(sx, sy, w) {
@@ -1142,8 +1179,20 @@ export function mountDetal(root) {
       target.appendChild(svgEl('circle', { cx: sb.x, cy: sb.y, r: 3.5, fill: PP.accent, 'pointer-events': 'none' }));
     } else if (d.tool === 'offset' && d.ent) {
       const e = d.ent, hi = { stroke: PP.accent, 'stroke-width': 3.5, fill: 'none', opacity: 0.55, 'pointer-events': 'none' };
-      if (e.type === 'circle') { const c = w2s(e.cx, e.cy); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: e.r * view.scale }, hi))); }
-      else target.appendChild(svgEl(e.closed && e.pts.length > 2 ? 'polygon' : 'polyline', Object.assign({ points: ptsAttr(e.pts, w2s) }, hi)));
+      const shape = (g, attrs) => {
+        if (g.type === 'circle') { const c = w2s(g.cx, g.cy); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: g.r * view.scale }, attrs))); }
+        else target.appendChild(svgEl(g.closed && g.pts.length > 2 ? 'polygon' : 'polyline', Object.assign({ points: ptsAttr(g.pts, w2s) }, attrs)));
+      };
+      shape(e, hi);
+      // Jonli ko'rinish: kursor tomonida N ta parallel nusxa (qadam — yozilgan/kiritilgan masofa, bo'lmasa kursorgacha)
+      if (state.cursorS) {
+        const step = offsetStep(e, screenToWorld(state.cursorS.sx, state.cursorS.sy));
+        if (step != null && Math.abs(step) > 1e-9) {
+          const N = offsetCount(), made = offsetSeries(e, step, N);
+          for (const o of made) shape(o, dash);
+          if (N > 1) label(target, state.cursorS.sx + 30, state.cursorS.sy - 22, made.length + ' × ' + fmtLen(Math.abs(step)), PP.edit, 11, PP, true);
+        }
+      }
     }
   }
   // Yopishish belgisi (rejimga qarab shakl), OTRACK/polar kuzatish chiziqlari, olingan nuqtalar, maslahat
@@ -1268,7 +1317,7 @@ export function mountDetal(root) {
     q('stBox').textContent = b ? fmtNum((b.maxX - b.minX) / U(), 2) + ' × ' + fmtNum((b.maxY - b.minY) / U(), 2) + ' ' + UNIT_LABEL[state.unit] : '—';
     q('stBends').textContent = String(bends);
     q('stSegs').textContent = String(segs);
-    renderTable(); renderLib(); syncButtons(); syncProjUI();
+    renderTable(); renderLib(); syncButtons(); syncProjUI(); syncOffUI();
   }
   function renderTable() {
     const el = q('segTable'), ap = activePline();
@@ -1290,8 +1339,8 @@ export function mountDetal(root) {
     else if (n >= 3) h += `<label class="dtl-closed"><input type="checkbox" data-f="closed"${closed ? ' checked' : ''} /> Yopiq kontur (oxiri boshiga ulanadi)</label>`;
     el.innerHTML = h;
   }
-  function loadLib() { try { const a = JSON.parse(localStorage.getItem(LIB_KEY)); state.lib = Array.isArray(a) ? a : []; } catch (e) { state.lib = []; } }
-  function saveLib() { try { localStorage.setItem(LIB_KEY, JSON.stringify(state.lib)); } catch (e) { /* noop */ } }
+  function loadLib() { try { const a = JSON.parse(localStorage.getItem(V.libKey)); state.lib = Array.isArray(a) ? a : []; } catch (e) { state.lib = []; } }
+  function saveLib() { try { localStorage.setItem(V.libKey, JSON.stringify(state.lib)); } catch (e) { /* noop */ } }
   function libMeta(it) {
     let total = 0, segs = 0;
     for (const e of it.ents || []) if (e.type === 'pline') for (const s of plineSegs(e)) { total += dist(s.a, s.b); segs++; }
@@ -1300,7 +1349,7 @@ export function mountDetal(root) {
   function renderLib() {
     const el = q('libList');
     q('libCnt').textContent = state.lib.length ? '(' + state.lib.length + ')' : '';
-    if (!state.lib.length) { el.innerHTML = '<div class="dtl-empty">Hali saqlangan detal yo\'q</div>'; return; }
+    if (!state.lib.length) { el.innerHTML = '<div class="dtl-empty">' + escHtml(V.libEmpty) + '</div>'; return; }
     el.innerHTML = state.lib.map((it) =>
       `<div class="dtl-libitem${it.name === state.name ? ' cur' : ''}">`
       + `<button type="button" class="dtl-libopen" data-act="open" data-id="${it.id}" title="Ochish"><b>${escHtml(it.name)}</b><span>${escHtml(libMeta(it))}</span></button>`
@@ -1309,9 +1358,9 @@ export function mountDetal(root) {
   function saveToLib() {
     let name = (q('nameInput').value || '').trim();
     if (!state.ents.length) { setInfo("Chizma bo'sh — saqlash uchun avval chizing"); return; }
-    if (!name) { name = 'Detal ' + (state.lib.length + 1); q('nameInput').value = name; }
+    if (!name) { name = V.autoName + ' ' + (state.lib.length + 1); q('nameInput').value = name; }
     state.name = name;
-    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), proj: JSON.parse(JSON.stringify(state.proj)), t: Date.now() };
+    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), proj: JSON.parse(JSON.stringify(state.proj)), offN: state.offN, t: Date.now() };
     const idx = state.lib.findIndex((x) => String(x.name).toLowerCase() === name.toLowerCase());
     if (idx >= 0) { item.id = state.lib[idx].id; state.lib[idx] = item; } else state.lib.unshift(item);
     saveLib(); renderLib(); saveLS();
@@ -1323,7 +1372,8 @@ export function mountDetal(root) {
     state.ents = JSON.parse(JSON.stringify(it.ents || []));
     state.nextId = Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1;
     state.name = it.name; q('nameInput').value = it.name;
-    if (it.proj) state.proj = sanitizeProj(it.proj);
+    if (it.proj && V.proj) state.proj = sanitizeProj(it.proj);
+    if (V.multiOffset && it.offN != null) state.offN = sanitizeOffN(it.offN);
     state.sel.clear();
     afterChange(); centerView();
     setInfo(`«${it.name}» ochildi`);
@@ -1349,7 +1399,7 @@ export function mountDetal(root) {
   }
   function exportDxf() {
     if (!state.ents.some((e) => e.type !== 'dim')) { setInfo("Chizma bo'sh — eksport qilinmaydi"); return; }
-    downloadDxf('detal_' + safeFileName(state.name || 'chizma') + '.dxf', buildDxf());
+    downloadDxf(V.filePrefix + safeFileName(state.name || 'chizma') + '.dxf', buildDxf());
     setInfo('DXF yuklab olindi (mm, Y yuqoriga)');
   }
   async function exportPng() {
@@ -1362,7 +1412,7 @@ export function mountDetal(root) {
     const ex = svgEl('svg', { xmlns: SVG_NS, width: W, height: H, viewBox: `0 0 ${W} ${H}` });
     paint(ex, view, W, H, true);
     const title = svgEl('text', { x: pad, y: 40, 'font-size': 22, 'font-weight': 700, fill: '#0f172a', 'font-family': 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' });
-    title.textContent = state.name || 'Detal';
+    title.textContent = state.name || V.title;
     ex.appendChild(title);
     const sub = svgEl('text', { x: pad, y: 64, 'font-size': 14, fill: '#475569', 'font-family': 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' });
     sub.textContent = 'Yoyilma: ' + q('stTotal').textContent + '   ·   Gabarit: ' + q('stBox').textContent + '   ·   Qayirmalar: ' + q('stBends').textContent;
@@ -1374,7 +1424,7 @@ export function mountDetal(root) {
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
       const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
       const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.drawImage(img, 0, 0);
-      await new Promise((res) => cv.toBlob((png) => { if (png) downloadBlob('detal_' + safeFileName(state.name || 'chizma') + '.png', png); res(); }, 'image/png'));
+      await new Promise((res) => cv.toBlob((png) => { if (png) downloadBlob(V.filePrefix + safeFileName(state.name || 'chizma') + '.png', png); res(); }, 'image/png'));
       setInfo('Rasm (PNG) yuklab olindi');
     } catch (err) { setInfo("Rasm yaratib bo'lmadi"); }
     finally { URL.revokeObjectURL(url); }
@@ -1420,11 +1470,11 @@ export function mountDetal(root) {
   let _saveT = null;
   function saveStateNow() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      localStorage.setItem(V.storageKey, JSON.stringify({
         ents: state.ents, nextId: state.nextId, unit: state.unit, angMode: state.angMode, tool: state.tool,
         showLen: state.showLen, showAng: state.showAng,
         scale: state.scale, panX: state.panX, panY: state.panY, name: state.name,
-        proj: state.proj,
+        proj: state.proj, offN: state.offN,
       }));
     } catch (e) { /* noop */ }
   }
@@ -1432,7 +1482,7 @@ export function mountDetal(root) {
   function flushSaveLS() { if (!_saveT) return; clearTimeout(_saveT); _saveT = null; saveStateNow(); }
   function loadStateLS() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return false;
+      const raw = localStorage.getItem(V.storageKey); if (!raw) return false;
       const o = JSON.parse(raw); if (!o || !Array.isArray(o.ents)) return false;
       state.ents = o.ents.filter((e) => e && (e.type === 'pline' ? Array.isArray(e.pts) : true));
       state.nextId = o.nextId || (Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1);
@@ -1445,6 +1495,8 @@ export function mountDetal(root) {
       if (typeof o.panY === 'number') state.panY = o.panY;
       state.name = o.name || '';
       state.proj = sanitizeProj(o.proj);
+      if (!V.proj) state.proj.on = false;   // Gul rejimida proyeksiyalar yo'q
+      state.offN = sanitizeOffN(o.offN == null ? 1 : o.offN);
       return true;
     } catch (e) { return false; }
   }
@@ -1685,11 +1737,22 @@ export function mountDetal(root) {
   on(q('projGap'), 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   for (const v of ['V', 'H', 'W']) on(q('gen' + v), 'click', (e) => genClick(v, e.currentTarget));
   on(q('projInfo'), 'click', (e) => { const b = e.target.closest('button[data-act="clear"]'); if (b) clearView(b.dataset.view); });
+  // Gul rejimi: nechta ofset tashlansin (− / son / +, ↑↓ bilan ham)
+  if (V.multiOffset) {
+    on(q('offMinus'), 'click', () => setOffN(state.offN - 1));
+    on(q('offPlus'), 'click', () => setOffN(state.offN + 1));
+    on(q('offCount'), 'change', (e) => setOffN(sonQiymat(e.target.value)));
+    on(q('offCount'), 'keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setOffN(state.offN + 1); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setOffN(state.offN - 1); }
+    });
+  }
   on(q('libList'), 'click', (e) => {
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const id = +b.dataset.id;
     if (b.dataset.act === 'open') { loadFromLib(id); return; }
-    if (b.dataset.arm === '1') { state.lib = state.lib.filter((x) => x.id !== id); saveLib(); renderLib(); setInfo("Detal kutubxonadan o'chirildi"); return; }
+    if (b.dataset.arm === '1') { state.lib = state.lib.filter((x) => x.id !== id); saveLib(); renderLib(); setInfo(V.libDel); return; }
     b.dataset.arm = '1'; b.textContent = 'Tasdiq?'; b.classList.add('arm');
     setTimeout(() => { if (b.isConnected) { b.dataset.arm = ''; b.innerHTML = '&#10005;'; b.classList.remove('arm'); } }, 3000);
   });
@@ -1741,7 +1804,7 @@ export function mountDetal(root) {
       statusBar.destroy();
       cleanups.forEach((fn) => fn());
       root.innerHTML = '';
-      root.classList.remove('chz', 'dtl');
+      root.classList.remove('chz', 'dtl', V.cls);
     },
   };
 }
