@@ -355,7 +355,7 @@ export default function App() {
   const [draft, setDraft]           = useState(() => {
     try {
       const raw = localStorage.getItem('tunika-draft');
-      if (raw) return JSON.parse(raw);
+      if (raw) { const d = JSON.parse(raw); if (d && !d.gulKey) d.gulKey = genId(); return d; }   // eski draft — gullar kaliti qo'shiladi
     } catch (e) { /* noop */ }
     return makeBlankDraft(DEFAULT_USD_RATE);
   });
@@ -1199,6 +1199,7 @@ export default function App() {
       kazRows: draftCalc.kazRows || [],
       notes: draft.notes,
       muddat: draft.muddat || '',   // topshirish muddati 'YYYY-MM-DD' ('' = belgilanmagan)
+      gulKey: draft.gulKey || '',   // Chizma → Gul chizish: zakasning gullari ro'yxati kaliti (localStorage gul-zakas-v1)
       status,
       // Tahrirlash/nusxa uchun — xom qatorlar (katalog id, narx turi, variant saqlanadi)
       srcItems: draft.items.map((it) => ({ ...it })),
@@ -1332,6 +1333,7 @@ export default function App() {
       payments: (order.payments && order.payments.length) ? order.payments.map((p) => ({ ...p })) : [makeBlankPayment(usdRate)],
       notes: order.notes || '',
       muddat: order.muddat || '',
+      ...(order.gulKey ? { gulKey: order.gulKey } : {}),   // tahrirda o'sha zakasning gullari ochiladi
       dastafka: order.dastafka ? { ...order.dastafka } : { ichida: false, summa: '' },
     });
     setEditingId(order.id);

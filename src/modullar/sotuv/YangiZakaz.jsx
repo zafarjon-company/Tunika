@@ -283,7 +283,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
           </Card>
 
           {/* CHIZMA — xona konturi (zakas olishda hisob-kitob yordamchisi) */}
-          <ChizmaCard tunikaBaza={tunikaBaza} />
+          <ChizmaCard tunikaBaza={tunikaBaza} zakasId={draft.gulKey || ''} />
 
           {/* TOVARLAR */}
           <Card>

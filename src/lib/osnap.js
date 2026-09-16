@@ -171,11 +171,15 @@ export function tangentPoints(p, c, r) {
 
 /* ---------------- GEOM QURISH ----------------
    Ikkala dvigatel elementlarini bitta shaklga keltiradi:
-     { segs: [{a,b,eid}], circles: [{c,r,eid}], nodes: [{x,y,eid}] }
+     { segs: [{a,b,eid}], circles: [{c,r,eid, a0?,sweep?}], nodes: [{x,y,eid}],
+       ends: [{x,y,eid,dir}], mids: [{x,y,eid}] }
    Element turlari: line{x1,y1,x2,y2} · polyline/pline{pts,closed} · circle{cx,cy,r}
-   dim{x1,y1,x2,y2} (uchlari tugun). opts: { skip(e), nodes:[], segs:[] } */
+   arc{cx,cy,r,a0,a1} (a0→a1 soat miliga qarshi; circles ga a0/sweep bilan kiradi —
+   CEN/QUA/INT/PER/TAN/NEA faqat yoy oralig'ida; uchlari ends (END, EXT uchun tangens
+   yo'nalishi), o'rtasi mids (MID)) · dim{x1,y1,x2,y2} (uchlari tugun).
+   opts: { skip(e), nodes:[], segs:[] } */
 export function buildGeom(entities, opts = {}) {
-  const segs = [], circles = [], nodes = [];
+  const segs = [], circles = [], nodes = [], ends = [], mids = [];
   // Buzuq (yo'q/NaN koordinatali) yozuvlar TASHLAB YUBORILADI — aks holda bitta
   // nuqsonli element butun chizmada magnitni NaN qilib qo'yardi.
   const ok = (p) => !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
@@ -192,11 +196,23 @@ export function buildGeom(entities, opts = {}) {
       if (p.length === 1) addNode(p[0], id);
     } else if (e.type === 'circle') {
       if (ok({ x: e.cx, y: e.cy }) && Number.isFinite(e.r) && e.r > 0) circles.push({ c: { x: e.cx, y: e.cy }, r: e.r, eid: id });
+    } else if (e.type === 'arc') {
+      const c = { x: e.cx, y: e.cy };
+      if (ok(c) && Number.isFinite(e.r) && e.r > 0 && Number.isFinite(e.a0) && Number.isFinite(e.a1)) {
+        const a0 = norm360(e.a0), sw = norm360(e.a1 - e.a0) < 1e-9 ? 360 : norm360(e.a1 - e.a0);
+        circles.push({ c, r: e.r, eid: id, a0, sweep: sw });
+        const pt = (ang) => { const v = dirVec(ang); return { x: c.x + v.dx * e.r, y: c.y + v.dy * e.r }; };
+        const s = pt(a0), en = pt(a0 + sw), mid = pt(a0 + sw / 2);
+        // uchdan TASHQARIGA tangens yo'nalishi (EXT davomi): boshida a0−90°, oxirida a1+90°
+        ends.push({ x: s.x, y: s.y, eid: id, dir: norm360(a0 - 90) });
+        ends.push({ x: en.x, y: en.y, eid: id, dir: norm360(a0 + sw + 90) });
+        mids.push({ x: mid.x, y: mid.y, eid: id });
+      }
     } else if (e.type === 'dim') { addNode({ x: e.x1, y: e.y1 }, id); addNode({ x: e.x2, y: e.y2 }, id); }
   }
   for (const n of opts.nodes || []) if (ok(n)) nodes.push(n);
   for (const s of opts.segs || []) if (s && ok(s.a) && ok(s.b)) segs.push(s);
-  return { segs, circles, nodes };
+  return { segs, circles, nodes, ends, mids };
 }
 // Nuqtada tugaydigan segmentlarning yo'nalishlari (gradus, nuqtadan TASHQARIGA) — EXT kuzatish uchun
 export function endpointDirs(geom, pt, eps = 1e-6) {
@@ -206,6 +222,8 @@ export function endpointDirs(geom, pt, eps = 1e-6) {
     if (atA) out.push(vecAng(s.a.x - s.b.x, s.a.y - s.b.y));   // a uchidan tashqariga: b -> a yo'nalishi
     if (atB) out.push(vecAng(s.b.x - s.a.x, s.b.y - s.a.y));
   }
+  // Yoy uchlari — tangens bo'ylab davom etadi
+  for (const p of geom.ends || []) if (Number.isFinite(p.dir) && Math.hypot(p.x - pt.x, p.y - pt.y) < eps) out.push(norm360(p.dir));
   return out;
 }
 
@@ -232,6 +250,10 @@ export function osnapCandidates(geom, cur, opts) {
   };
 
   if (m.NOD) for (const n of geom.nodes) if (!skip(n.eid)) push(n.x, n.y, 'NOD', n.eid);
+  if (m.END) for (const p of geom.ends || []) if (!skip(p.eid)) push(p.x, p.y, 'END', p.eid);
+  if (m.MID) for (const p of geom.mids || []) if (!skip(p.eid)) push(p.x, p.y, 'MID', p.eid);
+  // Yoy (sweep bor) — nuqta yoyning burchak oralig'idami; oddiy aylana — har doim
+  const inArc = (c, x, y) => c.sweep == null || norm360(vecAng(x - c.c.x, y - c.c.y) - c.a0) <= c.sweep + 1e-7;
 
   const nearSegs = [];      // kursor apertura ichida turgan segmentlar (INT/PER/NEA)
   for (const s of geom.segs) {
@@ -245,19 +267,19 @@ export function osnapCandidates(geom, cur, opts) {
   for (const c of geom.circles) {
     if (skip(c.eid)) continue;
     if (m.CEN) push(c.c.x, c.c.y, 'CEN', c.eid);
-    if (m.QUA) { push(c.c.x + c.r, c.c.y, 'QUA', c.eid); push(c.c.x - c.r, c.c.y, 'QUA', c.eid); push(c.c.x, c.c.y + c.r, 'QUA', c.eid); push(c.c.x, c.c.y - c.r, 'QUA', c.eid); }
+    if (m.QUA) for (const q of [[c.r, 0], [-c.r, 0], [0, c.r], [0, -c.r]]) { const qx = c.c.x + q[0], qy = c.c.y + q[1]; if (inArc(c, qx, qy)) push(qx, qy, 'QUA', c.eid); }
     const dc = Math.abs(Math.hypot(cur.x - c.c.x, cur.y - c.c.y) - c.r);
-    if (dc * sc <= ap) nearCirc.push({ c, dPx: dc * sc });
+    if (dc * sc <= ap && inArc(c, cur.x, cur.y)) nearCirc.push({ c, dPx: dc * sc });
   }
   // INT — kursorga yaqin element bilan qolganlarning kesishmasi
   if (m.INT) {
     for (const { s } of nearSegs) {
       for (const t of geom.segs) { if (t === s || skip(t.eid)) continue; const p = segSegInt(s.a, s.b, t.a, t.b); if (p) push(p.x, p.y, 'INT', s.eid); }
-      for (const c of geom.circles) { if (skip(c.eid)) continue; for (const p of segCircleInts(s.a, s.b, c.c, c.r)) push(p.x, p.y, 'INT', s.eid); }
+      for (const c of geom.circles) { if (skip(c.eid)) continue; for (const p of segCircleInts(s.a, s.b, c.c, c.r)) if (inArc(c, p.x, p.y)) push(p.x, p.y, 'INT', s.eid); }
     }
     for (const { c } of nearCirc) {
-      for (const c2 of geom.circles) { if (c2 === c || skip(c2.eid)) continue; for (const p of circleCircleInts(c.c, c.r, c2.c, c2.r)) push(p.x, p.y, 'INT', c.eid); }
-      for (const t of geom.segs) { if (skip(t.eid)) continue; for (const p of segCircleInts(t.a, t.b, c.c, c.r)) push(p.x, p.y, 'INT', c.eid); }
+      for (const c2 of geom.circles) { if (c2 === c || skip(c2.eid)) continue; for (const p of circleCircleInts(c.c, c.r, c2.c, c2.r)) if (inArc(c, p.x, p.y) && inArc(c2, p.x, p.y)) push(p.x, p.y, 'INT', c.eid); }
+      for (const t of geom.segs) { if (skip(t.eid)) continue; for (const p of segCircleInts(t.a, t.b, c.c, c.r)) if (inArc(c, p.x, p.y)) push(p.x, p.y, 'INT', c.eid); }
     }
   }
   // PER / TAN — tayanch nuqta (from) bo'lsa; kursor OBYEKT ustida bo'lsa yetarli
@@ -279,13 +301,13 @@ export function osnapCandidates(geom, cur, opts) {
         // Ikki oyoqdan KURSORGA YAQINI (AutoCAD kursor turgan tomonni beradi)
         const dx = f.x - c.c.x, dy = f.y - c.c.y, L = Math.hypot(dx, dy);
         if (L < 1e-9) continue;
-        const p = nearest([{ x: c.c.x + dx / L * c.r, y: c.c.y + dy / L * c.r }, { x: c.c.x - dx / L * c.r, y: c.c.y - dy / L * c.r }]);
+        const p = nearest([{ x: c.c.x + dx / L * c.r, y: c.c.y + dy / L * c.r }, { x: c.c.x - dx / L * c.r, y: c.c.y - dy / L * c.r }].filter((q) => inArc(c, q.x, q.y)));
         if (p && Math.hypot(p.x - f.x, p.y - f.y) > 1e-6) add(p.x, p.y, 'PER', c.eid, dPx);
       }
     }
     // TAN — ikki tangens nuqtasidan kursorga yaqini
     if (m.TAN) for (const { c, dPx } of nearCirc) {
-      const p = nearest(tangentPoints(f, c.c, c.r));
+      const p = nearest(tangentPoints(f, c.c, c.r).filter((q) => inArc(c, q.x, q.y)));
       if (p) add(p.x, p.y, 'TAN', c.eid, dPx);
     }
   }

@@ -202,19 +202,40 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   to'rtburchak, aylana, o'lcham chizig'i, ko'chirish/nusxa/burish/aks/masshtab/
   offset/o'chirish, griplar, undo/redo. Nomlangan detallar **kutubxonasi**
   (`detal-chizma-lib-v1`, localStorage), joriy chizma `detal-chizma-v1`.
-  **DXF** import (mm/sm/m, $INSUNITS) va eksport (mm, LINE/CIRCLE), **PNG** rasm.
+  **DXF** import (mm/sm/m, $INSUNITS) va eksport (mm, LINE/CIRCLE/ARC), **PNG** rasm.
 - **Gul chizish** — gul / naqsh konturini Detal chizish bilan bir xil asboblar
   bilan chizish (`src/modullar/sotuv/gulEngine.js` → `detalEngine.js`,
   variant `'gul'`, `VARIANTS` jadvali). Farqi — yon panelda **«Nechta ofset
   tashlansin»** soni (1…50): **Offset** asbobi bitta masofa bilan shuncha
   parallel kontur (masofa, 2×, 3×…) tashlaydi, tomonni bosishdan oldin jonli
   ko'rinadi; aylana radiusi tugasa yoki kontur sig'masa to'xtaydi («qolgani
-  sig'madi»). Geometriya `src/lib/offsetGeom.js` (`npm run test:offset`):
+  sig'madi»). Uchlari tutashgan (0.05 mm) chiziq va yoylar avtomatik BITTA
+  kontur (AutoCAD JOIN) sifatida ofset qilinadi — yopiq shakl butunlay
+  ichkariga/tashqariga (`src/lib/chainOffset.js`, `npm run test:chain`:
+  chiziq×chiziq, chiziq×yoy, yoy×yoy tutashmalari kesishtiriladi, silliq
+  (tangens) tutashmada surilgan uchlar o'zi tutashadi, yutilgan bo'laklar
+  tashlanadi). Geometriya `src/lib/offsetGeom.js` (`npm run test:offset`):
   AutoCAD kabi ichkariga ofsetda yutilgan (teskari bo'lib qolgan) segmentlar
   tashlab yuborilib qo'shnilari qayta kesishtiriladi (qisqa faska yo'qoladi),
   hammasi yutilsa — sig'madi. Proyeksiyalar bo'limi bu rejimda yo'q. localStorage:
   `gul-chizma-v1` (joriy), `gul-chizma-lib-v1` (kutubxona). Bu boshlanish —
   gulga xos imkoniyatlar shu rejimga qo'shib boriladi.
+- **Yoy (Arc)** — Detal va Gul chizishda «Yoy ▾» tugmasi: AutoCAD «Arc» menyusidagi
+  11 usul o'zbekcha — 3 nuqta; Boshi, Markaz, Oxiri / Burchak / Vatar; Boshi, Oxiri,
+  Burchak / Yo'nalish / Radius; Markaz, Boshi, Oxiri / Burchak / Vatar; Davom ettirish
+  (oxirgi chiziq yoki yoy uchidan tangens bo'ylab). Nuqtalar bosiladi yoki oldingi
+  nuqtadan masofa + burchak yoziladi; oxirgi qiymat yoziladi yoki sichqoncha bilan
+  beriladi (manfiy — soat mili bo'yicha / katta yoy). Yoy CCW saqlanadi
+  (`{cx,cy,r,a0,a1}`); griplari: boshi, oxiri, o'rtasi (bo'rtish), markaz; 2 marta
+  bosib radius/burchak; ko'chirish/burish/aks/masshtab/offset ishlaydi; yoyilma
+  hisobiga uzunligi kiradi; DXF eksportda ARC. Geometriya `src/lib/arcGeom.js`
+  (`npm run test:arc`); magnitlar (END/MID/CEN/QUA/INT/PER/TAN/NEA/EXT) yoy
+  oralig'ida — `osnap.js` `buildGeom` `arc`.
+- **Zakasdagi gullar** (Gul chizish, yon panel tepasi) — har zakas (draft `gulKey`,
+  `makeBlankDraft`) o'z gullar ro'yxatiga ega: «Yangi gul», gulni bosib unga o'tish
+  (joriysi avtomatik saqlanadi), nomi + o'lchami (eni × bo'yi), o'chirish. localStorage
+  `gul-zakas-v1` — `{ [gulKey]: { active, items } }`, 40 zakasgacha; zakas
+  saqlanganda `gulKey` zakas bilan yoziladi (tahrirda o'sha gullar ochiladi).
 
 ### Xona konturi → Tahrir rejimi (AutoCAD qulayliklari)
 

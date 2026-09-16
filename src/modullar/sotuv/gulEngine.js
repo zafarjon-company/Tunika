@@ -10,11 +10,14 @@
 //  qatorlari uchun. Proyeksiyalar bo'limi bu rejimda yo'q.
 //  Dvigatelning o'zi detalEngine.js (variant: 'gul') — bitta kod, ikki rejim;
 //  gulga xos yangi imkoniyatlar VARIANTS.gul / V.multiOffset shoxlariga qo'shiladi.
-//  localStorage: gul-chizma-v1 (joriy chizma), gul-chizma-lib-v1 (kutubxona).
-//  mountGul(root) — DOM quradi, { destroy, centerView } qaytaradi.
+//  Yon panel tepasida ZAKASDAGI GULLAR ro'yxati: har zakas (opts.zakasKey —
+//  zakas draft'ining gulKey'i) o'z gullariga ega, ular orasida bosib o'tiladi,
+//  nomi + o'lchami (eni × bo'yi) ko'rinadi (localStorage gul-zakas-v1).
+//  localStorage: gul-chizma-v1 (ishchi holat), gul-chizma-lib-v1 (kutubxona).
+//  mountGul(root, { zakasKey }) — DOM quradi, { destroy, centerView } qaytaradi.
 // ============================================================
 import { mountDetal } from './detalEngine.js';
 
-export function mountGul(root) {
-  return mountDetal(root, { variant: 'gul' });
+export function mountGul(root, opts) {
+  return mountDetal(root, { variant: 'gul', zakasKey: opts && opts.zakasKey });
 }

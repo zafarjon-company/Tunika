@@ -89,6 +89,15 @@ test('eng yaqin segment tanlanadi: kursor o\'ng segmentga yaqin', () => {
   // (95, 50): pastki/yuqori segmentlargacha 50, o'ngdagi (100,0)→(100,100) gacha 5
   const s = offsetSide(KVADRAT, P(95, 50)); near(s.nd, 5); assert.equal(s.side, 1);   // ichkarida
 });
+test('yoy: aylana kabi — tashqarida +1, ichkarida −1; ofset r ± k·D, burchaklar saqlanadi, r tugasa to\'xtaydi', () => {
+  const a = { type: 'arc', cx: 0, cy: 0, r: 50, a0: 0, a1: 90 };
+  const o = offsetSide(a, P(80, 0)); assert.equal(o.side, 1); near(o.nd, 30);
+  const i = offsetSide(a, P(0, -10)); assert.equal(i.side, -1); near(i.nd, 40);
+  const e1 = offsetEnt(a, 10, 2); assert.equal(e1.type, 'arc'); near(e1.r, 70); near(e1.a0, 0); near(e1.a1, 90); near(e1.cx, 0);
+  assert.equal(offsetEnt(a, -25, 2), null);
+  assert.deepEqual(multiOffset(a, P(0, -10), 20, 5).map((x) => x.r), [30, 10]);
+  assert.deepEqual(multiOffset(a, P(80, 0), 10, 3).map((x) => x.r), [60, 70, 80]);
+});
 test('noto\'g\'ri kirish → null', () => {
   assert.equal(offsetSide(null, P(0, 0)), null);
   assert.equal(offsetSide({ type: 'dim' }, P(0, 0)), null);

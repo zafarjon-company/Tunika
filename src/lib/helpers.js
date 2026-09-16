@@ -505,6 +505,7 @@ export function makeBlankDraft(usdRate) {
     notes: '',
     dastafka: { ichida: false, summa: '' }, // ichida=true → narxga kiritilgan (bepul qo'shimcha)
     muddat: '',                             // topshirish muddati 'YYYY-MM-DD' ('' = belgilanmagan)
+    gulKey: genId(),                        // Chizma → Gul chizish: shu zakasning gullari ro'yxati kaliti (localStorage gul-zakas-v1)
   };
 }
 

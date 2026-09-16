@@ -34,13 +34,14 @@ function readMode() {
   } catch (e) { return 'xona'; }
 }
 
-function mountFor(mode, root, tunikaBaza) {
+// zakasId — Gul chizish: shu zakasga tegishli gullar ro'yxati kaliti (draft.gulKey)
+function mountFor(mode, root, tunikaBaza, zakasId) {
   if (mode === 'detal') return mountDetal(root);
-  if (mode === 'gul') return mountGul(root);
+  if (mode === 'gul') return mountGul(root, { zakasKey: zakasId });
   return mountChizma(root, { tunikaBaza });
 }
 
-export function ChizmaCard({ tunikaBaza = [] }) {
+export function ChizmaCard({ tunikaBaza = [], zakasId = '' }) {
   // HAR DOIM yopiq ochiladi (foydalanuvchi xohishi) — chizmaning O'ZI baribir
   // localStorage'da saqlanadi, ochilganda joyida turadi.
   const [open, setOpen] = useState(false);
@@ -60,10 +61,10 @@ export function ChizmaCard({ tunikaBaza = [] }) {
   // yopilganda butunlay olib tashlaymiz (holat localStorage'da — hech narsa yo'qolmaydi).
   useEffect(() => {
     if (!open || !rootRef.current) return undefined;
-    const api = mountFor(mode, rootRef.current, tunikaRef.current);
+    const api = mountFor(mode, rootRef.current, tunikaRef.current, zakasId);
     apiRef.current = api;
     return () => { api.destroy(); apiRef.current = null; };
-  }, [open, mode]);
+  }, [open, mode, zakasId]);
 
   // Listlar (tunikalar) ro'yxati o'zgarsa — Kazirok panelidagi List selektorlarini yangilaymiz.
   useEffect(() => {
@@ -82,8 +83,9 @@ export function ChizmaCard({ tunikaBaza = [] }) {
       // Dvigatelning window tinglovchisi mount'da (bungacha) qo'shilgani
       // uchun avval ishlaydi va defaultPrevented shu yerda ko'rinadi.
       if (e.defaultPrevented) return;
-      // Chizmaning kiritish qutisi ochiq bo'lsa — avval u yopilsin.
-      if (rootRef.current?.querySelector('.chz-inputbox.show')) return;
+      // Chizmaning kiritish qutisi yoki Yoy menyusi ochiq bo'lsa — avval u yopilsin
+      // (tab almashgandan keyin dvigatel tinglovchisi bizdan KEYIN ishlashi mumkin).
+      if (rootRef.current?.querySelector('.chz-inputbox.show, .chz-arcmenu.show')) return;
       setFull(false);
     }
     window.addEventListener('keydown', onKey);

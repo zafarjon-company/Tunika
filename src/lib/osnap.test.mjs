@@ -295,7 +295,7 @@ console.log('\n=== 8) buildGeom ===\n');
 
 test('buildGeom: line → 1 seg, eid saqlanadi', () => {
   const g = buildGeom([line('l1', 0, 0, 10, 0)]);
-  assert.deepEqual(g, { segs: [{ a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, eid: 'l1' }], circles: [], nodes: [] });
+  assert.deepEqual(g, { segs: [{ a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, eid: 'l1' }], circles: [], nodes: [], ends: [], mids: [] });
 });
 test('buildGeom: polyline yopiq 3 nuqta → 3 seg (oxirgi p[2]→p[0])', () => {
   const pts = [P(0, 0), P(10, 0), P(0, 10)];
@@ -343,9 +343,9 @@ test('buildGeom: opts.nodes / opts.segs qo\'shiladi', () => {
   assert.equal(g.segs.length, 2); assert.equal(g.segs[1], s);
 });
 test('buildGeom: null / noma\'lum tur / entities yo\'q — xato bermaydi', () => {
-  assert.deepEqual(buildGeom([null, { id: 'z', type: 'text' }, undefined]), { segs: [], circles: [], nodes: [] });
-  assert.deepEqual(buildGeom(undefined), { segs: [], circles: [], nodes: [] });
-  assert.deepEqual(buildGeom(), { segs: [], circles: [], nodes: [] });
+  assert.deepEqual(buildGeom([null, { id: 'z', type: 'text' }, undefined]), { segs: [], circles: [], nodes: [], ends: [], mids: [] });
+  assert.deepEqual(buildGeom(undefined), { segs: [], circles: [], nodes: [], ends: [], mids: [] });
+  assert.deepEqual(buildGeom(), { segs: [], circles: [], nodes: [], ends: [], mids: [] });
 });
 
 /* ============================================================ */
@@ -1248,6 +1248,66 @@ test('Polar nur ustida, kesishma uzoq → polar (bog\'lanish chizig\'i yutmaydi)
 test('Buzuq guide (NaN) e\'tiborsiz qoldiriladi', () => {
   const r = resolveSnap({ geom: G0, cur: P(52, 30), scale: 1, settings: SG(), guides: [{ x: NaN, y: 0, ang: 90 }, null, { x: 50, y: 0, ang: 90 }] });
   assert.equal(r.kind, 'proj'); nearPt(r, 50, 30);
+});
+
+console.log('\n=== 11) YOY (arc) — magnitlar yoy oralig\'ida ===\n');
+
+const arc = (id, cx, cy, r, a0, a1) => ({ id, type: 'arc', cx, cy, r, a0, a1 });
+const AQ = arc('a1', 0, 0, 10, 0, 90);   // chorak yoy: (10,0) → (0,−10), o'ngdan tepaga (CCW)
+
+test('buildGeom: arc → circles[{c,r,eid,a0,sweep}], ends 2 (tashqariga tangens yo\'nalishi bilan), mids 1', () => {
+  const g = buildGeom([AQ]);
+  assert.equal(g.circles.length, 1); near(g.circles[0].a0, 0); near(g.circles[0].sweep, 90); near(g.circles[0].r, 10); assert.equal(g.circles[0].eid, 'a1');
+  assert.equal(g.ends.length, 2); nearPt(g.ends[0], 10, 0); near(g.ends[0].dir, 270); nearPt(g.ends[1], 0, -10); near(g.ends[1].dir, 180);
+  assert.equal(g.mids.length, 1); nearPt(g.mids[0], 10 * R2, -10 * R2);
+  assert.equal(g.segs.length, 0); assert.equal(g.nodes.length, 0);
+});
+test('buildGeom: buzuq yoy (r ≤ 0, NaN burchak) tashlab yuboriladi; oddiy aylanada sweep yo\'q', () => {
+  const g = buildGeom([arc('b', 0, 0, 0, 0, 90), arc('c', 0, 0, 5, NaN, 90), circle('k', 1, 1, 2)]);
+  assert.equal(g.circles.length, 1); assert.equal(g.circles[0].sweep, undefined); assert.equal(g.ends.length, 0);
+});
+test('END: yoy uchiga; MID: yoy o\'rtasiga yopishadi', () => {
+  const g = buildGeom([AQ]);
+  const e = osnapBest(g, P(9.5, 0.5), OPT({ modes: faqat('END') })); assert.equal(e.kind, 'END'); nearPt(e, 10, 0);
+  const m = osnapBest(g, P(7, -7), OPT({ modes: faqat('MID') })); assert.equal(m.kind, 'MID'); nearPt(m, 10 * R2, -10 * R2);
+});
+test('CEN: yoy markazi', () => {
+  const b = osnapBest(buildGeom([AQ]), P(0.5, 0.5), OPT({ modes: faqat('CEN') })); assert.equal(b.kind, 'CEN'); nearPt(b, 0, 0);
+});
+test('QUA: faqat yoy oralig\'idagi kvadrantlar (0°, 90°); 180° va 270° yo\'q', () => {
+  const g = buildGeom([AQ]);
+  assert.equal(osnapBest(g, P(-10, 0.3), OPT({ modes: faqat('QUA') })), null);
+  assert.equal(osnapBest(g, P(0.3, 10), OPT({ modes: faqat('QUA') })), null);
+  const q = osnapBest(g, P(0.3, -10), OPT({ modes: faqat('QUA') })); assert.equal(q.kind, 'QUA'); nearPt(q, 0, -10);
+});
+test('NEA: kursor yoy oralig\'ida — yoy ustidagi nuqta; oraliqdan tashqarida (270°) — hech narsa', () => {
+  const g = buildGeom([AQ]);
+  const n = osnapBest(g, P(6, -8), OPT({ modes: faqat('NEA') })); assert.equal(n.kind, 'NEA'); near(Math.hypot(n.x, n.y), 10); nearPt(n, 6, -8);
+  assert.equal(osnapBest(g, P(0, 9.5), OPT({ modes: faqat('NEA') })), null);
+});
+test('INT: chiziq × yoy — faqat yoy oralig\'idagi kesishma (8,−6); (−8,−6) emas', () => {
+  const g = buildGeom([AQ, line('l', -20, -6, 20, -6)]);
+  const i = osnapBest(g, P(8.2, -6.1), OPT({ modes: faqat('INT') })); assert.equal(i.kind, 'INT'); nearPt(i, 8, -6);
+  assert.equal(osnapBest(g, P(-8.2, -6.1), OPT({ modes: faqat('INT') })), null);
+});
+test('PER: tayanchdan yoyga perpendikulyar — oyoq yoy oralig\'ida bo\'lsagina (uzoq oyoq ham olinadi)', () => {
+  const g = buildGeom([AQ]);
+  const p = osnapBest(g, P(7, -7), OPT({ modes: faqat('PER'), from: P(20, -20) })); assert.equal(p.kind, 'PER'); nearPt(p, 10 * R2, -10 * R2);
+  const p2 = osnapBest(g, P(7, -7), OPT({ modes: faqat('PER'), from: P(-20, 20) })); assert.equal(p2.kind, 'PER'); nearPt(p2, 10 * R2, -10 * R2);
+});
+test('TAN: tashqi nuqtadan yoyga tangens — faqat oraliqdagi nuqta; ikkalasi tashqarida bo\'lsa yo\'q', () => {
+  const g = buildGeom([AQ]);
+  const t = osnapBest(g, P(0.3, -9.8), OPT({ modes: faqat('TAN'), from: P(10, -10) })); assert.equal(t.kind, 'TAN'); nearPt(t, 0, -10);
+  assert.equal(osnapBest(g, P(7, -7), OPT({ modes: faqat('TAN'), from: P(-10, 10) })), null);
+});
+test('endpointDirs: yoy uchidan tangens bo\'ylab davom (EXT) — boshida 270°, oxirida 180°', () => {
+  const g = buildGeom([AQ]);
+  const d0 = endpointDirs(g, P(10, 0)); assert.equal(d0.length, 1); near(d0[0], 270);
+  const d1 = endpointDirs(g, P(0, -10)); assert.equal(d1.length, 1); near(d1[0], 180);
+});
+test('resolveSnap: yoy uchi END ustunlik bilan (QUA bilan bir nuqta — takror emas)', () => {
+  const r = resolveSnap({ geom: buildGeom([AQ]), cur: P(9.6, 0.3), scale: 1, settings: DEFAULT_SNAP });
+  assert.equal(r.kind, 'END'); nearPt(r, 10, 0);
 });
 
 /* ============================================================ */

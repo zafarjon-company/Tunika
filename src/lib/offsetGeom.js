@@ -61,7 +61,7 @@ export function signedArea(pts) {
 // va eng yaqin segment/aylana chizig'igacha masofa (nd, mm). Element noma'lum/bo'sh — null.
 export function offsetSide(e, w) {
   if (!e || !w || !Number.isFinite(w.x) || !Number.isFinite(w.y)) return null;
-  if (e.type === 'circle') {
+  if (e.type === 'circle' || e.type === 'arc') {   // yoy — aylana kabi (markazdan masofa bo'yicha tomon)
     const dr = Math.hypot(w.x - e.cx, w.y - e.cy) - e.r;
     return { side: dr < 0 ? -1 : 1, nd: Math.abs(dr) };
   }
@@ -121,6 +121,10 @@ export function offsetEnt(e, D, k = 1) {
   if (e.type === 'circle') {
     const r = e.r + D * k;
     return r > 1e-9 ? { type: 'circle', cx: e.cx, cy: e.cy, r } : null;
+  }
+  if (e.type === 'arc') {   // yoy: o'sha markaz va burchaklar, radius ± k·D
+    const r = e.r + D * k;
+    return r > 1e-9 ? { type: 'arc', cx: e.cx, cy: e.cy, r, a0: e.a0, a1: e.a1 } : null;
   }
   if (e.type === 'pline') {
     const pts = offsetPlinePts(e.pts, e.closed, D * k);

@@ -10,7 +10,9 @@
     "test:ombor": "node src/lib/omborHisob.test.mjs",
     "test:maosh": "node src/lib/maosh.test.mjs",
     "test:osnap": "node src/lib/osnap.test.mjs",
-    "test:offset": "node src/lib/offsetGeom.test.mjs"
+    "test:offset": "node src/lib/offsetGeom.test.mjs",
+    "test:arc": "node src/lib/arcGeom.test.mjs",
+    "test:chain": "node src/lib/chainOffset.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",
