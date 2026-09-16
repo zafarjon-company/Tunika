@@ -218,6 +218,15 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   sig'madi). Proyeksiyalar bo'limi bu rejimda yo'q. localStorage `gul-chizma-v1`
   (joriy), `gul-chizma-lib-v1` (kutubxona). Gulga xos imkoniyatlar shu rejimga
   qo'shib boriladi.
+- **Ichki buyruqlar qatori va Massiv** (Detal va Gul chizish) — asboblar ostida
+  joriy asbobning AutoCAD variantlari o'zbekcha: Chiziq — Yopish / Orqaga / Yoy
+  (davomida); Aylana — Markaz+radius / Markaz+diametr / 2 nuqta / 3 nuqta;
+  Nusxa — Rejim Ko'p/Bitta, Massiv; Burish, Masshtab — Nusxa (asli qoladi);
+  Aks — Aslini o'chirish; Offset — Ko'p (bir masofa, ketma-ket); Tanlash —
+  Hammasi / Bo'shatish. **Massiv** (AR): tanlanganlarni to'rtburchak (qator ×
+  ustun, oraliqlar; qatorlar tepaga) yoki qutbiy (markazni bosing, soni,
+  to'ldirish burchagi — 360° bo'lsa teng taqsim; gul yaproqlari) ko'paytirish,
+  jonli ko'rinish, «Bajarish» yoki Enter. Variantlar chizma bilan saqlanadi.
 - **Kesish (Trim) / Uzaytirish (Extend)** (Detal va Gul chizish, `src/lib/trimExtend.js`,
   `npm run test:trim`) — AutoCAD tez rejimi: chegara tanlanmaydi, chizmadagi
   boshqa elementlar (chiziq segmentlari, yoylar, aylanalar, polyline'ning boshqa
