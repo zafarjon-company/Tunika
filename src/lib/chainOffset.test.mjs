@@ -210,6 +210,83 @@ test('«linza» (ikki yoy o\'tkir burchak ostida, silliq emas): ichkariga ofset 
 });
 function arcPtOf(e, ang) { const r = ang * Math.PI / 180; return { x: e.cx + e.r * Math.cos(r), y: e.cy - e.r * Math.sin(r) }; }
 
+console.log('\n— Gul: o\'tkir cusp\'lar (fillet), poya —');
+// 4 yaproqli gul: 100×100 kvadrat tomonlariga qurilgan yarim aylanalar (tashqariga bo'rtgan); cusp'lar — kvadrat burchaklari
+const GUL4 = [
+  arc('yu', 50, 0, 50, 0, 180),        // yuqori yaproq: (100,0) → (0,0) tepa orqali (CCW 0..180)
+  arc('ch', 0, 50, 50, 90, 270),       // chap: (0,0) → (0,100) chap orqali
+  arc('pa', 50, 100, 50, 180, 0),      // pastki: (0,100) → (100,100) past orqali
+  arc('on', 100, 50, 50, 270, 90),     // o'ng: (100,100) → (100,0) o'ng orqali
+];
+test('gul 4 yaproq: yopiq zanjir, ichkariga 10 (aylanalar kesishadi) → 4 yoy r 40, uchlari cusp\'ga yaqin va ichkarida', () => {
+  const ch = buildChains(GUL4)[0];
+  assert.equal(ch.closed, true); assert.equal(ch.pieces.length, 4);
+  const ents = piecesToEnts(offsetChainInward(ch, 10), true);
+  assert.equal(ents.length, 4);
+  for (const e of ents) { assert.equal(e.type, 'arc'); near(e.r, 40); }
+  // yuqori yaproq (markaz (50,0)) yangi uchlari: o'ng yaproq (markaz (100,50)) r40 bilan kesishma — cusp (100,0) ga yaqini
+  const top = ents.find((e) => e.cx === 50 && e.cy === 0);
+  const pts = [arcPtOf(top, top.a0), arcPtOf(top, top.a1)];
+  for (const p of pts) { assert.ok(p.y > 0 && p.y < 50, 'uch ichkarida: ' + JSON.stringify(p)); near(Math.hypot(p.x - 50, p.y), 40, 1e-9); }
+  const rt = pts.find((p) => p.x > 50); near(Math.hypot(rt.x - 100, rt.y - 50), 40, 1e-9);   // o'ng yaproq aylanasida ham
+});
+test('gul 4 yaproq: ichkariga 20 (aylanalar kesishmaydi) → cusp\'larda fillet yoylar (r 20, markaz burchakda), jami 8 yoy', () => {
+  const ch = buildChains(GUL4)[0];
+  const ps = offsetChainInward(ch, 20);
+  assert.ok(ps, 'null bo\'lmasin');
+  const fil = ps.filter((p) => p.fillet), main = ps.filter((p) => !p.fillet);
+  assert.equal(main.length, 4); assert.equal(fil.length, 4);
+  for (const f of fil) { near(f.r, 20); assert.ok([0, 100].includes(Math.round(f.cx)) && [0, 100].includes(Math.round(f.cy)), 'fillet markazi burchakda'); near(pieceSweep(f), 90, 1e-6); }
+  for (const m of main) near(m.r, 30);
+  // uchma-uch tutash: har bo'lak oxiri keyingisining boshi
+  for (let i = 0; i < ps.length; i++) { const a = pieceEnd(ps[i]), b = pieceStart(ps[(i + 1) % ps.length]); near(Math.hypot(a.x - b.x, a.y - b.y), 0, 1e-6, 'tutash ' + i); }
+  const ents = piecesToEnts(ps, true); assert.equal(ents.length, 8);
+});
+test('gul 4 yaproq: tashqariga 10 → 4 yoy r 60, fillet yo\'q (aylanalar kesishadi)', () => {
+  const ch = buildChains(GUL4)[0];
+  const ps = offsetChainInward(ch, -10 * chainInwardSign(ch) * chainInwardSign(ch));   // ishorasiz — ichkariga; tashqari uchun offsetChain to'g'ridan-to'g'ri
+  const outw = offsetChain(ch, -chainInwardSign(ch) * 10);
+  assert.ok(ps && outw);
+  assert.equal(outw.length, 4); for (const p of outw) near(p.r, 60);
+});
+test('gul + poya: konturga tegib turgan chiziq halqani buzmaydi — kontur yopiq zanjir, poya alohida', () => {
+  const ents = [pl('poya', [P(100, 0), P(150, -40)])].concat(GUL4);   // poya cusp (100,0) ga tegib turadi va ents'da BIRINCHI
+  const chs = buildChains(ents);
+  assert.equal(chs.length, 2);
+  const gul = chs.find((c) => c.ids.has('yu')), poya = chs.find((c) => c.ids.has('poya'));
+  assert.equal(gul.closed, true); assert.equal(gul.pieces.length, 4); assert.ok(!gul.ids.has('poya'));
+  assert.equal(poya.closed, false); assert.equal(poya.pieces.length, 1);
+});
+test('ochiq chiziq + yarim aylana bo\'rtma + chiziq: tashqariga ofset — yoy r 15, chiziqlar y=5, kesishmalar 50±√200', () => {
+  const bump = [pl('l1', [P(0, 0), P(40, 0)]), arc('b', 50, 0, 10, 180, 0), pl('l2', [P(60, 0), P(100, 0)])];
+  const ch = buildChains(bump)[0];
+  assert.equal(ch.pieces.length, 3); assert.equal(ch.closed, false);
+  const dir = chainSide(ch, P(50, 20)).side;   // pastda (bo'rtma tomonida) turgan nuqta tomoni
+  const ps = offsetChain(ch, dir * 5);
+  assert.ok(ps, 'null bo\'lmasin'); assert.equal(ps.length, 3);
+  const a = ps[1]; assert.equal(a.kind, 'arc'); near(a.r, 15);
+  const h = Math.sqrt(225 - 25);
+  ptsNear([pieceStart(a), pieceEnd(a)], [P(50 - h, 5), P(50 + h, 5)], 1e-9);
+  ptsNear([ps[0].a, ps[0].b], [P(0, 5), P(50 - h, 5)], 1e-9);
+});
+test('ag\'darilish mezoni: o\'tkir burilishlar orasidagi kichik yoy — tashqariga katta ofsetda asl o\'rta burchak (270°) saqlansa yutilmaydi', () => {
+  // yoy: markaz (0,0) r 10, 255°..285° (pastda, 30°); chiziqlar yoy uchlariga ~100° burilish bilan keladi/ketadi (yo'l o'zini kesadi)
+  const S = { x: 10 * Math.cos(255 * Math.PI / 180), y: -10 * Math.sin(255 * Math.PI / 180) }, Ee = { x: 10 * Math.cos(285 * Math.PI / 180), y: -10 * Math.sin(285 * Math.PI / 180) };
+  const d1 = { x: Math.cos(245 * Math.PI / 180), y: -Math.sin(245 * Math.PI / 180) }, d2 = { x: Math.cos(115 * Math.PI / 180), y: -Math.sin(115 * Math.PI / 180) };
+  const ents = [pl('l1', [P(S.x - 40 * d1.x, S.y - 40 * d1.y), P(S.x, S.y)]), arc('a', 0, 0, 10, 255, 285), pl('l2', [P(Ee.x, Ee.y), P(Ee.x + 40 * d2.x, Ee.y + 40 * d2.y)])];
+  const ch = buildChains(ents)[0];
+  assert.equal(ch.pieces.length, 3);
+  for (const D of [5, 30, 60]) {
+    const ps = offsetChain(ch, D);   // D > 0 — yurish o'ng tomoni = yoy tashqarisi (past)
+    assert.ok(ps, 'D=' + D + ' null');
+    const a = ps.find((p) => p.kind === 'arc');
+    assert.ok(a, 'D=' + D + ' yoy yutilgan'); near(a.r, 10 + D);
+    // asl o'rta burchak (270°) yangi oraliqda
+    const inRange = a.ccw ? ((270 - a.sa + 720) % 360) <= pieceSweep(a) + 1e-7 : ((a.sa - 270 + 720) % 360) <= pieceSweep(a) + 1e-7;
+    assert.ok(inRange, 'D=' + D + ' o\'rta burchak oraliqdan tashqarida');
+  }
+});
+
 console.log('\n— piecesToEnts —');
 test('yopiq aralash: segment qatori halqa bo\'ylab bo\'linmaydi (yoydan keyin boshlanadi)', () => {
   const pieces = [

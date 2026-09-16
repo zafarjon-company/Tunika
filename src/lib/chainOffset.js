@@ -11,6 +11,10 @@
 //  aylana×aylana); tangens (silliq) tutashmada surilgan uchlar o'zi tutashadi.
 //  Yutilgan bo'laklar (teskari chiziq, radiusi tugagan / ag'darilgan yoy)
 //  tashlab yuborilib qo'shnilari qayta kesishtiriladi; kontur yorilsa — null.
+//  O'tkir burchakda bo'laklar bir-biridan uzoqlashsa (masalan yaproqlar orasidagi
+//  cusp ichkariga) — burchak atrofida radiusi |D| bo'lgan fillet yoy qo'shiladi
+//  (aniq ofset lokusi). Zanjir qurishda bir uchga bir nechta element tutashsa
+//  (gul + poya) halqani yopadigani / davomi bor uch afzal ko'riladi.
 //
 //  Konvensiya: world mm, x o'ngga, y PASTGA; burchak 0° o'ng, 90° tepa, CCW musbat.
 //  Bo'lak (piece): { kind:'seg', a, b, eid } | { kind:'arc', cx, cy, r, sa, ea, ccw, eid }
@@ -76,37 +80,43 @@ export function buildChains(ents, tol = JOIN_TOL) {
   const used = new Set();
   const uStart = (u) => pieceStart(u.pieces[0]), uEnd = (u) => pieceEnd(u.pieces[u.pieces.length - 1]);
   const rev = (u) => ({ pieces: u.pieces.slice().reverse().map(reversePiece), eid: u.eid, closed: false });
-  for (let s = 0; s < units.length; s++) {
+  // Uch darajasi — shu nuqtaga nechta birlik uchi tutashgan (poya kabi «bo'sh» uch = 1)
+  const endpoints = [];
+  for (const u of units) endpoints.push(uStart(u), uEnd(u));
+  const deg = (p) => endpoints.filter((e) => dist(e, p) <= tol).length;
+  // Bir uchga bir nechta nomzod tutashsa: halqani yopadigani eng avval, so'ng davomi bor (daraja ≥ 2) uch
+  const pickNext = (at, other, wantStart) => {
+    let best = null, bestScore = -1;
+    for (let k = 0; k < units.length; k++) {
+      if (used.has(k)) continue;
+      const u = units[k];
+      let add = null, far = null;
+      if (wantStart) { if (dist(uStart(u), at) <= tol) { add = u; far = uEnd(u); } else if (dist(uEnd(u), at) <= tol) { add = rev(u); far = uStart(u); } }
+      else { if (dist(uEnd(u), at) <= tol) { add = u; far = uStart(u); } else if (dist(uStart(u), at) <= tol) { add = rev(u); far = uEnd(u); } }
+      if (!add) continue;
+      const score = dist(far, other) <= tol ? 100 : deg(far);
+      if (score > bestScore) { best = { add, k }; bestScore = score; }
+    }
+    return best;
+  };
+  // Qurish tartibi: ikkala uchi tutashgan (halqa a'zosi) birliklar avval, bo'sh uchli (poya) keyin —
+  // aks holda poyadan boshlangan zanjir halqani yutib, uni ochiq qilib qo'yardi
+  const dangling = (u) => (deg(uStart(u)) < 2 ? 1 : 0) + (deg(uEnd(u)) < 2 ? 1 : 0);
+  const order = units.map((u, i) => i).sort((a, b) => dangling(units[a]) - dangling(units[b]) || a - b);
+  for (const s of order) {
     if (used.has(s)) continue;
     used.add(s);
     let pieces = units[s].pieces.slice();
     const ids = new Set([units[s].eid]);
     const isClosed = () => pieces.length >= 2 && dist(pieceEnd(pieces[pieces.length - 1]), pieceStart(pieces[0])) <= tol;
     // oxiridan davom
-    let grew = true;
-    while (grew && !isClosed()) {
-      grew = false;
-      const end = pieceEnd(pieces[pieces.length - 1]);
-      for (let k = 0; k < units.length; k++) {
-        if (used.has(k)) continue;
-        const u = units[k];
-        let add = null;
-        if (dist(uStart(u), end) <= tol) add = u; else if (dist(uEnd(u), end) <= tol) add = rev(u);
-        if (add) { pieces = pieces.concat(add.pieces); ids.add(u.eid); used.add(k); grew = true; break; }
-      }
+    let nx;
+    while (!isClosed() && (nx = pickNext(pieceEnd(pieces[pieces.length - 1]), pieceStart(pieces[0]), true))) {
+      pieces = pieces.concat(nx.add.pieces); ids.add(units[nx.k].eid); used.add(nx.k);
     }
     // boshidan davom (teskariga)
-    grew = true;
-    while (grew && !isClosed()) {
-      grew = false;
-      const start = pieceStart(pieces[0]);
-      for (let k = 0; k < units.length; k++) {
-        if (used.has(k)) continue;
-        const u = units[k];
-        let add = null;
-        if (dist(uEnd(u), start) <= tol) add = u; else if (dist(uStart(u), start) <= tol) add = rev(u);
-        if (add) { pieces = add.pieces.concat(pieces); ids.add(u.eid); used.add(k); grew = true; break; }
-      }
+    while (!isClosed() && (nx = pickNext(pieceStart(pieces[0]), pieceEnd(pieces[pieces.length - 1]), false))) {
+      pieces = nx.add.pieces.concat(pieces); ids.add(units[nx.k].eid); used.add(nx.k);
     }
     chains.push({ pieces, closed: isClosed(), ids });
   }
@@ -172,22 +182,36 @@ export function offsetChain(chain, D) {
   });
   const adjacent = (prev, cur) => (prev.idx + 1) % n === cur.idx;
   const smooth = (prev, cur) => Math.abs(norm360(tangentAt(prev.orig, true) - tangentAt(cur.orig, false) + 180) - 180) < 0.01;
-  // Ikki surilgan qo'shni bo'lak tutashadigan nuqta; null — kontur yorildi
+  // Surilgan bo'lakning oxiri / boshi (o'z burchagida)
+  const shEnd = (p) => (p.kind === 'seg' ? p.b : arcPt(p, p.ea));
+  const shStart = (p) => (p.kind === 'seg' ? p.a : arcPt(p, p.sa));
+  // Ikki surilgan qo'shni bo'lak tutashmasi: { p } — nuqta; { fillet } — burchak atrofidagi yoy; null — kontur yorildi
   function junction(prev, cur) {
-    const J0 = pieceEnd(prev.orig);
+    const J0 = pieceEnd(prev.orig), pe = shEnd(prev), cs = shStart(cur);
+    const M = { x: (pe.x + cs.x) / 2, y: (pe.y + cs.y) / 2 };   // surilgan uchlar o'rtasi — nomzodni shunga yaqinligi bilan tanlaymiz (tangens yoylarda J0 ikkilanadi)
     if (prev.kind === 'seg' && cur.kind === 'seg') {
       const p = lineInt(prev.a, prev.b, cur.a, cur.b);
-      if (p) return p;
-      return adjacent(prev, cur) ? cur.a : null;   // parallel: asl qo'shnilar (kollinear) — surilgan uch
+      if (p) return { p };
+      return adjacent(prev, cur) ? { p: cur.a } : null;   // parallel: asl qo'shnilar (kollinear) — surilgan uch
     }
     let cands;
     if (prev.kind === 'seg') cands = lineCircleInts(prev.a, prev.b, { x: cur.cx, y: cur.cy }, cur.r);
     else if (cur.kind === 'seg') cands = lineCircleInts(cur.a, cur.b, { x: prev.cx, y: prev.cy }, prev.r);
     else cands = circleCircleInts({ x: prev.cx, y: prev.cy }, prev.r, { x: cur.cx, y: cur.cy }, cur.r);
-    const p = nearestTo(cands, J0);
-    if (p) return p;
-    // kesishma yo'q: silliq (tangens) tutashma — surilgan uchlar o'zi tutashadi; aks holda yorilgan
-    return smooth(prev, cur) ? (prev.kind === 'seg' ? prev.b : arcPt(prev, prev.ea)) : null;
+    const p = nearestTo(cands, M);
+    if (p) return { p };
+    // kesishma yo'q: silliq (tangens) tutashma — surilgan uchlar o'zi tutashadi
+    if (smooth(prev, cur) || dist(pe, cs) < 1e-6) return { p: pe };
+    // Bo'laklar yaqinlashadigan burchakda (burilish ofset tomoniga) kesishma yo'qligi — kontur yig'ilib ketgan
+    // (masalan oy/linza ichkariga katta masofada) → yorilgan. Uzoqlashadigan burchakda (burilish teskari tomonga,
+    // masalan gul yaproqlari orasidagi cusp ichkariga) aniq ofset lokusi — burchak atrofida radiusi |D| yoy (fillet)
+    const t1 = tangentAt(prev.orig, true), t2 = tangentAt(cur.orig, false);
+    const v1 = { x: Math.cos(t1 * Math.PI / 180), y: -Math.sin(t1 * Math.PI / 180) }, v2 = { x: Math.cos(t2 * Math.PI / 180), y: -Math.sin(t2 * Math.PI / 180) };
+    const cross = v1.x * v2.y - v1.y * v2.x;   // > 0 — o'ngga burilish (ekranda soat mili bo'yicha)
+    if (cross * D >= 0) return null;             // ofset tomoniga burilish — yaqinlashadi, kesishma bo'lishi kerak edi
+    const sa = vecAng(pe.x - J0.x, pe.y - J0.y), ea = vecAng(cs.x - J0.x, cs.y - J0.y);
+    const ccw = norm360(ea - sa) <= 180;
+    return { fillet: { kind: 'arc', cx: J0.x, cy: J0.y, r: Math.abs(D), sa, ea, ccw, eid: prev.orig.eid, fillet: true } };
   }
   for (let iter = 0; iter <= n; iter++) {
     const m = ps.length;
@@ -199,18 +223,25 @@ export function offsetChain(chain, D) {
       if (!jp) return null;
       J[k] = jp;
     }
+    // Tutashma nuqtasi: oddiy nuqta yoki fillet yoyning tegishli uchi
+    const jStart = (k) => (J[k].p ? J[k].p : pieceEnd(J[k].fillet));      // k-bo'lak boshi
+    const jEnd = (k) => (J[k].p ? J[k].p : pieceStart(J[k].fillet));      // (k−1)-bo'lak oxiri
     const out = [], bad = new Set();
     for (let k = 0; k < m; k++) {
       const p = ps[k];
-      const s = (closed || k > 0) ? J[k] : (p.kind === 'seg' ? p.a : arcPt(p, p.sa));
-      const e = (closed || k < m - 1) ? J[(k + 1) % m] : (p.kind === 'seg' ? p.b : arcPt(p, p.ea));
+      if ((closed || k > 0) && J[k].fillet) out.push(J[k].fillet);
+      const s = (closed || k > 0) ? jStart(k) : shStart(p);
+      const e = (closed || k < m - 1) ? jEnd((k + 1) % m) : shEnd(p);
       if (p.kind === 'seg') {
         if ((e.x - s.x) * p.ux + (e.y - s.y) * p.uy <= 1e-6) bad.add(k);   // teskari / nol — yutilgan
         out.push({ kind: 'seg', a: s, b: e, eid: p.orig.eid });
       } else {
         const sa = vecAng(s.x - p.cx, s.y - p.cy), ea = vecAng(e.x - p.cx, e.y - p.cy);
         const q = { kind: 'arc', cx: p.cx, cy: p.cy, r: p.r, sa, ea, ccw: p.ccw, eid: p.orig.eid };
-        if (dist(s, e) < 1e-6 || pieceSweep(q) > p.sweep0 + 180) bad.add(k);   // ag'darilgan (teskari tomonga o'ralgan) — yutilgan
+        // Ag'darilgan (yutilgan) yoy: asl yoyning o'rta burchagi yangi oraliqdan chiqib ketadi (to'ldiruvchi yoyga tushadi)
+        const o = p.orig, mid0 = o.ccw ? o.sa + p.sweep0 / 2 : o.sa - p.sweep0 / 2;
+        const midIn = q.ccw ? norm360(mid0 - q.sa) <= pieceSweep(q) + 1e-7 : norm360(q.sa - mid0) <= pieceSweep(q) + 1e-7;
+        if (dist(s, e) < 1e-6 || !midIn) bad.add(k);
         out.push(q);
       }
     }
