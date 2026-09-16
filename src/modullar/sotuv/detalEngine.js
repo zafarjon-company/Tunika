@@ -26,6 +26,7 @@ import { loadSnap, saveSnap, buildGeom, resolveSnap, updateAcquire, gridStepFor,
 import { mountStatusBar } from '../../lib/cadStatusBar.js';
 import { offsetSide, offsetSeries } from '../../lib/offsetGeom.js';
 import { chainOf, chainSide, offsetChainSeries, buildChains, offsetChainInward, piecesToEnts } from '../../lib/chainOffset.js';
+import { trimAt, extendAt } from '../../lib/trimExtend.js';
 import { arcSweep, arcLen, arcStart, arcEnd, arcMid, arcPt, angInArc, arcBounds, distToArc, arcSamples, arcDrawnEnd, arcSCA, arcSCE, arcSCL, arcSEA, arcSED, arcSER, arcFrom3, arcContinue, arcMap, arcSvgPath } from '../../lib/arcGeom.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -95,6 +96,8 @@ const CMDS = [
   { id: 'mirror', nomi: 'Aks ettirish', al: ['MI', 'MIRROR'] },
   { id: 'scale', nomi: 'Masshtab', al: ['SC', 'SCALE'] },
   { id: 'offset', nomi: 'Offset', al: ['O', 'OFFSET'] },
+  { id: 'trim', nomi: 'Kesish', al: ['TR', 'TRIM'] },
+  { id: 'extend', nomi: 'Uzaytirish', al: ['EX', 'EXTEND'] },
   { id: 'erase', nomi: "O'chirish", al: ['E', 'ERASE', 'DEL'] },
   { id: '#undo', nomi: 'Orqaga', al: ['U', 'UNDO'] },
   { id: '#redo', nomi: 'Oldinga', al: ['REDO'] },
@@ -136,7 +139,7 @@ const GRIP_PX = 4;           // grip kvadratining yarim tomoni (px)
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 // DXF $INSUNITS kodi -> 1 birlik necha mm
 const INSUNITS_MM = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
-const TOOLS = ['select', 'pline', 'rect', 'circle', 'arc', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'erase'];
+const TOOLS = ['select', 'pline', 'rect', 'circle', 'arc', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'offset', 'trim', 'extend', 'erase'];
 // Eksport (PNG) uchun mavzudan mustaqil OCH palitra — oq fonda doim o'qiladi.
 const EXPORT_P = {
   devor: '#0f172a', accent: '#0f172a', edit: '#0f172a', text: '#1e293b',
@@ -219,6 +222,8 @@ function buildTemplate(V) {
     <button type="button" class="tool etool" data-tool="mirror" title="Aks ettirish — o'qning 2 nuqtasini bosing (asl nusxa qoladi; kerak bo'lmasa Delete)">Aks</button>
     <button type="button" class="tool etool" data-tool="scale" title="Masshtab — tayanch nuqta → koeffitsient (yozing yoki bosing)">Masshtab</button>
     <button type="button" class="tool etool" data-tool="offset" title="${V.offTitle}">Offset</button>
+    <button type="button" class="tool etool" data-tool="trim" title="Kesish (TRIM, AutoCAD tez rejim) — chegarani tanlamasdan: olib tashlanadigan qismga bosing, u eng yaqin kesishmalargacha o'chadi (kesishma yo'q tomonda — uchigacha); chizma elementlari o'zaro chegara">&#9986; Kesish</button>
+    <button type="button" class="tool etool" data-tool="extend" title="Uzaytirish (EXTEND, tez rejim) — chiziq yoki yoyning uchiga yaqin bosing, u yo'nalishidagi eng yaqin elementgacha cho'ziladi">&#10145; Uzaytirish</button>
     <button type="button" class="tool etool erase" data-tool="erase" title="O'chirish — element ustiga bosing">O'chirish</button>
     <span class="sep"></span>
     <button type="button" class="tool" data-dtl="btnUndo" title="Ctrl+Z">&#8630; Orqaga</button>
@@ -322,6 +327,7 @@ function buildTemplate(V) {
         <span${V.proj ? '' : ' hidden'}>&bull; <b>3 proyeksiya</b> (chizma geometriya): yoqilsa maydon <b>OLD (V)</b> chap-yuqori, <b>USTDAN (H)</b> chap-past, <b>YON (W)</b> o'ng-yuqori kvadrantlarga bo'linadi; 45° buklash chizig'i H↔W chuqurligini bog'laydi. Ikkita proyeksiyani chizing (masalan H da 15 sm, W da 25 sm kesma) — <b>hosil qilish</b> tugmasi uchinchisini (15×25 to'rtburchak, qayirma chiziqlari bilan) chizadi; keyin uni oddiy chizmadek tahrirlang. Chizganda kursor boshqa proyeksiyalardagi uchlarning <b>bog'lanish chiziqlariga</b> yopishadi ("Proyeksiya" maslahati). Burchakdagi kvadratchani sudrab proyeksiyalarni suring.<br></span>
         ${V.autoOffset ? OFFSET_HINT : ''}
         ${ARC_HINT}
+        &bull; <b>Kesish</b> (TR) va <b>Uzaytirish</b> (EX) — AutoCAD tez rejimi: chegara tanlanmaydi, chizmadagi boshqa elementlar chegara. Kesishda olib tashlanadigan qismga bosing — eng yaqin kesishmalargacha o'chadi (kursor ostida qizil ko'rinadi; yopiq kontur ochiq polyline bo'lib qoladi, aylana yoyga aylanadi). Uzaytirishda chiziq/yoy uchiga yaqin bosing — yo'nalishidagi (yoy — aylanasi bo'ylab) eng yaqin elementgacha cho'ziladi.<br>
         &bull; <b>Saqlash</b> — nomlab kutubxonaga (${V.saveEx}...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
       </div>
     </div>
@@ -799,6 +805,8 @@ export function mountDetal(root, opts) {
       mirror: "Aks: o'qning 1-nuqtasini bosing",
       scale: 'Masshtab: tayanch nuqtani bosing',
       offset: V.joinOffset ? 'Offset: chiziq, yoy yoki aylanani bosing — uchlari tutashgan elementlar bitta kontur (join) sifatida' : 'Offset: chiziq yoki aylanani bosing',
+      trim: "Kesish: olib tashlanadigan qismga bosing — eng yaqin kesishmalargacha o'chadi (chegara — chizmadagi boshqa elementlar)",
+      extend: "Uzaytirish: chiziq yoki yoyning uchiga yaqin bosing — yo'nalishidagi eng yaqin elementgacha cho'ziladi",
       erase: "O'chirish: element ustiga bosing",
     };
     return m[t] || '';
@@ -1181,6 +1189,48 @@ export function mountDetal(root, opts) {
     setInfo(N > 1 ? made.length + ' ta ofset tashlandi (qadam ' + fmtLen(Math.abs(step)) + ')' + (made.length < N ? " — qolgani sig'madi" : '') + chTxt : toolHint('offset') + chTxt);
   }
 
+  /* ---- Kesish / Uzaytirish (AutoCAD tez rejim) — geometriya: src/lib/trimExtend.js ---- */
+  function trimExtendClick(t, sx, sy) {
+    const hit = entAt(sx, sy);
+    if (!hit || hit.ent.type === 'dim') { setInfo(t === 'trim' ? 'Kesish: chiziq, yoy yoki aylananing olib tashlanadigan qismiga bosing' : 'Uzaytirish: chiziq yoki yoyning uchiga yaqin bosing'); return; }
+    const raw = screenToWorld(sx, sy);
+    if (t === 'trim') {
+      const res = trimAt(state.ents, hit.ent, raw, hit.seg);
+      if (!res || !res.remove) { setInfo(res && res.reason ? res.reason : 'Kesib bo\'lmadi'); return; }
+      pushHistory();
+      state.ents = state.ents.filter((e) => !res.remove.includes(e.id));
+      for (const o of res.add) state.ents.push(newEnt(o.type, o));
+      state.sel.clear(); state.cont = null;
+      afterChange(); setInfo('Kesildi' + (res.add.length ? '' : ' — element butunlay olib tashlandi') + '. ' + toolHint('trim'));
+    } else {
+      const res = extendAt(state.ents, hit.ent, raw);
+      if (!res || !res.patch) { setInfo(res && res.reason ? res.reason : 'Uzaytirib bo\'lmadi'); return; }
+      pushHistory();
+      Object.assign(hit.ent, res.patch);
+      afterChange(); setInfo('Uzaytirildi. ' + toolHint('extend'));
+    }
+  }
+  // Jonli ko'rinish: kursor ostidagi elementning kesiladigan qismi (qizil) / uzaytiriladigan qismi (punktir)
+  function paintTrimExtendPreview(target, w2s, view, PP) {
+    const s = state.cursorS; if (!s) return;
+    const hit = entAt(s.sx, s.sy); if (!hit || hit.ent.type === 'dim') return;
+    const raw = screenToWorld(s.sx, s.sy);
+    const shape = (g, attrs) => {
+      if (g.type === 'circle') { const c = w2s(g.cx, g.cy); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: g.r * view.scale }, attrs))); }
+      else if (g.type === 'arc') target.appendChild(svgEl('path', Object.assign({ d: arcSvgPath(g, w2s, view.scale) }, attrs)));
+      else if (g.type === 'pline') target.appendChild(svgEl(g.closed && g.pts.length > 2 ? 'polygon' : 'polyline', Object.assign({ points: ptsAttr(g.pts, w2s) }, attrs)));
+    };
+    if (state.tool === 'trim') {
+      const res = trimAt(state.ents, hit.ent, raw, hit.seg);
+      if (!res || !res.removed) return;
+      shape(res.removed, { stroke: '#ef4444', 'stroke-width': 4, fill: 'none', opacity: 0.75, 'stroke-linecap': 'round', 'pointer-events': 'none' });
+    } else {
+      const res = extendAt(state.ents, hit.ent, raw);
+      if (!res || !res.patch) return;
+      const g = Object.assign({}, hit.ent, res.patch);
+      shape(g, { stroke: PP.accent, 'stroke-width': 2.2, fill: 'none', 'stroke-dasharray': '6 4', 'pointer-events': 'none' });
+    }
+  }
   function toolClick(sx, sy, w) {
     const t = state.tool;
     if (t === 'pline') return plineClick(w);
@@ -1189,6 +1239,7 @@ export function mountDetal(root, opts) {
     if (t === 'arc') return arcClick(w);
     if (t === 'dim') return dimClick(w);
     if (t === 'offset') return offsetClick(sx, sy, w);
+    if (t === 'trim' || t === 'extend') return trimExtendClick(t, sx, sy);
     if (t === 'erase') {
       const hit = entAt(sx, sy);
       if (hit) { pushHistory(); state.ents = state.ents.filter((x) => x !== hit.ent); state.sel.delete(hit.ent.id); afterChange(); }
@@ -1561,6 +1612,7 @@ export function mountDetal(root, opts) {
     if (state.proj.on && state.proj.links) paintProjLinks(target, w2s, W, H, PP);
     // 3) chizilayotgan (jonli)
     if (state.draft) paintDraft(target, w2s, view, PP);
+    else if (state.tool === 'trim' || state.tool === 'extend') paintTrimExtendPreview(target, w2s, view, PP);
     // 4) griplar (Tanlash asbobida, tanlanganlarga)
     if (state.tool === 'select') for (const e of selectedEnts()) for (const g of gripsOf(e)) {
       const s = w2s(g.x, g.y);
@@ -1933,9 +1985,9 @@ export function mountDetal(root, opts) {
     }
     state.cursor = resolveCursor(sx, sy, anchorPoint());
     state.cursorS = { sx, sy };
-    if (state.tool === 'select' || state.tool === 'erase') { state.snapHit = null; state.snapRes = null; }
+    if (state.tool === 'select' || state.tool === 'erase' || state.tool === 'trim' || state.tool === 'extend') { state.snapHit = null; state.snapRes = null; }
     statusBar.setCoords('X ' + fmtNum(state.cursor.x / U(), 2) + '   Y ' + fmtNum(-state.cursor.y / U(), 2) + '  ' + UNIT_LABEL[state.unit]);
-    if (state.draft || ['pline', 'rect', 'circle', 'arc', 'dim', 'offset'].includes(state.tool) || MODIFY.includes(state.tool)) render();
+    if (state.draft || ['pline', 'rect', 'circle', 'arc', 'dim', 'offset', 'trim', 'extend'].includes(state.tool) || MODIFY.includes(state.tool)) render();
   });
   on(window, 'mouseup', (e) => {
     if (panning) { panning = false; return; }

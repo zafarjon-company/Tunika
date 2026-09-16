@@ -12,7 +12,8 @@
     "test:osnap": "node src/lib/osnap.test.mjs",
     "test:offset": "node src/lib/offsetGeom.test.mjs",
     "test:arc": "node src/lib/arcGeom.test.mjs",
-    "test:chain": "node src/lib/chainOffset.test.mjs"
+    "test:chain": "node src/lib/chainOffset.test.mjs",
+    "test:trim": "node src/lib/trimExtend.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",

@@ -218,6 +218,15 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   sig'madi). Proyeksiyalar bo'limi bu rejimda yo'q. localStorage `gul-chizma-v1`
   (joriy), `gul-chizma-lib-v1` (kutubxona). Gulga xos imkoniyatlar shu rejimga
   qo'shib boriladi.
+- **Kesish (Trim) / Uzaytirish (Extend)** (Detal va Gul chizish, `src/lib/trimExtend.js`,
+  `npm run test:trim`) — AutoCAD tez rejimi: chegara tanlanmaydi, chizmadagi
+  boshqa elementlar (chiziq segmentlari, yoylar, aylanalar, polyline'ning boshqa
+  segmentlari) chegara. Kesish: olib tashlanadigan qismga bosing — eng yaqin
+  kesishmalargacha o'chadi (kesishma yo'q tomonda — uchigacha); ochiq polyline
+  0–2 bo'lakka, yopiq polyline bitta ochiq polyline'ga, aylana (≥ 2 kesishma)
+  yoyga aylanadi; kursor ostida olib tashlanadigan qism qizil ko'rinadi.
+  Uzaytirish: chiziq/ochiq polyline uchi oxirgi segment yo'nalishida, yoy uchi
+  aylanasi bo'ylab eng yaqin chegaragacha; punktir ko'rinish.
 - **AutoCAD klaviatura mantiqi** (Detal va Gul chizish): **Esc** — faqat joriy
   buyruq/tanlovni bekor qiladi (to'liq ekrandan chiqarmaydi — «Kichraytirish»
   tugmasi); **Enter / Tab** — buyruqni tugatadi, bo'sh joyda → Tanlash, yana
