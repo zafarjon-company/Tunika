@@ -71,28 +71,14 @@ export function ChizmaCard({ tunikaBaza = [], zakasId = '' }) {
     apiRef.current?.setTunikaBaza?.(tunikaBaza);
   }, [tunikaBaza]);
 
-  // To'liq ekranda orqa sahifa aylanmasin + Esc bilan chiqish.
+  // To'liq ekranda orqa sahifa aylanmasin. Esc to'liq ekrandan CHIQARMAYDI
+  // (AutoCAD'dek: Esc faqat joriy buyruq/tanlovni bekor qiladi — dvigatel
+  // ichida) — chiqish faqat «Kichraytirish» tugmasi bilan.
   useEffect(() => {
     if (!full) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    function onKey(e) {
-      if (e.key !== 'Escape') return;
-      // Dvigatel Esc'ni o'zi ishlatgan bo'lsa (chizish/nuqta rejimini bekor
-      // qilish, kiritish qutisini yopish) — to'liq ekrandan chiqmaymiz.
-      // Dvigatelning window tinglovchisi mount'da (bungacha) qo'shilgani
-      // uchun avval ishlaydi va defaultPrevented shu yerda ko'rinadi.
-      if (e.defaultPrevented) return;
-      // Chizmaning kiritish qutisi yoki Yoy menyusi ochiq bo'lsa — avval u yopilsin
-      // (tab almashgandan keyin dvigatel tinglovchisi bizdan KEYIN ishlashi mumkin).
-      if (rootRef.current?.querySelector('.chz-inputbox.show, .chz-arcmenu.show')) return;
-      setFull(false);
-    }
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener('keydown', onKey);
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [full]);
 
   const tabs = (
@@ -147,7 +133,7 @@ export function ChizmaCard({ tunikaBaza = [], zakasId = '' }) {
                 <Ruler className="w-4 h-4" /> Chizma <span className="text-slate-400 font-medium normal-case tracking-normal">· {modeLabel}</span>
               </span>
               {tabs}
-              <button type="button" onClick={() => setFull(false)} title="Kichraytirish (Esc)"
+              <button type="button" onClick={() => setFull(false)} title="Kichraytirish"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100">
                 <Minimize2 className="w-3.5 h-3.5" /> Kichraytirish
               </button>

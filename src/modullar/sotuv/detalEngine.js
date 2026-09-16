@@ -25,43 +25,45 @@ import { safeFileName, downloadDxf } from '../../lib/dxfExport.js';
 import { loadSnap, saveSnap, buildGeom, resolveSnap, updateAcquire, gridStepFor, snapMarkerShapes } from '../../lib/osnap.js';
 import { mountStatusBar } from '../../lib/cadStatusBar.js';
 import { offsetSide, offsetSeries } from '../../lib/offsetGeom.js';
-import { chainOf, chainSide, offsetChainSeries } from '../../lib/chainOffset.js';
+import { chainOf, chainSide, offsetChainSeries, buildChains, offsetChainInward, piecesToEnts } from '../../lib/chainOffset.js';
 import { arcSweep, arcLen, arcStart, arcEnd, arcMid, arcPt, angInArc, arcBounds, distToArc, arcSamples, arcDrawnEnd, arcSCA, arcSCE, arcSCL, arcSEA, arcSED, arcSER, arcFrom3, arcContinue, arcMap, arcSvgPath } from '../../lib/arcGeom.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const UNITS = { mm: 1, cm: 10 };
 const UNIT_LABEL = { mm: 'mm', cm: 'sm' };
-const OFF_MAX = 50;          // bir yo'la tashlanadigan ofsetlar soni chegarasi (Gul rejimi)
+const AUTO_OFF_DEF = 20;     // Gul rejimi: yopiq kontur ichkariga avtomatik ofset masofasi (mm) — 2 sm
+const AUTO_OFF_MAX = 1000;
 // Rejim variantlari — bitta dvigatel, ikki rejim: Detal chizish (asl) va Gul chizish (gulEngine.js).
-// Gulga xos yangi imkoniyatlar shu jadval va V.multiOffset shoxlari orqali qo'shiladi.
+// Gulga xos yangi imkoniyatlar shu jadval va V.autoOffset / V.zakas / V.joinOffset shoxlari orqali qo'shiladi.
 const VARIANTS = {
   detal: {
     cls: 'dtl', storageKey: 'detal-chizma-v1', libKey: 'detal-chizma-lib-v1',
     title: 'Detal', namePh: 'Detal nomi (masalan: Qosh 12 sm)', autoName: 'Detal', saveEx: 'patalok, qosh',
     libLabel: 'Saqlangan detallar', libEmpty: "Hali saqlangan detal yo'q", libDel: "Detal kutubxonadan o'chirildi",
     offTitle: 'Offset — parallel nusxa (list qalinligi uchun qulay): elementni bosing, masofani yozing, tomonni bosing',
-    filePrefix: 'detal_', proj: true, multiOffset: false, zakas: false, joinOffset: false,
+    filePrefix: 'detal_', proj: true, autoOffset: false, zakas: false, joinOffset: false,
   },
   gul: {
     cls: 'gul', storageKey: 'gul-chizma-v1', libKey: 'gul-chizma-lib-v1',
     title: 'Gul', namePh: 'Gul nomi (masalan: Lola 20 sm)', autoName: 'Gul', saveEx: 'lola, yaproq',
     libLabel: 'Saqlangan gullar', libEmpty: "Hali saqlangan gul yo'q", libDel: "Gul kutubxonadan o'chirildi",
     offTitle: "Offset — parallel nusxalar: elementni bosing, masofani yozing, tomonni bosing — yon paneldagi son bo'yicha bir nechta",
-    filePrefix: 'gul_', proj: false, multiOffset: true, zakas: true, joinOffset: true,
+    filePrefix: 'gul_', proj: false, autoOffset: true, zakas: true, joinOffset: true,
   },
 };
 // Gul rejimi: yon paneldagi «Nechta ofset tashlansin» bloki va qo'llanma bandi
 const OFFSET_PANEL = '<h3 class="dtl-h3">Ofset</h3>'
   + '<div class="gul-off">'
-  + '<div class="dtl-gap gul-offrow"><span>Nechta ofset tashlansin</span>'
+  + '<div class="dtl-gap gul-offrow"><span>Ofset (ichkariga)</span>'
   + '<span class="gul-step">'
-  + '<button type="button" data-dtl="offMinus" title="Bitta kam">&minus;</button>'
-  + '<input data-dtl="offCount" type="text" inputmode="numeric" data-num="pos" maxlength="2" title="Offset asbobi shuncha parallel nusxa tashlaydi (1–' + OFF_MAX + ')" />'
-  + "<button type=\"button\" data-dtl=\"offPlus\" title=\"Bitta ko'p\">+</button>"
+  + '<button type="button" data-dtl="offMinus" title="0.5 sm kam">&minus;</button>'
+  + "<input data-dtl=\"autoOff\" type=\"text\" inputmode=\"decimal\" data-num=\"pos\" title=\"Yopiq kontur ichkariga avtomatik ofset masofasi (0 — o'chiq)\" />"
+  + '<i data-dtl="autoOffUnit">sm</i>'
+  + "<button type=\"button\" data-dtl=\"offPlus\" title=\"0.5 sm ko'p\">+</button>"
   + '</span></div>'
-  + '<div class="gul-offhint">«Offset» asbobi: elementni bosing, masofani yozib Enter, tomonni bosing — shuncha parallel kontur (masofa, 2×, 3×…) tashlanadi. Uchlari tutashgan chiziq va yoylar bitta kontur (join) sifatida — yopiq shakl butunlay ichkariga/tashqariga.</div>'
+  + "<div class=\"gul-offhint\">Chizmadagi shakl hamma tomondan yopiq bo'lsa (uchlari tutashgan chiziq va yoylar — xuddi join qilingandek), shu masofada ichkariga parallel kontur o'zi chiziladi; chizma yoki son o'zgarganda qayta hisoblanadi. 0 — o'chirish.</div>"
   + '</div>';
-const OFFSET_HINT = "&bull; <b>Ofset soni</b> (yon panel): «Offset» asbobi bilan elementni bosing, masofani yozib Enter, tomonni bosing — <b>shuncha</b> parallel kontur (masofa, 2×, 3×…) tashlanadi; tomonni bosishdan oldin jonli ko'rinadi. Uchlari tutashgan chiziq va yoylar <b>bitta kontur (join)</b> sifatida ofset qilinadi — yopiq shakl butunlay ichkariga; aylana radiusi tugasa yoki kontur sig'masa to'xtaydi.<br>";
+const OFFSET_HINT = "&bull; <b>Ofset</b> (yon panel, sm): shakl hamma tomondan yopiq bo'lsa (uchlari tutashgan chiziq/yoylar — join), shu masofada ichkariga parallel kontur <b>avtomatik</b> chiziladi (binafsha); chizma yoki son o'zgarsa qayta hisoblanadi, DXF (OFSET qatlami) va rasmga kiradi. Qo'lda «Offset» asbobi ham tutashgan elementlarni bitta kontur sifatida ofset qiladi.<br>";
 // Yoy chizish usullari (AutoCAD «Arc» menyusi, o'zbekcha). steps: ['pt', nom] — nuqta bosiladi
 // (yoki oldingi nuqtadan masofa + burchak yoziladi); ['ang'|'len', nom] — oxirgi qiymat yoziladi
 // yoki sichqoncha bilan beriladi. grp — menyudagi ajratgich guruhi (AutoCAD tartibi).
@@ -79,6 +81,27 @@ const ARC_METHODS = [
   { key: 'cont', nomi: 'Davom ettirish', grp: 4, steps: [['pt', 'Oxirgi nuqta']] },
 ];
 const ARC_BY_KEY = Object.fromEntries(ARC_METHODS.map((m) => [m.key, m]));
+// Buyruq qidirish ro'yxati: o'zbekcha nomi + AutoCAD qisqartmalari (id — asbob yoki #amal)
+const CMDS = [
+  { id: 'select', nomi: 'Tanlash', al: ['SEL', 'S'] },
+  { id: 'pline', nomi: 'Chiziq', al: ['L', 'PL', 'LINE', 'PLINE'] },
+  { id: 'rect', nomi: "To'rtburchak", al: ['REC', 'RECTANG'] },
+  { id: 'circle', nomi: 'Aylana', al: ['C', 'CIRCLE'] },
+  { id: 'arc', nomi: 'Yoy', al: ['A', 'ARC'] },
+  { id: 'dim', nomi: "O'lcham", al: ['DIM', 'DLI', 'DAL'] },
+  { id: 'move', nomi: "Ko'chirish", al: ['M', 'MOVE'] },
+  { id: 'copy', nomi: 'Nusxa', al: ['CO', 'CP', 'COPY'] },
+  { id: 'rotate', nomi: 'Burish', al: ['RO', 'ROTATE'] },
+  { id: 'mirror', nomi: 'Aks ettirish', al: ['MI', 'MIRROR'] },
+  { id: 'scale', nomi: 'Masshtab', al: ['SC', 'SCALE'] },
+  { id: 'offset', nomi: 'Offset', al: ['O', 'OFFSET'] },
+  { id: 'erase', nomi: "O'chirish", al: ['E', 'ERASE', 'DEL'] },
+  { id: '#undo', nomi: 'Orqaga', al: ['U', 'UNDO'] },
+  { id: '#redo', nomi: 'Oldinga', al: ['REDO'] },
+  { id: '#fit', nomi: 'Markazga (zoom)', al: ['Z', 'ZOOM'] },
+  { id: '#clear', nomi: 'Tozalash', al: ['CLEAR'] },
+  { id: '#start0', nomi: '0,0 dan boshlash', al: ['0'] },
+];
 // Usul belgisi (AutoCAD uslubida): yoy + boshi/oxiri nuqtalari, markaz (+), burchak, vatar, yo'nalish, radius
 function arcIcon(key) {
   const A = '<path d="M4 20 A16 16 0 0 0 20 4" fill="none" stroke="currentColor" stroke-width="1.8"/>';
@@ -100,7 +123,7 @@ function arcIcon(key) {
 }
 const ARC_HINT = "&bull; <b>Yoy</b> — «Yoy» tugmasi yonidagi ▾ dan usulni tanlang (AutoCAD'dagidek): <b>3 nuqta</b>; <b>Boshi, Markaz, Oxiri / Burchak / Vatar</b>; <b>Boshi, Oxiri, Burchak / Yo'nalish / Radius</b>; <b>Markaz, Boshi, …</b>; <b>Davom ettirish</b> — oxirgi chiziq yoki yoy uchidan tangens bo'ylab. Nuqtalarni bosing yoki oldingi nuqtadan masofa + burchak yozing; oxirgi qiymat (burchak / vatar / radius / yo'nalish) yoziladi yoki sichqoncha bilan beriladi; manfiy qiymat — soat mili bo'yicha / katta yoy. Yoyning uchlari, o'rtasi, markazi va kvadrantlariga magnit yopishadi; yoyga 2 marta bosib radius/burchak tahrirlanadi.<br>";
 // Gul rejimi: zakasdagi gullar ro'yxati (yon panel tepasi)
-const ZAKAS_KEY = 'gul-zakas-v1';   // localStorage: { [zakasKey]: { active, items:[{id,name,ents,offN,t}], t } }
+const ZAKAS_KEY = 'gul-zakas-v1';   // localStorage: { [zakasKey]: { active, items:[{id,name,ents,autoOff,t}], t } }
 const ZAKAS_MAX = 40;                // saqlanadigan zakaslar soni (eng eskisi tashlanadi)
 const ZAKAS_PANEL = '<div class="gul-zakas" data-dtl="zakasBox">'
   + '<div class="gul-zakas-head"><span>Zakasdagi gullar <span class="dtl-cnt" data-dtl="zakasCnt"></span></span>'
@@ -180,7 +203,7 @@ function buildTemplate(V) {
   return `
   <div class="chz-toolbar">
     <span class="chz-tglbl">Asbob:</span>
-    <button type="button" class="tool etool" data-tool="select" title="Tanlash — bosing yoki ramka torting; uchlarini (grip) sudrab o'zgartiring; chiziqqa 2 marta bosing — uzunlik/burchak tahriri">&#10530; Tanlash</button>
+    <button type="button" class="tool etool" data-tool="select" title="Tanlash — bosing (har bosish qo'shiladi, Shift — olib tashlash, bo'sh joy/Esc — bo'shatish) yoki ramka torting; uchlarini (grip) sudrab o'zgartiring; chiziqqa 2 marta bosing — uzunlik/burchak tahriri">&#10530; Tanlash</button>
     <button type="button" class="tool etool" data-tool="pline" title="Chiziq — boshlang'ich nuqtani bosing, so'ng uzunlik (sm) va burchak (°) yozib Enter bosing. Esc — tugatish, C — konturni yopish">&#9998; Chiziq</button>
     <button type="button" class="tool etool" data-tool="rect" title="To'rtburchak — burchakni bosing; eni/bo'yini yozing yoki qarama-qarshi burchakni bosing">&#9645; To'rtburchak</button>
     <button type="button" class="tool etool" data-tool="circle" title="Aylana — markazni bosing; radiusni yozing yoki bosing">&#9711; Aylana</button>
@@ -202,6 +225,10 @@ function buildTemplate(V) {
     <button type="button" class="tool" data-dtl="btnRedo" title="Ctrl+Y">&#8631; Oldinga</button>
     <button type="button" class="tool" data-dtl="btnClear" title="Butun chizmani tozalash (Orqaga bilan qaytariladi)">&#10005; Tozalash</button>
     <button type="button" class="tool" data-dtl="btnFit" title="Chizma chegarasigacha avtozoom — Ctrl+E">&#10530; Markazga</button>
+    <span class="chz-cmdwrap" data-dtl="cmdWrap">
+      <input class="chz-cmd" data-dtl="cmd" placeholder="Buyruq: chiziq, L, yoy, O…" autocomplete="off" spellcheck="false" title="Buyruqni yozib qidiring (o'zbekcha nomi yoki AutoCAD qisqartmasi) — maydon ustida harf bossangiz o'zi tushadi" />
+      <div class="chz-cmdlist" data-dtl="cmdList"></div>
+    </span>
     <span class="chz-scale" data-dtl="scaleInfo"></span>
   </div>
   <div class="chz-edittoolbar dtl-optbar">
@@ -266,7 +293,7 @@ function buildTemplate(V) {
         <label class="dtl-gap">Proyeksiyalar oralig'i <input data-dtl="projGap" type="text" inputmode="decimal" data-num="pos" /> <i data-dtl="projGapUnit">sm</i></label>
       </div>
       </div>
-      ${V.multiOffset ? OFFSET_PANEL : ''}
+      ${V.autoOffset ? OFFSET_PANEL : ''}
       <h3 class="dtl-h3">Hisob <span class="dtl-cnt" data-dtl="stScope"></span></h3>
       <div class="chz-stat lines"><span class="lbl">Yoyilma (umumiy uzunlik):</span><span class="val" data-dtl="stTotal">&mdash;</span></div>
       <div class="chz-stat kazirok"><span class="lbl">Gabarit (eni &times; bo'yi):</span><span class="val" data-dtl="stBox">&mdash;</span></div>
@@ -293,7 +320,7 @@ function buildTemplate(V) {
         &bull; <b>Holat paneli</b> (pastda, AutoCAD'dek): <b>SNAP</b> (F9) — to'r tugunlariga; <b>GRID</b> (F7, qadam ▾); <b>ORTHO</b> (F8); <b>POLAR</b> (F10, burchak qadami ▾); <b>OSNAP</b> (F3, magnit rejimlari ▾: uch nuqta, o'rta, markaz, kvadrant, kesishma, perpendikulyar, tangens, eng yaqin, davomi — belgi shakli AutoCAD'dek); <b>OTRACK</b> (F11) — nuqta ustida biroz turing, undan gorizontal/vertikal/polar kuzatish chiziqlari chiqadi, ikki chiziq kesishmasiga ham yopishadi; <b>DYN</b> (F12) — kiritish qutisi.<br>
         &bull; <b>Yoyilma</b> — barcha segmentlar yig'indisi (profil uchun list eni). <b>Surish</b>: o'rta/o'ng tugma; g'ildirak — zoom; <b>Ctrl+E</b> — markazga.<br>
         <span${V.proj ? '' : ' hidden'}>&bull; <b>3 proyeksiya</b> (chizma geometriya): yoqilsa maydon <b>OLD (V)</b> chap-yuqori, <b>USTDAN (H)</b> chap-past, <b>YON (W)</b> o'ng-yuqori kvadrantlarga bo'linadi; 45° buklash chizig'i H↔W chuqurligini bog'laydi. Ikkita proyeksiyani chizing (masalan H da 15 sm, W da 25 sm kesma) — <b>hosil qilish</b> tugmasi uchinchisini (15×25 to'rtburchak, qayirma chiziqlari bilan) chizadi; keyin uni oddiy chizmadek tahrirlang. Chizganda kursor boshqa proyeksiyalardagi uchlarning <b>bog'lanish chiziqlariga</b> yopishadi ("Proyeksiya" maslahati). Burchakdagi kvadratchani sudrab proyeksiyalarni suring.<br></span>
-        ${V.multiOffset ? OFFSET_HINT : ''}
+        ${V.autoOffset ? OFFSET_HINT : ''}
         ${ARC_HINT}
         &bull; <b>Saqlash</b> — nomlab kutubxonaga (${V.saveEx}...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
       </div>
@@ -340,10 +367,12 @@ export function mountDetal(root, opts) {
     track: { hover: null, acq: [] },  // OTRACK: nuqta ustida turib "olingan" nuqtalar
     snapRes: null,                    // oxirgi resolveSnap natijasi (belgi, kuzatish chiziqlari, maslahat)
     proj: { on: false, sepX: 300, sepY: 300, gap: 100, guides: true, links: true },   // 3 proyeksiya (V old · H ustdan · W yon)
-    offN: 1,               // Gul rejimi: Offset asbobi nechta parallel nusxa tashlaydi (yon panel)
+    autoOff: AUTO_OFF_DEF, // Gul rejimi: yopiq kontur ichkariga avtomatik ofset masofasi (mm)
+    autoEnts: [],          // hisoblangan avto-ofset konturlari (id'siz, chizmaga kirmaydi — jonli)
+    lastTool: 'pline',     // Enter/Tab bilan takrorlanadigan oxirgi asbob (AutoCAD)
     arcMethod: '3p',       // yoy chizish usuli (oxirgi tanlangan, ARC_METHODS)
     cont: null,            // «Davom ettirish» uchun oxirgi chiziq/yoy uchi {x, y, ang — tangens yo'nalishi}
-    zakas: { active: 0, items: [] },   // Gul rejimi: shu zakasdagi gullar [{id,name,ents,offN,t}], faoli = ishchi holat
+    zakas: { active: 0, items: [] },   // Gul rejimi: shu zakasdagi gullar [{id,name,ents,autoOff,t}], faoli = ishchi holat
     name: '',
     lib: [],               // saqlangan detallar [{id,name,ents,t}]
     cursor: { x: 0, y: 0 },   // world (snap/cheklov qo'llangan)
@@ -628,21 +657,33 @@ export function mountDetal(root, opts) {
     q('projInfo').innerHTML = ['V', 'H', 'W'].map((v) => '<span><b>' + VIEW_NOMI[v] + '</b>: ' + c[v] + (c[v] ? ' <button type="button" data-act="clear" data-view="' + v + '" title="' + VIEW_NOMI[v] + ' ni tozalash">&#10005;</button>' : '') + '</span>').join('');
     q('genV').disabled = !(c.H && c.W); q('genH').disabled = !(c.V && c.W); q('genW').disabled = !(c.V && c.H);
   }
-  /* ---------------- OFSETLAR SONI (Gul rejimi: «Nechta ofset tashlansin») ---------------- */
-  function sanitizeOffN(v) { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(1, Math.min(OFF_MAX, n)) : 1; }
-  function setOffN(v) {
-    state.offN = sanitizeOffN(v);
-    syncOffUI(true); saveLS();
-    if (state.tool === 'offset' && !state.draft) setInfo(toolHint('offset'));
-    render();
+  /* ---------------- AVTOMATIK ICHKI OFSET (Gul rejimi) ----------------
+     Yopiq zanjirlar (uchlari tutashgan chiziq/yoylar — xuddi join qilingandek) va aylanalar uchun
+     state.autoOff (mm) masofada ichkariga parallel kontur hisoblanadi (state.autoEnts, id'siz);
+     har o'zgarishda (afterChange) qayta hisoblanadi — jonli. */
+  function sanitizeAutoOff(v) { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(AUTO_OFF_MAX, n)) : AUTO_OFF_DEF; }
+  function setAutoOff(mm) {
+    state.autoOff = sanitizeAutoOff(mm);
+    syncOffUI(true); computeAutoOff(); saveLS(); render();
   }
   // force — maydon fokusda bo'lsa ham qiymat yoziladi (o'zgartirishdan keyin)
   function syncOffUI(force) {
-    if (!V.multiOffset) return;
-    const inp = q('offCount');
-    if (force || document.activeElement !== inp) inp.value = String(state.offN);
-    q('offMinus').disabled = state.offN <= 1;
-    q('offPlus').disabled = state.offN >= OFF_MAX;
+    if (!V.autoOffset) return;
+    const inp = q('autoOff');
+    if (force || document.activeElement !== inp) inp.value = fmtNum(state.autoOff / U(), 2);
+    q('autoOffUnit').textContent = UNIT_LABEL[state.unit];
+    q('offMinus').disabled = state.autoOff <= 0;
+  }
+  function computeAutoOff() {
+    state.autoEnts = [];
+    if (!V.autoOffset || !(state.autoOff > 0)) return;
+    const D = state.autoOff;
+    for (const ch of buildChains(state.ents)) {
+      if (!ch.closed) continue;
+      const ps = offsetChainInward(ch, D);
+      if (ps) state.autoEnts.push(...piecesToEnts(ps, true));
+    }
+    for (const e of state.ents) if (e.type === 'circle' && e.r - D > 1e-6) state.autoEnts.push({ type: 'circle', cx: e.cx, cy: e.cy, r: e.r - D });
   }
   // Joriy asbob uchun cheklov tayanch nuqtasi (rubber-band boshi)
   function anchorPoint() {
@@ -701,10 +742,10 @@ export function mountDetal(root, opts) {
   function openBox(cfg) {
     state.box = cfg;
     syncBoxLabels();
-    if (!state.snapSet.dyn) { inputBox.classList.remove('show'); return; }   // DYN o'chiq — faqat sichqoncha bilan
-    inputBox.classList.add('show');
     in1.value = (cfg.f1 && cfg.f1.val != null) ? String(cfg.f1.val) : '';
     in2.value = (cfg.f2 && cfg.f2.val != null) ? String(cfg.f2.val) : '';
+    if (!state.snapSet.dyn) { inputBox.classList.remove('show'); return; }   // DYN o'chiq — faqat sichqoncha bilan (maydonlar tozalangan)
+    inputBox.classList.add('show');
     positionBox();
     const first = cfg.f1 ? in1 : in2;
     first.focus(); first.select();
@@ -746,7 +787,7 @@ export function mountDetal(root, opts) {
   /* ---------------- ASBOBLAR ---------------- */
   function toolHint(t) {
     const m = {
-      select: "Tanlash: element ustiga bosing yoki ramka torting (Shift — qo'shish); chiziqqa 2 marta bosing — uzunlik/burchak tahriri",
+      select: "Tanlash: element ustiga bosing — har bosish qo'shiladi (AutoCAD); Shift — olib tashlash; bo'sh joy yoki Esc — bo'shatish; ramka torting; chiziqqa 2 marta bosing — uzunlik/burchak tahriri",
       pline: "Chiziq: boshlang'ich nuqtani bosing (yoki «0,0 dan boshlash»), so'ng uzunlik + burchak yozib Enter",
       rect: "To'rtburchak: birinchi burchakni bosing",
       circle: 'Aylana: markazni bosing',
@@ -757,7 +798,7 @@ export function mountDetal(root, opts) {
       rotate: 'Burish: tayanch nuqtani bosing',
       mirror: "Aks: o'qning 1-nuqtasini bosing",
       scale: 'Masshtab: tayanch nuqtani bosing',
-      offset: V.multiOffset ? 'Offset: chiziq yoki aylanani bosing — ' + state.offN + ' ta parallel nusxa tashlanadi (soni yon panelda)' : 'Offset: chiziq yoki aylanani bosing',
+      offset: V.joinOffset ? 'Offset: chiziq, yoy yoki aylanani bosing — uchlari tutashgan elementlar bitta kontur (join) sifatida' : 'Offset: chiziq yoki aylanani bosing',
       erase: "O'chirish: element ustiga bosing",
     };
     return m[t] || '';
@@ -767,6 +808,7 @@ export function mountDetal(root, opts) {
     if (!TOOLS.includes(t)) return;
     cancelDraft(true);
     state.tool = t;
+    if (t !== 'select') state.lastTool = t;   // Enter/Tab bilan takrorlash uchun
     if (MODIFY.includes(t) && !state.sel.size) setInfo("Avval element(lar)ni «Tanlash» asbobi bilan belgilang, so'ng tayanch nuqtani bosing");
     else setInfo(toolHint(t));
     if (t === 'arc') arcAutoStart();
@@ -1014,9 +1056,10 @@ export function mountDetal(root, opts) {
     const a = arcBuild(d, param, state.cursor);
     if (!a) {
       const M = ARC_BY_KEY[d.method], lastPt = M.steps[M.steps.length - 1][0] === 'pt';
-      setInfo("Yoy hosil bo'lmadi — nuqtalar bir chiziqda yoki qiymat mos emas (masalan radius vatarning yarmidan kichik, vatar diametrdan katta)" + (lastPt ? ' — oxirgi nuqtani qaytadan bosing' : ''));
       // Oxirgi qadam nuqta bo'lsa uni qaytaramiz — qayta bosish mumkin (draft qotib qolmaydi)
       if (lastPt && d.pts.length >= M.steps.length) { d.pts.pop(); arcOpenBox(); render(); }
+      // Xato xabari qutining maslahatidan KEYIN — ko'rinib qolsin
+      setInfo("Yoy hosil bo'lmadi — nuqtalar bir chiziqda yoki qiymat mos emas (masalan radius vatarning yarmidan kichik, vatar diametrdan katta)" + (lastPt ? ' — oxirgi nuqtani qaytadan bosing' : ''));
       return;
     }
     pushHistory();
@@ -1100,7 +1143,7 @@ export function mountDetal(root, opts) {
   /* ---- Offset — parallel nusxa (geometriya: src/lib/offsetGeom.js) ----
      Gul rejimida yon paneldagi son bo'yicha N ta nusxa: masofa, 2×masofa, … N×masofa
      (aylana radiusi tugasa to'xtaydi). Detal rejimida har doim 1 ta. */
-  function offsetCount() { return V.multiOffset ? state.offN : 1; }
+  function offsetCount() { return 1; }   // qo'lda ofset — bitta nusxa (AutoCAD); avto-ofset yon panelda
   // Bitta qadam (ishorali, mm) — tomon kursordan (raw — yopishtirilmagan world nuqta);
   // masofa: qutida yozilgan > Enter bilan kiritilgan > kursorgacha masofa
   function offsetStep(e, raw) {
@@ -1507,6 +1550,13 @@ export function mountDetal(root, opts) {
       else if (e.type === 'circle' && state.showLen) { const c = w2s(e.cx, e.cy); label(target, c.x, c.y - e.r * view.scale - 12 * m, 'R ' + fmtLen(e.r), PP.text, 11, PP); }
       else if (e.type === 'arc') paintArcLabels(target, e, w2s, PP, !exportMode && state.sel.has(e.id));
     }
+    // 2b) avtomatik ichki ofset konturi (Gul rejimi) — binafsha, eksportga ham kiradi
+    for (const g of state.autoEnts || []) {
+      const at = { stroke: PP.offset, 'stroke-width': 1.5 * m, fill: 'none', 'stroke-linejoin': 'round', 'pointer-events': 'none' };
+      if (g.type === 'pline') target.appendChild(svgEl(g.closed && g.pts.length > 2 ? 'polygon' : 'polyline', Object.assign({ points: ptsAttr(g.pts, w2s) }, at)));
+      else if (g.type === 'arc') target.appendChild(svgEl('path', Object.assign({ d: arcSvgPath(g, w2s, view.scale) }, at)));
+      else if (g.type === 'circle') { const c = w2s(g.cx, g.cy); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: g.r * view.scale }, at))); }
+    }
     if (exportMode) return;
     if (state.proj.on && state.proj.links) paintProjLinks(target, w2s, W, H, PP);
     // 3) chizilayotgan (jonli)
@@ -1527,7 +1577,7 @@ export function mountDetal(root, opts) {
     paint(svg, { scale: state.scale, panX: state.panX, panY: state.panY }, r.width, r.height, false);
     positionBox(); updateScaleInfo(); saveLS();
   }
-  function afterChange() { render(); updatePanel(); }
+  function afterChange() { computeAutoOff(); render(); updatePanel(); }
 
   /* ---------------- YON PANEL: hisob, segmentlar jadvali, kutubxona ---------------- */
   function activePline() {
@@ -1600,7 +1650,7 @@ export function mountDetal(root, opts) {
     if (!state.ents.length) { setInfo("Chizma bo'sh — saqlash uchun avval chizing"); return; }
     if (!name) { name = V.autoName + ' ' + (state.lib.length + 1); q('nameInput').value = name; }
     state.name = name;
-    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), proj: JSON.parse(JSON.stringify(state.proj)), offN: state.offN, t: Date.now() };
+    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), proj: JSON.parse(JSON.stringify(state.proj)), autoOff: state.autoOff, t: Date.now() };
     const idx = state.lib.findIndex((x) => String(x.name).toLowerCase() === name.toLowerCase());
     if (idx >= 0) { item.id = state.lib[idx].id; state.lib[idx] = item; } else state.lib.unshift(item);
     saveLib(); renderLib(); saveLS();
@@ -1613,7 +1663,7 @@ export function mountDetal(root, opts) {
     state.nextId = Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1;
     state.name = it.name; q('nameInput').value = it.name;
     if (it.proj && V.proj) state.proj = sanitizeProj(it.proj);
-    if (V.multiOffset && it.offN != null) state.offN = sanitizeOffN(it.offN);
+    if (V.autoOffset && it.autoOff != null) state.autoOff = sanitizeAutoOff(it.autoOff);
     state.sel.clear();
     afterChange(); centerView();
     setInfo(`«${it.name}» ochildi`);
@@ -1629,13 +1679,17 @@ export function mountDetal(root, opts) {
   /* ---------------- EKSPORT: DXF / PNG ---------------- */
   function buildDxf() {
     const num = (v) => (Math.round(v * 1000) / 1000).toString();
-    let out = '';
-    const L = (x1, y1, x2, y2) => { out += '0\nLINE\n8\nDETAL\n10\n' + num(x1) + '\n20\n' + num(-y1) + '\n30\n0\n11\n' + num(x2) + '\n21\n' + num(-y2) + '\n31\n0\n'; };
-    for (const e of state.ents) {
-      if (e.type === 'pline') { for (const s of plineSegs(e)) if (dist(s.a, s.b) > 1e-6) L(s.a.x, s.a.y, s.b.x, s.b.y); }
-      else if (e.type === 'circle') out += '0\nCIRCLE\n8\nDETAL\n10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n';
-      else if (e.type === 'arc') out += '0\nARC\n8\nDETAL\n10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n50\n' + num(e.a0) + '\n51\n' + num(e.a1) + '\n';
-    }
+    let out = '', lay = 'DETAL';
+    const L = (x1, y1, x2, y2) => { out += '0\nLINE\n8\n' + lay + '\n10\n' + num(x1) + '\n20\n' + num(-y1) + '\n30\n0\n11\n' + num(x2) + '\n21\n' + num(-y2) + '\n31\n0\n'; };
+    const emit = (ents) => {
+      for (const e of ents) {
+        if (e.type === 'pline') { for (const s of plineSegs(e)) if (dist(s.a, s.b) > 1e-6) L(s.a.x, s.a.y, s.b.x, s.b.y); }
+        else if (e.type === 'circle') out += '0\nCIRCLE\n8\n' + lay + '\n10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n';
+        else if (e.type === 'arc') out += '0\nARC\n8\n' + lay + '\n10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n50\n' + num(e.a0) + '\n51\n' + num(e.a1) + '\n';
+      }
+    };
+    emit(state.ents);
+    lay = 'OFSET'; emit(state.autoEnts || []);   // avtomatik ichki ofset — alohida qatlam
     return '0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n' + out + '0\nENDSEC\n0\nEOF\n';
   }
   function exportDxf() {
@@ -1715,7 +1769,7 @@ export function mountDetal(root, opts) {
         ents: state.ents, nextId: state.nextId, unit: state.unit, angMode: state.angMode, tool: state.tool,
         showLen: state.showLen, showAng: state.showAng,
         scale: state.scale, panX: state.panX, panY: state.panY, name: state.name,
-        proj: state.proj, offN: state.offN, arcMethod: state.arcMethod,
+        proj: state.proj, autoOff: state.autoOff, arcMethod: state.arcMethod,
       }));
     } catch (e) { /* noop */ }
     zakasSave();
@@ -1738,7 +1792,7 @@ export function mountDetal(root, opts) {
       state.name = o.name || '';
       state.proj = sanitizeProj(o.proj);
       if (!V.proj) state.proj.on = false;   // Gul rejimida proyeksiyalar yo'q
-      state.offN = sanitizeOffN(o.offN == null ? 1 : o.offN);
+      state.autoOff = o.autoOff == null ? AUTO_OFF_DEF : sanitizeAutoOff(o.autoOff);
       if (ARC_BY_KEY[o.arcMethod]) state.arcMethod = o.arcMethod;
       return true;
     } catch (e) { return false; }
@@ -1890,15 +1944,15 @@ export function mountDetal(root, opts) {
     const { sx, sy } = evScreen(e);
     const bs = boxSel; boxSel = null; selBoxEl.style.display = 'none';
     if (!bs.moved) {
-      if (!bs.additive) state.sel.clear();
+      // AutoCAD (PICKADD): har bosish tanlovga QO'SHILADI; Shift+bosish — olib tashlaydi; bo'sh joyga bosish — bo'shatadi (Esc kabi)
       if (bs.candidate) {
         const id = bs.candidate.ent.id;
         if (bs.additive && state.sel.has(id)) state.sel.delete(id); else state.sel.add(id);
-      }
+      } else if (!bs.additive) state.sel.clear();
     } else {
       const r = { x1: Math.min(bs.sx, sx), y1: Math.min(bs.sy, sy), x2: Math.max(bs.sx, sx), y2: Math.max(bs.sy, sy) };
       const crossing = sx < bs.sx;
-      if (!bs.additive) state.sel.clear();
+      // Ramka ham tanlovga qo'shadi (AutoCAD); Shift+ramka — olib tashlaydi
       for (const ent of state.ents) {
         const vs = (ent.type === 'arc' ? arcSamples(ent, 24) : entVerts(ent)).map((p) => worldToScreen(p.x, p.y));
         let hit = vs.length > 0 && vs.every((s) => pointInRect(s.x, s.y, r));
@@ -1907,7 +1961,7 @@ export function mountDetal(root, opts) {
           for (let i = 0; !hit && i < vs.length - 1; i++) hit = segIntersectsRect(vs[i], vs[i + 1], r);
           if (!hit && ent.type === 'pline' && ent.closed && vs.length > 2) hit = segIntersectsRect(vs[vs.length - 1], vs[0], r);
         }
-        if (hit) state.sel.add(ent.id);
+        if (hit) { if (bs.additive) state.sel.delete(ent.id); else state.sel.add(ent.id); }
       }
     }
     render(); renderTable();
@@ -1933,7 +1987,18 @@ export function mountDetal(root, opts) {
       else if (state.sel.size) { e.preventDefault(); state.sel.clear(); render(); renderTable(); }
       return;
     }
-    if (e.key === 'Enter' && state.draft && state.draft.tool === 'pline') { e.preventDefault(); finishPline(false); return; }
+    if (e.key === 'Enter' || e.key === 'Tab') {   // AutoCAD: buyruqni tugatish; bo'sh joyda → Tanlash, yana bossa → oxirgi asbob
+      e.preventDefault();
+      if (state.draft && state.draft.tool === 'pline') { finishPline(false); return; }
+      if (state.draft) { cancelCurrent(); return; }
+      if (state.tool !== 'select') setTool('select');
+      else if (state.lastTool && TOOLS.includes(state.lastTool)) setTool(state.lastTool);
+      return;
+    }
+    // Chiziq chizilayotganda C — konturni yopish (AutoCAD LINE → Close)
+    if (state.draft && state.draft.tool === 'pline' && (e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) { e.preventDefault(); finishPline(true); return; }
+    // Harf bosilsa — buyruq qidirish maydoniga tushadi (AutoCAD buyruq satri kabi)
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && /[a-zA-Z0-9']/.test(e.key)) { e.preventDefault(); cmdOpen(e.key); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel.size && !state.draft) { e.preventDefault(); eraseSelected(); return; }
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
@@ -1982,28 +2047,30 @@ export function mountDetal(root, opts) {
   on(q('projGap'), 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
   for (const v of ['V', 'H', 'W']) on(q('gen' + v), 'click', (e) => genClick(v, e.currentTarget));
   on(q('projInfo'), 'click', (e) => { const b = e.target.closest('button[data-act="clear"]'); if (b) clearView(b.dataset.view); });
-  // Gul rejimi: nechta ofset tashlansin (− / son / +, ↑↓ bilan ham)
-  if (V.multiOffset) {
-    on(q('offMinus'), 'click', () => setOffN(state.offN - 1));
-    on(q('offPlus'), 'click', () => setOffN(state.offN + 1));
-    on(q('offCount'), 'change', (e) => setOffN(sonQiymat(e.target.value)));
-    on(q('offCount'), 'keydown', (e) => {
+  // Gul rejimi: avtomatik ichki ofset masofasi (− / sm / +, ↑↓ bilan ham; 0 — o'chiq)
+  if (V.autoOffset) {
+    const STEP = 5;   // mm — 0.5 sm
+    on(q('offMinus'), 'click', () => setAutoOff(state.autoOff - STEP));
+    on(q('offPlus'), 'click', () => setAutoOff(state.autoOff + STEP));
+    on(q('autoOff'), 'change', (e) => setAutoOff(sonQiymat(e.target.value) * U()));
+    on(q('autoOff'), 'keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setOffN(state.offN + 1); }
-      else if (e.key === 'ArrowDown') { e.preventDefault(); setOffN(state.offN - 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setAutoOff(state.autoOff + STEP); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setAutoOff(state.autoOff - STEP); }
     });
   }
+
   /* ---------------- ZAKASDAGI GULLAR (Gul rejimi) ----------------
-     localStorage ZAKAS_KEY: { [zakasKey]: { active, items:[{id,name,ents,offN,t}], t } }.
-     Faol gul = ishchi holat (state.ents / name / offN); har saqlashda ro'yxatga qaytariladi. */
+     localStorage ZAKAS_KEY: { [zakasKey]: { active, items:[{id,name,ents,autoOff,t}], t } }.
+     Faol gul = ishchi holat (state.ents / name / autoOff); har saqlashda ro'yxatga qaytariladi. */
   function zakasReadAll() { try { const o = JSON.parse(localStorage.getItem(ZAKAS_KEY) || 'null'); return o && typeof o === 'object' && !Array.isArray(o) ? o : null; } catch (e) { return null; } }
-  function zakasBlank() { return { id: Date.now() + Math.floor(Math.random() * 1000), name: '', ents: [], offN: state.offN, t: Date.now() }; }
+  function zakasBlank() { return { id: Date.now() + Math.floor(Math.random() * 1000), name: '', ents: [], autoOff: state.autoOff, t: Date.now() }; }
   function zakasLoad() {
     if (!V.zakas) return;
     const all = zakasReadAll(), ent = all && all[zakasKey];
     const items = ent && Array.isArray(ent.items) ? ent.items.filter((it) => it && Array.isArray(it.ents)) : [];
     if (items.length) {
-      state.zakas.items = items.map((it) => ({ id: it.id || Date.now(), name: String(it.name || ''), ents: it.ents, offN: sanitizeOffN(it.offN == null ? 1 : it.offN), t: it.t || 0 }));
+      state.zakas.items = items.map((it) => ({ id: it.id || Date.now(), name: String(it.name || ''), ents: it.ents, autoOff: it.autoOff == null ? AUTO_OFF_DEF : sanitizeAutoOff(it.autoOff), t: it.t || 0 }));
       state.zakas.active = Math.min(Math.max(0, ent.active | 0), state.zakas.items.length - 1);
       zakasApply();
       return;
@@ -2020,13 +2087,13 @@ export function mountDetal(root, opts) {
     state.ents = JSON.parse(JSON.stringify(it.ents || [])).filter((e) => e && e.type);
     state.nextId = Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1;
     state.name = it.name || ''; q('nameInput').value = state.name;
-    state.offN = sanitizeOffN(it.offN == null ? 1 : it.offN);
+    state.autoOff = it.autoOff == null ? AUTO_OFF_DEF : sanitizeAutoOff(it.autoOff);
     state.sel.clear(); state.hist.length = 0; state.redo.length = 0; state.cont = null;
   }
   // Ishchi holatdan faol gulga (saqlashdan / almashishdan oldin)
   function zakasSyncActive() {
     const it = state.zakas.items[state.zakas.active]; if (!it) return;
-    it.name = state.name; it.ents = JSON.parse(JSON.stringify(state.ents)); it.offN = state.offN; it.t = Date.now();
+    it.name = state.name; it.ents = JSON.parse(JSON.stringify(state.ents)); it.autoOff = state.autoOff; it.t = Date.now();
   }
   function zakasSave() {
     if (!V.zakas || !state.zakas.items.length) return;
@@ -2120,6 +2187,64 @@ export function mountDetal(root, opts) {
   });
   on(document, 'mousedown', (e) => { if (arcMenu.classList.contains('show') && !q('arcWrap').contains(e.target)) showArcMenu(false); });
 
+  /* ---------------- BUYRUQ QIDIRISH (AutoCAD buyruq satri, o'zbekcha) ----------------
+     Asbob nomi yoki AutoCAD qisqartmasini yozing — ro'yxatdan tanlab Enter. Maydon ustida harf
+     bosilsa o'zi ochiladi. */
+  const cmdInput = q('cmd'), cmdList = q('cmdList');
+  let cmdSel = 0;
+  const cmdNorm = (s) => String(s || '').toLowerCase().replace(/[‘’ʻʼ`]/g, "'").trim();
+  function cmdAll() {
+    const base = CMDS.slice();
+    for (const M of ARC_METHODS) base.push({ id: 'arc:' + M.key, nomi: 'Yoy — ' + M.nomi, al: [] });
+    return base;
+  }
+  function cmdMatches(qs) {
+    const s = cmdNorm(qs); if (!s) return [];
+    const toks = s.split(/\s+/).filter(Boolean);   // bir nechta so'z — hammasi nom yoki qisqartmada uchrasin («yoy 3», «boshi markaz»)
+    const score = (c) => {
+      const nm = cmdNorm(c.nomi), als = c.al.map(cmdNorm), hay = nm + ' ' + als.join(' ');
+      if (als.includes(s)) return 0;
+      if (als.some((a) => a.startsWith(s))) return 1;
+      if (nm.startsWith(s)) return 2;
+      if (nm.includes(s)) return 3;
+      if (als.some((a) => a.includes(s))) return 4;
+      if (toks.length > 1 && toks.every((t) => hay.includes(t))) return 5;
+      return -1;
+    };
+    return cmdAll().map((c) => ({ c, sc: score(c) })).filter((x) => x.sc >= 0).sort((a, b) => a.sc - b.sc).slice(0, 9).map((x) => x.c);
+  }
+  function renderCmdList() {
+    const list = cmdMatches(cmdInput.value);
+    if (!list.length) { cmdList.classList.remove('show'); cmdList.innerHTML = ''; return; }
+    cmdSel = Math.max(0, Math.min(cmdSel, list.length - 1));
+    cmdList.innerHTML = list.map((c, i) => '<div class="chz-cmditem' + (i === cmdSel ? ' on' : '') + '" data-cmd="' + c.id + '"><span>' + escHtml(c.nomi) + '</span><b>' + escHtml(c.al.join(', ')) + '</b></div>').join('');
+    cmdList.classList.add('show');
+  }
+  function cmdOpen(ch) { cmdInput.value = ch || ''; cmdSel = 0; cmdInput.focus(); renderCmdList(); }
+  function cmdClose() { cmdInput.value = ''; cmdList.classList.remove('show'); cmdList.innerHTML = ''; cmdInput.blur(); }
+  function runCmd(id) {
+    cmdClose();
+    if (!id) return;
+    if (id === '#undo') return undo();
+    if (id === '#redo') return redo();
+    if (id === '#fit') return centerView();
+    if (id === '#clear') return q('btnClear').click();
+    if (id === '#start0') return start0();
+    if (id.startsWith('arc:')) { const k = id.slice(4); if (ARC_BY_KEY[k]) { state.arcMethod = k; renderArcMenu(); saveLS(); } setTool('arc'); return; }
+    if (TOOLS.includes(id)) setTool(id);
+  }
+  on(cmdInput, 'input', () => { cmdSel = 0; renderCmdList(); });
+  on(cmdInput, 'focus', renderCmdList);
+  on(cmdInput, 'keydown', (e) => {
+    const list = cmdMatches(cmdInput.value);
+    if (e.key === 'ArrowDown') { e.preventDefault(); cmdSel = Math.min(cmdSel + 1, list.length - 1); renderCmdList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); cmdSel = Math.max(cmdSel - 1, 0); renderCmdList(); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); if (list.length) runCmd(list[cmdSel] ? list[cmdSel].id : list[0].id); else cmdClose(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cmdClose(); }
+  });
+  on(cmdList, 'mousedown', (e) => { e.preventDefault(); const it = e.target.closest('[data-cmd]'); if (it) runCmd(it.dataset.cmd); });
+  on(document, 'mousedown', (e) => { if (cmdList.classList.contains('show') && !q('cmdWrap').contains(e.target)) cmdClose(); });
+
   on(q('libList'), 'click', (e) => {
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const id = +b.dataset.id;
@@ -2162,6 +2287,7 @@ export function mountDetal(root, opts) {
   loadLib();
   loadStateLS();
   zakasLoad();
+  computeAutoOff();
   renderArcMenu();
   q('nameInput').value = state.name;
   setInfo(toolHint(state.tool));

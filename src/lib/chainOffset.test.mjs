@@ -5,7 +5,7 @@
 //  D > 0 — yurish yo'nalishining o'ng tomoni. Kutilgan qiymatlar mustaqil hisoblangan.
 // ============================================================
 import assert from 'node:assert/strict';
-import { unitOf, buildChains, chainOf, chainSide, offsetChain, piecesToEnts, offsetChainSeries, pieceStart, pieceEnd, pieceSweep, tangentAt, reversePiece } from './chainOffset.js';
+import { unitOf, buildChains, chainOf, chainSide, offsetChain, piecesToEnts, offsetChainSeries, pieceStart, pieceEnd, pieceSweep, tangentAt, reversePiece, chainInwardSign, offsetChainInward } from './chainOffset.js';
 import { offsetPlinePts } from './offsetGeom.js';
 
 let jami = 0, xato = 0;
@@ -79,6 +79,21 @@ test('chainSide: kvadrat — ichkari va tashqari qarama-qarshi ishorada (zanjir 
   assert.equal(chainSide(st, P(50, 25)).side, 1);
   const rr = chainSide(st, P(135, 25)); assert.equal(rr.side, -1); near(rr.nd, 10);
   assert.equal(chainSide(st, P(115, 25)).side, 1);
+});
+
+test('chainInwardSign: kvadrat (CCW zanjir) −1, stadion (CW) +1, oy (CCW) −1 — chainSide ichki nuqtasi bilan mos', () => {
+  const sq = buildChains(SQ4)[0], st = buildChains(STAD)[0], mo = buildChains(MOON)[0];
+  assert.equal(chainInwardSign(sq), chainSide(sq, P(50, 50)).side);
+  assert.equal(chainInwardSign(st), 1); assert.equal(chainInwardSign(st), chainSide(st, P(50, 25)).side);
+  assert.equal(chainInwardSign(mo), -1); assert.equal(chainInwardSign(mo), chainSide(mo, P(50, 20)).side);
+});
+test('offsetChainInward: ishorasiz masofa — har doim ichkariga (kvadrat 10..90; stadion r 20; oy r 40)', () => {
+  const sq = piecesToEnts(offsetChainInward(buildChains(SQ4)[0], 10), true)[0].pts.map((p) => p.x).sort((a, b) => a - b);
+  near(sq[0], 10); near(sq[3], 90);
+  const st = piecesToEnts(offsetChainInward(buildChains(STAD)[0], -5), true);   // manfiy berilsa ham ichkariga
+  for (const a of st.filter((e) => e.type === 'arc')) near(a.r, 20);
+  const mo = piecesToEnts(offsetChainInward(buildChains(MOON)[0], 10), true);
+  near(mo.find((e) => e.type === 'arc').r, 40);
 });
 
 console.log('\n— Ofset: faqat chiziqlar —');

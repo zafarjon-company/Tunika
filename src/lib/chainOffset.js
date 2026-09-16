@@ -245,6 +245,22 @@ export function piecesToEnts(pieces, closed) {
   return out;
 }
 
+// Yopiq zanjirning ICHKI tomoni: +1 — yurish yo'nalishining o'ng tomoni (ekranda soat mili bo'yicha
+// aylanish), −1 — chap tomoni. Bo'laklar (yoylar namunalanib) ko'pburchak yuzasi ishorasidan.
+export function chainInwardSign(chain) {
+  if (!chain || !chain.pieces.length) return 1;
+  const pts = [];
+  for (const p of chain.pieces) {
+    if (p.kind === 'seg') pts.push(p.a);
+    else { const n = 12, sw = pieceSweep(p); for (let k = 0; k < n; k++) pts.push(arcPt(p, p.ccw ? p.sa + sw * k / n : p.sa - sw * k / n)); }
+  }
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) { const u = pts[i], v = pts[(i + 1) % pts.length]; a += u.x * v.y - v.x * u.y; }
+  return a > 0 ? 1 : -1;   // y pastga: musbat yuza = ekranda soat mili bo'yicha → ichkari o'ng tomonda
+}
+// Yopiq zanjirni ichkariga |D| ga ofset qilish (Gul: avtomatik ichki kontur)
+export function offsetChainInward(chain, D) { return offsetChain(chain, chainInwardSign(chain) * Math.abs(D)); }
+
 // 1·step, 2·step, … n·step — har qadam uchun element xossalari massivi; sig'maganida to'xtaydi
 export function offsetChainSeries(chain, step, n = 1) {
   const out = [];

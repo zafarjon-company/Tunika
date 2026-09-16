@@ -205,21 +205,25 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   **DXF** import (mm/sm/m, $INSUNITS) va eksport (mm, LINE/CIRCLE/ARC), **PNG** rasm.
 - **Gul chizish** — gul / naqsh konturini Detal chizish bilan bir xil asboblar
   bilan chizish (`src/modullar/sotuv/gulEngine.js` → `detalEngine.js`,
-  variant `'gul'`, `VARIANTS` jadvali). Farqi — yon panelda **«Nechta ofset
-  tashlansin»** soni (1…50): **Offset** asbobi bitta masofa bilan shuncha
-  parallel kontur (masofa, 2×, 3×…) tashlaydi, tomonni bosishdan oldin jonli
-  ko'rinadi; aylana radiusi tugasa yoki kontur sig'masa to'xtaydi («qolgani
-  sig'madi»). Uchlari tutashgan (0.05 mm) chiziq va yoylar avtomatik BITTA
-  kontur (AutoCAD JOIN) sifatida ofset qilinadi — yopiq shakl butunlay
-  ichkariga/tashqariga (`src/lib/chainOffset.js`, `npm run test:chain`:
-  chiziq×chiziq, chiziq×yoy, yoy×yoy tutashmalari kesishtiriladi, silliq
-  (tangens) tutashmada surilgan uchlar o'zi tutashadi, yutilgan bo'laklar
-  tashlanadi). Geometriya `src/lib/offsetGeom.js` (`npm run test:offset`):
-  AutoCAD kabi ichkariga ofsetda yutilgan (teskari bo'lib qolgan) segmentlar
-  tashlab yuborilib qo'shnilari qayta kesishtiriladi (qisqa faska yo'qoladi),
-  hammasi yutilsa — sig'madi. Proyeksiyalar bo'limi bu rejimda yo'q. localStorage:
-  `gul-chizma-v1` (joriy), `gul-chizma-lib-v1` (kutubxona). Bu boshlanish —
-  gulga xos imkoniyatlar shu rejimga qo'shib boriladi.
+  variant `'gul'`, `VARIANTS` jadvali). Farqi — yon panelda **«Ofset (ichkariga)»**
+  masofasi (sm, default 2): chizmadagi shakl hamma tomondan yopiq bo'lsa (uchlari
+  0.05 mm ichida tutashgan chiziq va yoylar — xuddi AutoCAD JOIN qilingandek, yoki
+  aylana) shu masofada ichkariga parallel kontur **avtomatik, jonli** chiziladi
+  (binafsha), chizma yoki son o'zgarganda qayta hisoblanadi; chizmaga element
+  sifatida kirmaydi, DXF da alohida `OFSET` qatlami, PNG rasmda ham. 0 — o'chiq.
+  Qo'lda «Offset» asbobi ham tutashgan elementlarni bitta kontur sifatida ofset
+  qiladi (`src/lib/chainOffset.js`, `npm run test:chain`: chiziq×chiziq,
+  chiziq×yoy, yoy×yoy tutashmalari kesishtiriladi, silliq (tangens) tutashmada
+  surilgan uchlar o'zi tutashadi, yutilgan bo'laklar tashlanadi, kontur yorilsa —
+  sig'madi). Proyeksiyalar bo'limi bu rejimda yo'q. localStorage `gul-chizma-v1`
+  (joriy), `gul-chizma-lib-v1` (kutubxona). Gulga xos imkoniyatlar shu rejimga
+  qo'shib boriladi.
+- **AutoCAD klaviatura mantiqi** (Detal va Gul chizish): **Esc** — faqat joriy
+  buyruq/tanlovni bekor qiladi (to'liq ekrandan chiqarmaydi — «Kichraytirish»
+  tugmasi); **Enter / Tab** — buyruqni tugatadi, bo'sh joyda → Tanlash, yana
+  bosilsa → oxirgi asbob takrorlanadi; **harf bosilsa** buyruq qidirish maydoni
+  ochiladi — o'zbekcha nomi yoki AutoCAD qisqartmasi (L, C, A, M, CO, RO, MI,
+  SC, O, E, U, Z…), ↑↓ bilan tanlab Enter.
 - **Yoy (Arc)** — Detal va Gul chizishda «Yoy ▾» tugmasi: AutoCAD «Arc» menyusidagi
   11 usul o'zbekcha — 3 nuqta; Boshi, Markaz, Oxiri / Burchak / Vatar; Boshi, Oxiri,
   Burchak / Yo'nalish / Radius; Markaz, Boshi, Oxiri / Burchak / Vatar; Davom ettirish
