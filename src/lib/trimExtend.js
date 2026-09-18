@@ -112,7 +112,9 @@ export function trimAt(ents, target, w, segIdx) {
     const sw = arcSweep(target);
     const ds = circleAngles(c, target.r, cut, { a0: target.a0, sweep: sw });
     if (!ds.length) return { reason: "Kesuvchi chegara yo'q — yoy boshqa element bilan kesishmaydi" };
-    const dc = Math.min(sw, norm360(vecAng(w.x - c.x, w.y - c.y) - target.a0));
+    // Kursor burchagi yoy oralig'idan tashqarida bo'lsa — qaysi uchga yaqinroq: oxiridan keyin → sw, boshidan oldin → 0
+    let dc = norm360(vecAng(w.x - c.x, w.y - c.y) - target.a0);
+    if (dc > sw) dc = (dc - sw) < (360 - dc) ? sw : 0;
     let lo = 0, hi = sw;
     for (const d of ds) { if (d <= dc) lo = d; else { hi = d; break; } }
     const add = [];

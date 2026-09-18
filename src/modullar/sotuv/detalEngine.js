@@ -331,7 +331,7 @@ function buildTemplate(V) {
         <span${V.proj ? '' : ' hidden'}>&bull; <b>3 proyeksiya</b> (chizma geometriya): yoqilsa maydon <b>OLD (V)</b> chap-yuqori, <b>USTDAN (H)</b> chap-past, <b>YON (W)</b> o'ng-yuqori kvadrantlarga bo'linadi; 45° buklash chizig'i H↔W chuqurligini bog'laydi. Ikkita proyeksiyani chizing (masalan H da 15 sm, W da 25 sm kesma) — <b>hosil qilish</b> tugmasi uchinchisini (15×25 to'rtburchak, qayirma chiziqlari bilan) chizadi; keyin uni oddiy chizmadek tahrirlang. Chizganda kursor boshqa proyeksiyalardagi uchlarning <b>bog'lanish chiziqlariga</b> yopishadi ("Proyeksiya" maslahati). Burchakdagi kvadratchani sudrab proyeksiyalarni suring.<br></span>
         ${V.autoOffset ? OFFSET_HINT : ''}
         ${ARC_HINT}
-        &bull; <b>Ichki buyruqlar qatori</b> (asboblar ostida, AutoCAD variantlari): Chiziq — Yopish / Orqaga / Yoy (davomida); Aylana — Markaz+radius / Markaz+diametr / 2 nuqta / 3 nuqta; Nusxa — Rejim Ko'p/Bitta, Massiv; Burish, Masshtab — Nusxa (asli qoladi); Aks — Aslini o'chirish; Offset — Ko'p; <b>Massiv</b> — to'rtburchak (qator × ustun, oraliqlar) yoki qutbiy (markazni bosing, soni, to'ldirish burchagi — gul yaproqlari), jonli ko'rinish, «Bajarish» yoki Enter.<br>
+        &bull; <b>Ichki buyruqlar qatori</b> (asboblar ostida, AutoCAD variantlari): Chiziq — Yopish / Orqaga / Yoy (davomida); Aylana — Markaz+radius / Markaz+diametr / 2 nuqta / 3 nuqta; Nusxa — Rejim Ko'p/Bitta, Massiv; Ko'chirish, Burish, Masshtab — Nusxa (asli qoladi); Aks — Aslini o'chirish; Offset — Ko'p; <b>Massiv</b> — to'rtburchak (qator × ustun, oraliqlar) yoki qutbiy (markazni bosing, soni, to'ldirish burchagi — gul yaproqlari), jonli ko'rinish, «Bajarish» yoki Enter.<br>
         &bull; <b>Kesish</b> (TR) va <b>Uzaytirish</b> (EX) — AutoCAD tez rejimi: chegara tanlanmaydi, chizmadagi boshqa elementlar chegara. Kesishda olib tashlanadigan qismga bosing — eng yaqin kesishmalargacha o'chadi (kursor ostida qizil ko'rinadi; yopiq kontur ochiq polyline bo'lib qoladi, aylana yoyga aylanadi). Uzaytirishda chiziq/yoy uchiga yaqin bosing — yo'nalishidagi (yoy — aylanasi bo'ylab) eng yaqin elementgacha cho'ziladi.<br>
         &bull; <b>Saqlash</b> — nomlab kutubxonaga (${V.saveEx}...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
       </div>
@@ -392,8 +392,9 @@ export function mountDetal(root, opts) {
     box: null,                // dinamik kiritish qutisi konfiguratsiyasi
     grip: null,               // sudralayotgan grip {ent, kind, idx}
     hist: [], redo: [],
+    pointerIn: false,      // kursor chizma (asboblar, maydon, panel) ustidami — klaviatura buyruqlari shu holatda tutiladi
     // Asbob variantlari (AutoCAD buyruq variantlari — pastdagi ichki buyruqlar qatori)
-    opt: { circleMode: 'cr', copyMulti: true, rotateCopy: false, mirrorErase: false, scaleCopy: false, offsetMulti: false,
+    opt: { circleMode: 'cr', copyMulti: true, moveCopy: false, rotateCopy: false, mirrorErase: false, scaleCopy: false, offsetMulti: false,
       arr: { kind: 'polar', rows: 2, cols: 2, dr: 200, dc: 200, n: 6, fill: 360 } },
   };
 
@@ -803,7 +804,7 @@ export function mountDetal(root, opts) {
   /* ---------------- ASBOBLAR ---------------- */
   function toolHint(t) {
     const m = {
-      select: "Tanlash: element ustiga bosing — har bosish qo'shiladi (AutoCAD); Shift — olib tashlash; bo'sh joy yoki Esc — bo'shatish; ramka torting; chiziqqa 2 marta bosing — uzunlik/burchak tahriri",
+      select: "Tanlash: element ustiga bosing — har bosish qo'shiladi (AutoCAD); Shift+bosish — olib tashlash; bo'sh joy yoki Esc — bo'shatish; ramka torting; chiziqqa 2 marta bosing — uzunlik/burchak tahriri",
       pline: "Chiziq: boshlang'ich nuqtani bosing (yoki «0,0 dan boshlash»), so'ng uzunlik + burchak yozib Enter",
       rect: "To'rtburchak: birinchi burchakni bosing",
       circle: state.opt.circleMode === '2p' ? 'Aylana (2 nuqta): diametrning 1-uchini bosing' : (state.opt.circleMode === '3p' ? 'Aylana (3 nuqta): 1-nuqtani bosing' : 'Aylana (' + CIRCLE_MODES[state.opt.circleMode] + '): markazni bosing'),
@@ -1162,8 +1163,11 @@ export function mountDetal(root, opts) {
     const d = state.draft; if (!d) return;
     const base = d.base;
     pushHistory();
-    if (t === 'move') for (const e of selectedEnts()) mapEnt(e, (p) => ({ x: p.x + target.x - base.x, y: p.y + target.y - base.y }));
-    else if (t === 'copy') {
+    if (t === 'move') {   // variant «Nusxa»: asli qoladi, surilgan nusxa qo'shiladi
+      const src = state.opt.moveCopy ? selectedEnts().map(cloneEnt) : selectedEnts();
+      for (const e of src) mapEnt(e, (p) => ({ x: p.x + target.x - base.x, y: p.y + target.y - base.y }));
+      if (state.opt.moveCopy) { state.ents.push(...src); state.sel.clear(); for (const e of src) state.sel.add(e.id); }
+    } else if (t === 'copy') {
       const cl = selectedEnts().map(cloneEnt);
       for (const c of cl) mapEnt(c, (p) => ({ x: p.x + target.x - base.x, y: p.y + target.y - base.y }));
       state.ents.push(...cl);
@@ -1184,7 +1188,7 @@ export function mountDetal(root, opts) {
       state.ents.push(...cl);
     }
     state.draft = null; closeBox();
-    if (t === 'copy' && state.opt.copyMulti) { state.draft = { tool: 'copy', base: { x: target.x, y: target.y } }; openModifyBox('copy', state.draft.base); setInfo("Yana nusxa (rejim: Ko'p): joyni bosing yoki masofa + burchak; Esc — tugatish"); }
+    if (t === 'copy' && state.opt.copyMulti) { state.draft = { tool: 'copy', base: { x: base.x, y: base.y } }; /* tayanch ASL nuqtada qoladi (AutoCAD) */ openModifyBox('copy', state.draft.base); setInfo("Yana nusxa (rejim: Ko'p): joyni bosing yoki masofa + burchak; Esc — tugatish"); }
     afterChange();
   }
 
@@ -1235,6 +1239,7 @@ export function mountDetal(root, opts) {
 
   /* ---- Massiv (ARRAY): to'rtburchak (qator × ustun) va qutbiy (markaz atrofida — gul yaproqlari) ---- */
   function arrayClick(w) {
+    commitOptInputs();
     if (!state.sel.size) { setInfo("Avval element(lar)ni «Tanlash» asbobi bilan belgilang"); return; }
     if (state.opt.arr.kind === 'polar') {
       state.draft = { tool: 'array', center: { x: w.x, y: w.y } };
@@ -1260,6 +1265,7 @@ export function mountDetal(root, opts) {
     return out;
   }
   function applyArray() {
+    commitOptInputs();
     if (!state.sel.size) { setInfo('Massiv: avval element(lar)ni belgilang'); return; }
     const a = state.opt.arr;
     if (a.kind === 'polar' && !(state.draft && state.draft.tool === 'array' && state.draft.center)) { setInfo('Qutbiy massiv: avval markazni maydonda bosing'); return; }
@@ -1267,8 +1273,9 @@ export function mountDetal(root, opts) {
     if (!cl.length) { setInfo(a.kind === 'polar' ? "Massiv: soni 2 dan katta bo'lsin" : "Massiv: qator yoki ustun soni 2 dan katta bo'lsin"); return; }
     pushHistory();
     for (const c of cl) { c.id = state.nextId++; state.ents.push(c); }
-    state.draft = null;
-    afterChange(); setInfo(cl.length + " ta nusxa qo'shildi (massiv)");
+    state.draft = null; state.sel.clear();
+    afterChange(); setTool('select');   // buyruq tugadi (AutoCAD) — takror Enter ustma-ust nusxa qo'shmasin
+    setInfo(cl.length + " ta nusxa qo'shildi (massiv) — Orqaga (Ctrl+Z) bilan qaytariladi");
   }
   function paintArrayPreview(target, w2s, view, PP) {
     if (state.tool !== 'array' || !state.sel.size) return;
@@ -1303,6 +1310,7 @@ export function mountDetal(root, opts) {
       for (const k of Object.keys(CIRCLE_MODES)) btn(CIRCLE_MODES[k], () => { o.circleMode = k; cancelDraft(false); setInfo(toolHint('circle')); }, { on: o.circleMode === k });
     } else if (t === 'arc') { btn('Usul: ' + arcDef().nomi + ' \u25BE', () => showArcMenu(true)); }
     else if (t === 'copy') { btn('Rejim: ' + (o.copyMulti ? "Ko'p" : 'Bitta'), () => { o.copyMulti = !o.copyMulti; }, { on: o.copyMulti }); btn('Massiv\u2026', () => setTool('array')); }
+    else if (t === 'move') tog('Nusxa (asli qoladi)', 'moveCopy');
     else if (t === 'rotate') tog('Nusxa (asli qoladi)', 'rotateCopy');
     else if (t === 'scale') tog('Nusxa (asli qoladi)', 'scaleCopy');
     else if (t === 'mirror') tog("Aslini o'chirish", 'mirrorErase');
@@ -1324,6 +1332,26 @@ export function mountDetal(root, opts) {
       btn('Bajarish (Enter)', () => applyArray(), { primary: true, disabled: !state.sel.size || (a.kind === 'polar' && !(d && d.tool === 'array' && d.center)) });
     }
     return items;
+  }
+  // Qatordagi yozilgan (hali commit bo'lmagan) sonlarni qo'llash — maydonga bosishdan / bajarishdan oldin
+  function commitOptInputs() {
+    const row = q('optRow'); if (!row) return false;
+    let changed = false;
+    row.querySelectorAll('input[data-opt]').forEach((i) => {
+      const it = optRowItems[+i.dataset.opt]; if (!it || !it.set) return;
+      const v = sonQiymat(i.value);
+      if (Math.abs(v - it.val) > 1e-9) { it.set(v); it.val = v; changed = true; }
+    });
+    if (changed) { saveLS(); render(); syncOptRow(); }
+    return changed;
+  }
+  // Qatorni qayta qurmasdan yangilash (fokus va bosilayotgan tugma yo'qolmasin): tugma holati, matn
+  function syncOptRow() {
+    const row = q('optRow'); if (!row) return;
+    optItems().forEach((it, i) => {
+      if (it.kind === 'btn') { const b = row.querySelector('button[data-opt="' + i + '"]'); if (b) { b.disabled = !!it.disabled; b.classList.toggle('on', !!it.on); if (b.textContent !== it.label) b.textContent = it.label; } }
+      else if (it.kind === 'txt') { const s = row.querySelector('.chz-opttxt'); if (s && s.textContent !== it.text) s.textContent = it.text; }
+    });
   }
   function renderOptRow() {
     const row = q('optRow'); if (!row) return;
@@ -2000,7 +2028,7 @@ export function mountDetal(root, opts) {
       if (o.opt && typeof o.opt === 'object') {
         const p = o.opt, so = state.opt;
         if (CIRCLE_MODES[p.circleMode]) so.circleMode = p.circleMode;
-        for (const k of ['copyMulti', 'rotateCopy', 'mirrorErase', 'scaleCopy', 'offsetMulti']) if (typeof p[k] === 'boolean') so[k] = p[k];
+        for (const k of ['copyMulti', 'moveCopy', 'rotateCopy', 'mirrorErase', 'scaleCopy', 'offsetMulti']) if (typeof p[k] === 'boolean') so[k] = p[k];
         if (p.arr && typeof p.arr === 'object') {
           if (p.arr.kind === 'rect' || p.arr.kind === 'polar') so.arr.kind = p.arr.kind;
           for (const k of ['rows', 'cols', 'dr', 'dc', 'n', 'fill']) if (Number.isFinite(p.arr[k])) so.arr[k] = p.arr[k];
@@ -2082,6 +2110,9 @@ export function mountDetal(root, opts) {
   on(q('btnCloseP'), 'click', () => finishPline(true));
   on(q('btnEnd'), 'click', () => cancelCurrent());
 
+  on(root, 'mouseenter', () => { state.pointerIn = true; });
+  on(root, 'mouseleave', () => { state.pointerIn = false; });
+
   // Zoom (g'ildirak) — kursor atrofida
   on(canvasWrap, 'wheel', (e) => {
     e.preventDefault();
@@ -2098,6 +2129,7 @@ export function mountDetal(root, opts) {
   on(canvasWrap, 'contextmenu', (e) => e.preventDefault());
   on(canvasWrap, 'mousedown', (e) => {
     if (inputBox.contains(e.target)) return;
+    commitOptInputs();   // variantlar qatoridagi yozilgan son (blur bo'lmagan) qo'llansin
     if (e.button === 1 || e.button === 2) {
       e.preventDefault();
       panning = true; panStart = { x: e.clientX, y: e.clientY, panX: state.panX, panY: state.panY };
@@ -2148,7 +2180,7 @@ export function mountDetal(root, opts) {
     state.cursorS = { sx, sy };
     if (state.tool === 'select' || state.tool === 'erase' || state.tool === 'trim' || state.tool === 'extend') { state.snapHit = null; state.snapRes = null; }
     statusBar.setCoords('X ' + fmtNum(state.cursor.x / U(), 2) + '   Y ' + fmtNum(-state.cursor.y / U(), 2) + '  ' + UNIT_LABEL[state.unit]);
-    if (state.draft || ['pline', 'rect', 'circle', 'arc', 'dim', 'offset', 'trim', 'extend'].includes(state.tool) || MODIFY.includes(state.tool)) render();
+    if (state.draft || ['pline', 'rect', 'circle', 'arc', 'dim', 'offset', 'trim', 'extend', 'array'].includes(state.tool) || MODIFY.includes(state.tool)) render();
   });
   on(window, 'mouseup', (e) => {
     if (panning) { panning = false; return; }
@@ -2160,7 +2192,7 @@ export function mountDetal(root, opts) {
       // AutoCAD (PICKADD): har bosish tanlovga QO'SHILADI; Shift+bosish — olib tashlaydi; bo'sh joyga bosish — bo'shatadi (Esc kabi)
       if (bs.candidate) {
         const id = bs.candidate.ent.id;
-        if (bs.additive && state.sel.has(id)) state.sel.delete(id); else state.sel.add(id);
+        if (bs.additive) state.sel.delete(id); else state.sel.add(id);   // Shift — faqat olib tashlash (AutoCAD)
       } else if (!bs.additive) state.sel.clear();
     } else {
       const r = { x1: Math.min(bs.sx, sx), y1: Math.min(bs.sy, sy), x2: Math.max(bs.sx, sx), y2: Math.max(bs.sy, sy) };
@@ -2200,6 +2232,13 @@ export function mountDetal(root, opts) {
       else if (state.sel.size) { e.preventDefault(); state.sel.clear(); render(); renderTable(); }
       return;
     }
+    // Chizma «faol»mi: kursor chizma ustida, fokus chizma ichida yoki to'liq ekran. Chizmadan TASHQARIDAGI
+    // tugma/havola fokusda bo'lsa (sahifa tugmalari, «Kichraytirish») yoki Shift+Tab — tutilmaydi, sahifa klaviaturasi ishlayveradi
+    const ae = document.activeElement;
+    const outsideControl = !!(ae && ae !== document.body && !root.contains(ae));
+    const active = !outsideControl && (state.pointerIn || root.contains(ae) || !!root.closest('.chz-full-wrap'));
+    if (!active) return;
+    if (e.key === 'Tab' && e.shiftKey) return;
     if (e.key === 'Enter' || e.key === 'Tab') {   // AutoCAD: buyruqni tugatish; bo'sh joyda → Tanlash, yana bossa → oxirgi asbob
       e.preventDefault();
       if (state.draft && state.draft.tool === 'pline') { finishPline(false); return; }
@@ -2467,7 +2506,7 @@ export function mountDetal(root, opts) {
   on(q('optRow'), 'change', (e) => {
     const i = e.target.closest('input[data-opt]'); if (!i) return;
     const it = optRowItems[+i.dataset.opt];
-    if (it && it.set) { it.set(sonQiymat(i.value)); renderOptRow(); saveLS(); render(); }
+    if (it && it.set) { const v = sonQiymat(i.value); it.set(v); it.val = v; i.value = fmtNum(v, 2); saveLS(); render(); syncOptRow(); }   // qator qayta qurilmaydi — fokus/tugma saqlanadi
   });
   on(q('optRow'), 'keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); e.target.blur(); if (state.tool === 'array') applyArray(); } });
   on(q('libList'), 'click', (e) => {

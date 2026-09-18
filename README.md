@@ -221,7 +221,7 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
 - **Ichki buyruqlar qatori va Massiv** (Detal va Gul chizish) — asboblar ostida
   joriy asbobning AutoCAD variantlari o'zbekcha: Chiziq — Yopish / Orqaga / Yoy
   (davomida); Aylana — Markaz+radius / Markaz+diametr / 2 nuqta / 3 nuqta;
-  Nusxa — Rejim Ko'p/Bitta, Massiv; Burish, Masshtab — Nusxa (asli qoladi);
+  Nusxa — Rejim Ko'p/Bitta, Massiv; Ko'chirish, Burish, Masshtab — Nusxa (asli qoladi);
   Aks — Aslini o'chirish; Offset — Ko'p (bir masofa, ketma-ket); Tanlash —
   Hammasi / Bo'shatish. **Massiv** (AR): tanlanganlarni to'rtburchak (qator ×
   ustun, oraliqlar; qatorlar tepaga) yoki qutbiy (markazni bosing, soni,

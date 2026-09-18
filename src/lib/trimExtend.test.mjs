@@ -91,6 +91,13 @@ test('yoy: oxiriga yaqin bosilsa → 0..60 qoladi; ikki kesuvchi bo\'lsa o\'rta 
   const r2 = trimAt([a, pl('v', [P(5, -20), P(5, 20)]), pl('h', [P(-20, -5), P(20, -5)])], a, P(7.07, -7.07));   // 45° o'rtada; kesuvchilar 60° va 30°
   assert.equal(r2.add.length, 2); near(r2.add[0].a1, 30, 1e-6); near(r2.add[1].a0, 60, 1e-6);
 });
+test('yoy: kursor yoy BOSHIDAN sal tashqarida (−5°) bo\'lsa — boshidagi bo\'lak o\'chadi (oxiridagi emas)', () => {
+  const a = arc('a', 0, 0, 10, 0, 90), v = pl('v', [P(5, -20), P(5, 20)]);   // kesuvchi 60° da
+  const r = trimAt([a, v], a, P(9.96, 0.87));   // burchak −5° → 355°: boshiga yaqin
+  near(r.add[0].a0, 60, 1e-6); near(r.add[0].a1, 90); near(r.removed.a0, 0);
+  const r2 = trimAt([a, v], a, P(-0.87, -9.96));   // 95° → oxiriga yaqin → 0..60 qoladi
+  near(r2.add[0].a0, 0); near(r2.add[0].a1, 60, 1e-6);
+});
 test('aylana: ikki vertikal kesuvchi (x=±5), tepasiga bosilsa → 120..60 yoy (300°)', () => {
   const c = circle('c', 0, 0, 10);
   const r = trimAt([c, pl('a', [P(5, -20), P(5, 20)]), pl('b', [P(-5, -20), P(-5, 20)])], c, P(0, -10));

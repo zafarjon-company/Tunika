@@ -7,8 +7,8 @@
 //   • Detal chizish — alohida detalni (patalok, qosh profili, paloska...)
 //     AutoCAD uslubida sm + gradus bilan chizish (detalEngine.js).
 //   • Gul chizish — gul/naqsh konturini xuddi shu asboblar bilan chizish,
-//     yon panelda «nechta ofset tashlansin» soni (gulEngine.js → detalEngine
-//     variant 'gul').
+//     yon panelda avtomatik ichki ofset masofasi va zakasdagi gullar ro'yxati
+//     (gulEngine.js → detalEngine variant 'gul').
 //  Bu yerda faqat karta, tab, yig'ish (collapse) va to'liq ekran rejimi
 //  boshqariladi. Barcha chizmalar avtomatik saqlanadi (localStorage) —
 //  yopib-ochilsa yoki rejim almashsa ham yo'qolmaydi.
@@ -24,7 +24,7 @@ const MODE_KEY = 'xona-chizma-mode';   // oxirgi tanlangan rejim ('xona' | 'deta
 const MODES = [
   { v: 'xona', label: 'Xona konturi', hint: 'Kazirok · devor · qosh · qozon', Icon: Ruler },
   { v: 'detal', label: 'Detal chizish', hint: 'sm + gradus, AutoCAD uslubi', Icon: PenTool },
-  { v: 'gul', label: 'Gul chizish', hint: 'Gul / naqsh konturi, ofsetlar soni bilan', Icon: Flower2 },
+  { v: 'gul', label: 'Gul chizish', hint: 'Gul / naqsh konturi, avtomatik ichki ofset (join) bilan', Icon: Flower2 },
 ];
 
 function readMode() {
@@ -120,7 +120,7 @@ export function ChizmaCard({ tunikaBaza = [], zakasId = '' }) {
         <button type="button" onClick={() => setOpen(true)}
           className="w-full text-left px-3 py-3 rounded-xl border-2 border-dashed border-slate-200 hover:border-slate-400 transition text-sm text-slate-400">
           Xona konturini chizish (kazirok, devor, qosh, qozon hisobi), alohida detal
-          (patalok, qosh profili) yoki gul / naqsh chizish (ofsetlar soni bilan) — sm va gradus bilan,
+          (patalok, qosh profili) yoki gul / naqsh chizish (avtomatik ichki ofset bilan) — sm va gradus bilan,
           AutoCAD uslubida. Ochish uchun bosing
         </button>
       )}
