@@ -3,7 +3,7 @@
 //  Ishga tushirish:  node src/lib/hatchGeom.test.mjs   (npm run test:hatch)
 // ============================================================
 import assert from 'node:assert/strict';
-import { chainPolygon, circlePolygon, polyAreaAbs, pointInPoly, pointInLoops, closedLoops, findRegion, regionArea } from './hatchGeom.js';
+import { chainPolygon, circlePolygon, polyAreaAbs, pointInPoly, pointInLoops, closedLoops, findRegion, regionArea, chainAreaExact, regionAreaOf } from './hatchGeom.js';
 
 let jami = 0, xato = 0;
 function test(nom, fn) {
@@ -64,6 +64,30 @@ test('pointInLoops / regionArea: juft-toq qoida (tashqi − orol + orol ichidagi
   assert.equal(pointInLoops(P(50, 50), [A, B, C]), true);
   near(regionArea([A, B]), 10000 - 3600);
   near(regionArea([A, B, C]), 10000 - 3600 + 400);
+});
+
+console.log('\n— Ko\'rik tuzatishlari —');
+test('chainAreaExact: yarim aylana + diametr = πr²/2 aniq; ikki yoydan aylana = πr²; tashqariga bo\'rtgan tomonli kvadrat', () => {
+  near(chainAreaExact([{ kind: 'seg', a: P(-10, 0), b: P(10, 0) }, { kind: 'arc', cx: 0, cy: 0, r: 10, sa: 0, ea: 180, ccw: true }]), 50 * Math.PI, 1e-9);
+  near(chainAreaExact([{ kind: 'arc', cx: 0, cy: 0, r: 7, sa: 0, ea: 180, ccw: true }, { kind: 'arc', cx: 0, cy: 0, r: 7, sa: 180, ea: 0, ccw: true }]), 49 * Math.PI, 1e-9);
+  // kvadrat 0..20 (y pastga), o'ng tomoni o'rniga tashqariga bo'rtgan yarim aylana (markaz (20,-10), r 10) — CW yurish
+  const sq = [{ kind: 'seg', a: P(0, 0), b: P(0, -20) }, { kind: 'seg', a: P(0, -20), b: P(20, -20) }, { kind: 'arc', cx: 20, cy: -10, r: 10, sa: 90, ea: 270, ccw: false }, { kind: 'seg', a: P(20, 0), b: P(0, 0) }];
+  near(chainAreaExact(sq), 400 + 50 * Math.PI, 1e-9);
+});
+test('closedLoops: ustma-ust takror halqa (Kontur nusxasi) bittaga qisqaradi — orol bo\'yalmaydi', () => {
+  const L = closedLoops([sq(1, 0, 0, 100), { id: 2, type: 'circle', cx: 50, cy: 50, r: 20 }, sq(101, 0, 0, 100), { id: 102, type: 'circle', cx: 50, cy: 50, r: 20 }]);
+  assert.equal(L.length, 2);
+  const r = findRegion(L, P(10, 10));
+  assert.equal(r.islands.length, 1);
+  assert.equal(pointInLoops(P(50, 50), [r.outer.pts, ...r.islands.map((l) => l.pts)]), false);
+  near(regionAreaOf(r.outer, r.islands), 10000 - 400 * Math.PI, 1e-6);
+});
+test('regionAreaOf: aylana yuzasi aniq (πr²), orol ichidagi orol qo\'shiladi', () => {
+  const L = closedLoops([{ id: 1, type: 'circle', cx: 0, cy: 0, r: 500 }]);
+  near(regionAreaOf(findRegion(L, P(0, 0)).outer, []), Math.PI * 250000, 1e-6);
+  const L2 = closedLoops([sq(1, 0, 0, 100), sq(2, 20, 20, 60), sq(3, 40, 40, 20)]);
+  const r2 = findRegion(L2, P(5, 5));
+  near(regionAreaOf(r2.outer, r2.islands), 10000 - 3600 + 400);
 });
 
 console.log(`\nJami: ${jami}, xato: ${xato}`);

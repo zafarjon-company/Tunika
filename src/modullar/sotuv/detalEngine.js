@@ -30,7 +30,7 @@ import { trimAt, extendAt } from '../../lib/trimExtend.js';
 import { breakEnt, stretchEnt, lengthenEnt, polygonPts, polygonEdge, divideEnt, measureEnt, polyArea, polyPerim, chainArea, areaOfEnt } from '../../lib/editGeom.js';
 import { curveOf, filletCurves, chamferLines, replaceSegEnd, adjacentSegs, cornerOp, filletPlineAll, chamferPlineAll, explodeEnt, joinEnts } from '../../lib/modifyGeom.js';
 import { arcSweep, arcLen, arcStart, arcEnd, arcMid, arcPt, angInArc, arcBounds, distToArc, arcSamples, arcDrawnEnd, arcSCA, arcSCE, arcSCL, arcSEA, arcSED, arcSER, arcFrom3, arcContinue, arcMap, arcSvgPath } from '../../lib/arcGeom.js';
-import { closedLoops, findRegion, pointInLoops, regionArea } from '../../lib/hatchGeom.js';
+import { closedLoops, findRegion, pointInLoops, regionArea, regionAreaOf } from '../../lib/hatchGeom.js';
 import { TEXT_CAP } from '../../lib/curveGeom.js';
 import { ellipsePts, ellipseFromCenter, ellipseFromAxis, distToAxis, ellipseGrips, ellipseMap, splinePts, textBox, distToTextBox, textMap, linearRot, rotatedDim, rotatedOff, angularDim, lineInt, radialDim } from '../../lib/curveGeom.js';
 
@@ -174,7 +174,7 @@ const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 // DXF $INSUNITS kodi -> 1 birlik necha mm
 const INSUNITS_MM = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
 const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'erase', 'dist', 'area', 'divide', 'measure'];
-const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'lengthen', 'divide', 'measure'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
+const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'lengthen', 'divide', 'measure', 'hatch', 'boundary'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const PICK_FIRST = ['move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'align'];   // tanlovsiz tanlansa — avval obyektlar tanlanadi (AutoCAD verb-noun)
 // AutoCAD doskasi ranglari (model maydoni: 33,40,48)
 const ACAD_BOARD = { bg: '#212830', devor: '#ffffff', accent: '#5b9bff', edit: '#e8edf3', text: '#d5dde7', labelBg: 'rgba(33,40,48,.84)', ref: '#6b7686', kazirok: '#cfd8e3', offset: '#ff66e8', accentSoft: '#1b2230', qozon: '#5b9bff', cross: '#ffffff', snap: '#f2c200' };
@@ -608,9 +608,12 @@ export function mountDetal(root, opts) {
     if (e.type === 'text') { Object.assign(e, textMap(e, textW(e), fn)); return; }
     if (isCons(e)) { const u = dirVec(e.ang), a = fn({ x: e.x, y: e.y }), b = fn({ x: e.x + u.dx, y: e.y + u.dy }); e.x = a.x; e.y = a.y; e.ang = vecAng(b.x - a.x, b.y - a.y); return; }
     if (e.type === 'hatch') {   // naqsh burchagi ham birga buriladi; masshtabda oraliq ham
-      const p0 = (e.loops[0] && e.loops[0][0]) || { x: 0, y: 0 }, u = dirVec(e.ang || 0), a = fn(p0), b = fn({ x: p0.x + u.dx, y: p0.y + u.dy });
-      e.ang = vecAng(b.x - a.x, b.y - a.y);
-      if (rFactor != null) e.sc = Math.abs(e.sc * rFactor);
+      const off = e.pat === 'line' ? 0 : 45;   // chizilgan chiziqlar yo'nalishi (ang + off) akslantiriladi — ko'zguda ham to'g'ri
+      const p0 = (e.loops[0] && e.loops[0][0]) || { x: 0, y: 0 }, u = dirVec((e.ang || 0) + off), a = fn(p0), b = fn({ x: p0.x + u.dx, y: p0.y + u.dy });
+      const s = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      e.ang = norm360(vecAng(b.x - a.x, b.y - a.y) - off);
+      e.sc = Math.abs(e.sc * s);
+      if (Number.isFinite(e.area)) e.area *= s * s;
       e.loops = e.loops.map((l) => l.map(fn)); return;
     }
     if (e.type === 'pline') { e.pts = e.pts.map(fn); if (e.fit) e.fit = e.fit.map(fn); if (e.ell) e.ell = ellipseMap(e.ell, fn); }
@@ -671,6 +674,7 @@ export function mountDetal(root, opts) {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     const add = (p) => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); };
     for (const e of ents) {
+      if (isCons(e)) continue;   // cheksiz yordamchi chiziqlar gabaritga (Ctrl+E, PNG) kirmaydi — AutoCAD kabi
       if (e.type === 'arc') { const ab = arcBounds(e); add({ x: ab.minX, y: ab.minY }); add({ x: ab.maxX, y: ab.maxY }); continue; }
       for (const p of entVerts(e)) add(p);
       if (e.type === 'dim') for (const p of dimExtentPts(e)) add(p);
@@ -1571,9 +1575,10 @@ export function mountDetal(root, opts) {
     const o = state.opt;
     const loops = [r.outer].concat(r.islands).map((l) => l.pts.map((p) => ({ x: p.x, y: p.y })));
     pushHistory();
-    state.ents.push(newEnt('hatch', { loops, pat: o.hatchPat, sc: o.hatchSc, ang: o.hatchAng }));
+    const area = regionAreaOf(r.outer, r.islands);   // aniq (yoylar / aylanalar bo'yicha), ko'pburchak taxminisiz
+    state.ents.push(newEnt('hatch', { loops, pat: o.hatchPat, sc: o.hatchSc, ang: o.hatchAng, area }));
     afterChange();
-    setInfo('Shtrix: yuza ' + fmtArea(regionArea(loops)) + (r.islands.length ? ', orollar: ' + r.islands.length : '') + ' — ' + toolHint('hatch'));
+    setInfo('Shtrix: yuza ' + fmtArea(area) + (r.islands.length ? ', orollar: ' + r.islands.length : '') + ' — ' + toolHint('hatch'));
   }
   function boundaryClick(w) {
     const r = regionAt(w);
@@ -2262,7 +2267,7 @@ export function mountDetal(root, opts) {
     }
     const hit = entAt(sx, sy); if (!hit) { setInfo(toolHint('area')); return; }
     let r = areaOfEnt(hit.ent), ids = [hit.ent.id];
-    if (!r && hit.ent.type === 'hatch') { let per = 0; for (const l of hit.ent.loops) per += polyPerim(l, true); r = { area: regionArea(hit.ent.loops), perim: per }; }
+    if (!r && hit.ent.type === 'hatch') { let per = 0; for (const l of hit.ent.loops) per += polyPerim(l, true); r = { area: Number.isFinite(hit.ent.area) ? hit.ent.area : regionArea(hit.ent.loops), perim: per }; }
     if (!r) { const ch = chainOf(state.ents, hit.ent.id); if (ch && ch.closed) { r = chainArea(ch.pieces); ids = [...ch.ids]; } }
     if (!r) { setInfo("Yopiq kontur emas — yopiq polyline, aylana yoki uchlari tutashgan yopiq zanjirni bosing"); return; }
     state.measureShow = { ids };
@@ -2345,7 +2350,7 @@ export function mountDetal(root, opts) {
     const dash = { stroke: PP.edit, 'stroke-width': 1.8, 'stroke-dasharray': '6 4', fill: 'none', 'pointer-events': 'none' };
     if (t === 'hatch' || t === 'boundary') {   // kursor ostidagi soha (orollari bilan) — oldindan ko'rinish
       if (!state.cursorIn) return;
-      const r = regionAt(state.cursor); if (!r) return;
+      const r = regionAt(screenToWorld(s.sx, s.sy)); if (!r) return;   // xom nuqta — magnit chegaraga tortmasin
       target.appendChild(svgEl('path', { d: hatchPath({ loops: [r.outer].concat(r.islands).map((l) => l.pts) }, w2s), fill: PP.accent, 'fill-opacity': 0.14, 'fill-rule': 'evenodd', stroke: PP.accent, 'stroke-width': 1.6, 'stroke-dasharray': '6 4', 'pointer-events': 'none' }));
       return;
     }
@@ -2427,9 +2432,9 @@ export function mountDetal(root, opts) {
     if (t === 'ellipse') return ellipseClick(w);
     if (t === 'spline') return splineClick(w);
     if (t === 'text') return textClick(w);
-    if (t === 'hatch') return hatchClick(w);
+    if (t === 'hatch') return hatchClick(screenToWorld(sx, sy));   // xom (magnitsiz) nuqta: chegaraga tortilsa soha noto'g'ri topilardi
     if (t === 'xline' || t === 'ray') return consClick(t, w);
-    if (t === 'boundary') return boundaryClick(w);
+    if (t === 'boundary') return boundaryClick(screenToWorld(sx, sy));
     if (t === 'stretch') return stretchClick(w);
     if (t === 'align') return alignClick(w);
     if (t === 'break') return breakClick(sx, sy, w);
@@ -2565,6 +2570,28 @@ export function mountDetal(root, opts) {
   }
 
   /* ---- Ramka bilan tanlash yordamchilari ---- */
+  // Oyna (to'liq ichida) / kesib o'tish ramkasi elementni oladimi. Shtrix — har halqa alohida yopiq;
+  // yordamchi chiziq / nur — cheksiz: oynaga hech qachon to'liq sig'maydi, kesib o'tishda ko'rinadigan qismi tekshiriladi
+  function boxHit(ent, r, crossing) {
+    const S = (p) => worldToScreen(p.x, p.y);
+    if (isCons(ent)) {
+      if (!crossing) return false;
+      const R = svg.getBoundingClientRect(), [a, b] = consEnds(ent, state, R.width, R.height), sa = S(a), sb = S(b);
+      return pointInRect(sa.x, sa.y, r) || pointInRect(sb.x, sb.y, r) || segIntersectsRect(sa, sb, r);
+    }
+    const rings = ent.type === 'hatch'
+      ? ent.loops.map((l) => ({ vs: l.map(S), closed: true }))
+      : [{ vs: (ent.type === 'arc' ? arcSamples(ent, 24) : entVerts(ent)).map(S), closed: ent.type === 'pline' && ent.closed }];
+    if (rings.length && rings.every((g) => g.vs.length > 0 && g.vs.every((s) => pointInRect(s.x, s.y, r)))) return true;
+    if (!crossing) return false;
+    for (const g of rings) {
+      const vs = g.vs;
+      if (vs.some((s) => pointInRect(s.x, s.y, r))) return true;
+      for (let i = 0; i < vs.length - 1; i++) if (segIntersectsRect(vs[i], vs[i + 1], r)) return true;
+      if (g.closed && vs.length > 2 && segIntersectsRect(vs[vs.length - 1], vs[0], r)) return true;
+    }
+    return false;
+  }
   function pointInRect(x, y, r) { return x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2; }
   function turn(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
   function segSeg(a, b, c, d) { return (turn(a, b, c) * turn(a, b, d) < 0) && (turn(c, d, a) * turn(c, d, b) < 0); }
@@ -3467,14 +3494,7 @@ export function mountDetal(root, opts) {
       const crossing = sx < bs.sx;
       // Ramka ham tanlovga qo'shadi (AutoCAD); Shift+ramka — olib tashlaydi
       for (const ent of state.ents) {
-        const vs = (ent.type === 'arc' ? arcSamples(ent, 24) : entVerts(ent)).map((p) => worldToScreen(p.x, p.y));
-        let hit = vs.length > 0 && vs.every((s) => pointInRect(s.x, s.y, r));
-        if (!hit && crossing) {
-          hit = vs.some((s) => pointInRect(s.x, s.y, r));
-          for (let i = 0; !hit && i < vs.length - 1; i++) hit = segIntersectsRect(vs[i], vs[i + 1], r);
-          if (!hit && ent.type === 'pline' && ent.closed && vs.length > 2) hit = segIntersectsRect(vs[vs.length - 1], vs[0], r);
-        }
-        if (hit) { if (bs.additive) state.sel.delete(ent.id); else state.sel.add(ent.id); }
+        if (boxHit(ent, r, crossing)) { if (bs.additive) state.sel.delete(ent.id); else state.sel.add(ent.id); }
       }
     }
     if (state.picking) setInfo(toolLabel(state.tool) + ': tanlandi ' + state.sel.size + " — yana tanlang yoki Enter / Probel / o'ng tugma");

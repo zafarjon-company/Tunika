@@ -53,7 +53,30 @@ export function pointInLoops(p, loops) {
   for (const l of loops || []) if (pointInPoly(p, l)) inside = !inside;
   return inside;
 }
-// Chizmadagi barcha yopiq halqalar: { pts, area, ids:[eid], pieces?, ent? }
+// Yopiq zanjirning ANIQ yuzasi: vatarlar ko'pburchagi + har yoy segmenti (r²/2·(θ − sin θ)).
+// y pastga: ekranda soat miliga qarshi yurish — shoelace manfiy; CCW yoy (ccw) shu tomonga qo'shiladi.
+export function chainAreaExact(pieces) {
+  const st = (p) => (p.kind === 'seg' ? p.a : { x: p.cx + p.r * Math.cos(p.sa * D2R), y: p.cy - p.r * Math.sin(p.sa * D2R) });
+  const pts = (pieces || []).map(st);
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a.x * b.y - b.x * a.y; }
+  let A = s / 2;
+  for (const p of pieces || []) {
+    if (p.kind === 'seg') continue;
+    let sw = p.ccw ? norm360(p.ea - p.sa) : norm360(p.sa - p.ea);
+    if (sw < 1e-9) sw = 360;
+    const th = sw * D2R, seg = (p.r * p.r / 2) * (th - Math.sin(th));
+    A += p.ccw ? -seg : seg;
+  }
+  return Math.abs(A);
+}
+function bboxOf(pts) {
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  for (const p of pts) { if (p.x < a) a = p.x; if (p.y < b) b = p.y; if (p.x > c) c = p.x; if (p.y > d) d = p.y; }
+  return [a, b, c, d];
+}
+// Chizmadagi barcha yopiq halqalar: { pts, area (aniq), ids:[eid], pieces?, ent? }
+// Ustma-ust takror halqalar (masalan Kontur nusxasi) bittaga qisqaradi — aks holda juft-toq qoida orolni bo'yab qo'yadi
 // ent — halqa bitta elementdan iborat bo'lsa (yopiq polyline / aylana) — nusxa olish uchun
 export function closedLoops(ents) {
   const out = [];
@@ -61,18 +84,24 @@ export function closedLoops(ents) {
   for (const e of ents || []) if (e && e.id != null) byId.set(e.id, e);
   for (const ch of buildChains(ents || [])) {
     if (!ch.closed) continue;
-    const pts = chainPolygon(ch.pieces);
+    const pts = chainPolygon(ch.pieces, 2);
     if (pts.length < 3) continue;
     const ids = [...ch.ids];
     const one = ids.length === 1 ? byId.get(ids[0]) : null;
-    out.push({ pts, area: polyAreaAbs(pts), ids, pieces: ch.pieces, ent: one && one.type === 'pline' && one.closed ? one : null });
+    out.push({ pts, area: chainAreaExact(ch.pieces), ids, pieces: ch.pieces, ent: one && one.type === 'pline' && one.closed ? one : null });
   }
   for (const e of ents || []) {
     if (!e || e.type !== 'circle' || !(e.r > 0) || ![e.cx, e.cy, e.r].every(Number.isFinite)) continue;
-    const pts = circlePolygon(e);
+    const pts = circlePolygon(e, 180);
     out.push({ pts, area: Math.PI * e.r * e.r, ids: [e.id], pieces: null, ent: e });
   }
-  return out;
+  const uniq = [];
+  for (const l of out) {
+    l.bb = bboxOf(l.pts);
+    const dup = uniq.some((u) => Math.abs(u.area - l.area) <= 1e-6 * Math.max(1, l.area) + 1e-6 && u.bb.every((v, i) => Math.abs(v - l.bb[i]) < 1e-3));
+    if (!dup) uniq.push(l);
+  }
+  return uniq;
 }
 // Bosilgan nuqta atrofidagi soha: { outer, islands } yoki null
 export function findRegion(loops, P) {
@@ -82,6 +111,16 @@ export function findRegion(loops, P) {
   for (const l of containing) if (l.area < outer.area) outer = l;
   const islands = loops.filter((l) => l !== outer && l.area < outer.area && !pointInPoly(P, l.pts) && l.pts.every((q) => pointInPoly(q, outer.pts)));
   return { outer, islands };
+}
+// Topilgan soha yuzasi (aniq): tashqi − orollar (orol ichidagi orol — qo'shiladi)
+export function regionAreaOf(outer, islands) {
+  let a = outer.area;
+  for (const l of islands) {
+    let depth = 0;
+    for (const m of islands) if (m !== l && m.area > l.area && pointInPoly(l.pts[0], m.pts)) depth++;
+    a += (depth % 2 === 0 ? -1 : 1) * l.area;
+  }
+  return a;
 }
 // Juft-toq qoida bo'yicha bo'yalgan yuza (tashqi − orollar + orol ichidagi orollar …)
 export function regionArea(loops) {
