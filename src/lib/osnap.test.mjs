@@ -15,7 +15,7 @@ import {
   segClosest, lineLineInt, segSegInt, segCircleInts, circleCircleInts, tangentPoints,
   buildGeom, endpointDirs,
   osnapCandidates, osnapBest,
-  polarSnap, trackAngles, trackSnap, resolveSnap, updateAcquire,
+  polarSnap, polarLen, trackAngles, trackSnap, resolveSnap, updateAcquire,
   autoGridStep, gridStepFor, snapMarkerShapes,
 } from './osnap.js';
 
@@ -705,6 +705,34 @@ test('POLAR: 0 uzunlik → null; ortho ham polar ham o\'chiq → null', () => {
   assert.equal(polarSnap(P(0, 0), P(10, 0), { ortho: false, polar: false }, 1), null);
 });
 
+test('POLAR burchak tolerantligi: uzun chiziq 0.8° og\'ish (perp 12.2 px > 12) — polarAngTol 3 bilan tutiladi, 0 bilan yo\'q', () => {
+  const cur = P(Math.cos(-0.8 * D2R) * 875, -Math.sin(-0.8 * D2R) * 875);   // 359.2°, 875 mm, scale 1 → perp ≈ 12.2 px
+  assert.equal(polarSnap(P(0, 0), cur, { polar: true, polarInc: 15, aperture: 12 }, 1), null);
+  const r = polarSnap(P(0, 0), cur, { polar: true, polarInc: 15, aperture: 12, polarAngTol: 3 }, 1);
+  assert.equal(r.ang, 0); near(r.y, 0);
+});
+test('POLAR burchak tolerantligi qadamning 1/3 idan oshmaydi: qadam 5 → 1.67°; 2.5° og\'ish tutilmaydi', () => {
+  const s = { polar: true, polarInc: 5, aperture: 12, polarAngTol: 3 };
+  const far = (deg) => P(Math.cos(deg * D2R) * 2000, -Math.sin(deg * D2R) * 2000);
+  assert.equal(polarSnap(P(0, 0), far(12.5), s, 1), null);             // 10° va 15° dan 2.5° — tutilmaydi
+  assert.equal(polarSnap(P(0, 0), far(11.5), s, 1).ang, 10);          // 1.5° — tutiladi
+});
+test('POLAR uzunlik qadami (PolarSnap): 1 sm → 109.96 → 110; 3 → 10 (bir qadam); o\'chiq → aniq', () => {
+  near(polarLen(109.96, { polarDist: 10 }), 110); near(polarLen(3, { polarDist: 10 }), 10); near(polarLen(104.9, { polarDist: 10 }), 100);
+  near(polarLen(109.96, { polarDist: 0 }), 109.96); near(polarLen(109.96, {}), 109.96);
+  const r = polarSnap(P(0, 0), P(109.96, -1), { polar: true, polarInc: 15, aperture: 12, polarDist: 10 }, 1);
+  nearPt(r, 110, 0);
+  const o = polarSnap(P(0, 0), P(3, 47.3), { ortho: true, polarDist: 5 }, 1);
+  nearPt(o, 0, 45);
+});
+test('DEFAULT_SNAP: polarDist 10 mm (1 sm), polarAngTol 3°; loadSnap ixtiyoriy qadam (7.5) va polarDist saqlaydi', () => {
+  assert.equal(DEFAULT_SNAP.polarDist, 10); assert.equal(DEFAULT_SNAP.polarAngTol, 3);
+  const mem = (o) => ({ getItem: (k) => (k === SNAP_KEY ? JSON.stringify(o) : null), setItem() {} });
+  const s = loadSnap(mem({ polarInc: 7.5, polarDist: 0 })); assert.equal(s.polarInc, 7.5); assert.equal(s.polarDist, 0);
+  const bad = loadSnap(mem({ polarInc: 500, polarDist: -1 }));
+  assert.equal(bad.polarInc, 15); assert.equal(bad.polarDist, 10);
+});
+
 /* ============================================================ */
 console.log('\n=== 12) trackAngles ===\n');
 
@@ -877,7 +905,7 @@ test('OTRACK-INT: ikki olingan nuqta (from yo\'q) → (100,0)', () => {
 });
 test('POLAR > OTRACK chizig\'i: ikkalasi yaqin, kesishma uzoq → polar (85,0)', () => {
   const s = SET({ polarInc: 45 });
-  const r = resolveSnap({ geom: G_EMPTY, cur: P(85, -10), scale: 1, settings: s, from: P(0, 0), acquired: [P(0, 60)] });
+  const r = resolveSnap({ geom: G_EMPTY, cur: P(85, -10), scale: 1, settings: { ...s, polarDist: 0 }, from: P(0, 0), acquired: [P(0, 60)] });
   assert.equal(r.kind, 'polar'); nearPt(r, 85, 0); assert.equal(r.tip, 'Polar 0°');
   assert.equal(r.tracks.length, 1); assert.equal(r.tracks[0].polar, true); assert.equal(r.tracks[0].ang, 0);
 });
@@ -910,7 +938,7 @@ test('GRID: gridStep 0 yoki gridSnap o\'chiq → raw', () => {
   assert.equal(r2.kind, 'raw'); nearPt(r2, 83, -14);
 });
 test('POLAR > GRID: from bor, nur yaqin → polar (to\'r emas)', () => {
-  const r = resolveSnap({ geom: G_EMPTY, cur: P(83, -1), scale: 1, settings: SET({ gridSnap: true }), gridStep: 10, from: P(0, 0) });
+  const r = resolveSnap({ geom: G_EMPTY, cur: P(83, -1), scale: 1, settings: SET({ gridSnap: true, polarDist: 0 }), gridStep: 10, from: P(0, 0) });
   assert.equal(r.kind, 'polar'); nearPt(r, 83, 0);
 });
 test('RAW: hech narsa mos kelmasa — xom kursor', () => {
@@ -1051,8 +1079,9 @@ test('To\'g\'ri qiymatlar o\'qiladi: boolean maydonlar, polarInc 45, gridStep 25
   assert.equal(s.acquireMs, 250);   // acquireMs storage'dan o'qilmaydi — standart
   assert.deepEqual(s.modes, DEFAULT_SNAP.modes);
 });
-test('Noto\'g\'ri polarInc (7, "15", null) rad etiladi → 15', () => {
-  for (const v of [7, '15', null, -15, 0]) assert.equal(loadSnap(soxtaStorage({ [SNAP_KEY]: JSON.stringify({ polarInc: v }) })).polarInc, 15, `polarInc ${v}`);
+test('Noto\'g\'ri polarInc ("15", null, −15, 0, 0.2, 500) rad etiladi → 15; ixtiyoriy qadam (7, 7.5, 12) qabul', () => {
+  for (const v of [7, 7.5, 12]) assert.equal(loadSnap(soxtaStorage({ [SNAP_KEY]: JSON.stringify({ polarInc: v }) })).polarInc, v, `polarInc ${v}`);
+  for (const v of ['15', null, -15, 0, 0.2, 500]) assert.equal(loadSnap(soxtaStorage({ [SNAP_KEY]: JSON.stringify({ polarInc: v }) })).polarInc, 15, `polarInc ${v}`);
   for (const v of POLAR_INCS) assert.equal(loadSnap(soxtaStorage({ [SNAP_KEY]: JSON.stringify({ polarInc: v }) })).polarInc, v);
 });
 test('Noto\'g\'ri gridStep (3, -1, "10") rad etiladi → 0; ro\'yxatdagilar qabul', () => {
@@ -1242,7 +1271,7 @@ test('OSNAP nuqtasi bog\'lanish chizig\'idan ustun: END (50,30) apertura ichida 
   assert.equal(r.kind, 'END'); nearPt(r, 50, 30);
 });
 test('Polar nur ustida, kesishma uzoq → polar (bog\'lanish chizig\'i yutmaydi)', () => {
-  const r = resolveSnap({ geom: G0, cur: P(80, -1), scale: 1, settings: SG(), from: P(0, 0), guides: [{ x: 0, y: -1, ang: 0 }] });
+  const r = resolveSnap({ geom: G0, cur: P(80, -1), scale: 1, settings: SG({ polarDist: 0 }), from: P(0, 0), guides: [{ x: 0, y: -1, ang: 0 }] });
   assert.equal(r.kind, 'polar'); nearPt(r, 80, 0);
 });
 test('Buzuq guide (NaN) e\'tiborsiz qoldiriladi', () => {

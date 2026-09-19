@@ -9,7 +9,10 @@
 //  mountStatusBar(host, { settings, onChange }) ->
 //    { sync(), setCoords(text), handleKey(e) -> bool, destroy() }
 // ============================================================
-import { SNAP_MODES, POLAR_INCS, GRID_STEPS, snapMarkerShapes } from './osnap.js';
+import { SNAP_MODES, POLAR_INCS, POLAR_DISTS, GRID_STEPS, snapMarkerShapes } from './osnap.js';
+// Qadam misollari: 15 → «15, 30, 45, 60…»
+const incSample = (a) => [1, 2, 3, 4].map((k) => +(a * k).toFixed(2)).join(', ') + '…';
+const distLabel = (d) => (d === 0 ? "o'chiq (aniq)" : (d >= 10 ? (d / 10) + ' sm' : d + ' mm'));
 
 let uidSeq = 0;
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -41,9 +44,12 @@ export function mountStatusBar(host, opts) {
     <span class="cad-dd">
       <button type="button" data-cs="polar" title="POLAR (F10) — kursor polar burchak qadamlariga yopishadi, kuzatish nuri chiqadi">POLAR</button>
       <button type="button" class="cad-ddbtn" data-cs="polarMenu" title="Polar qadam">&#9662;</button>
-      <div class="cad-menu" data-cs="polarPanel">
-        <div class="cad-menu-title">Polar burchak qadami</div>
-        ${POLAR_INCS.map((a) => `<label><input type="radio" name="${uid}-polar" value="${a}" /> ${a}°${a === 90 ? ' (faqat orto)' : ''}</label>`).join('')}
+      <div class="cad-menu cad-menu-wide" data-cs="polarPanel">
+        <div class="cad-menu-title">Burchak qadami (Polar)</div>
+        ${POLAR_INCS.map((a) => `<label><input type="radio" name="${uid}-polar" value="${a}" /> <b class="cad-incv">${a}°</b> <span class="cad-incs">${incSample(a)}</span></label>`).join('')}
+        <label class="cad-menu-inline cad-inc-custom">Boshqa: <input type="text" inputmode="decimal" data-cs="polarCustom" placeholder="7.5" /> °</label>
+        <div class="cad-menu-title cad-menu-sub">Uzunlik qadami (PolarSnap)</div>
+        ${POLAR_DISTS.map((d) => `<label><input type="radio" name="${uid}-pdist" value="${d}" /> ${distLabel(d)}</label>`).join('')}
       </div>
     </span>
     <span class="cad-dd">
@@ -75,6 +81,9 @@ export function mountStatusBar(host, opts) {
     for (const k of TOGGLES) { const b = q(k); if (b) b.classList.toggle('on', !!s[k]); }
     bar.querySelectorAll(`input[name="${uid}-grid"]`).forEach((r) => { r.checked = +r.value === (s.gridStep || 0); });
     bar.querySelectorAll(`input[name="${uid}-polar"]`).forEach((r) => { r.checked = +r.value === s.polarInc; });
+    bar.querySelectorAll(`input[name="${uid}-pdist"]`).forEach((r) => { r.checked = +r.value === (s.polarDist || 0); });
+    const pc = q('polarCustom'); if (pc && document.activeElement !== pc) pc.value = POLAR_INCS.includes(s.polarInc) ? '' : String(s.polarInc);
+    const pb = q('polar'); if (pb) pb.textContent = 'POLAR ' + s.polarInc + '°';
     bar.querySelectorAll('input[data-mode]').forEach((c) => { c.checked = !!s.modes[c.dataset.mode]; });
     const ap = q('aperture');
     if (ap) {
@@ -113,6 +122,12 @@ export function mountStatusBar(host, opts) {
     if (!t) return;
     if (t.name === `${uid}-grid`) { s.gridStep = +t.value || 0; if (!s.grid) s.grid = true; sync(); opts.onChange && opts.onChange('gridStep'); }
     else if (t.name === `${uid}-polar`) { s.polarInc = +t.value; if (!s.polar) { s.polar = true; s.ortho = false; } sync(); opts.onChange && opts.onChange('polarInc'); }
+    else if (t.name === `${uid}-pdist`) { s.polarDist = +t.value || 0; sync(); opts.onChange && opts.onChange('polarDist'); }
+    else if (t === q('polarCustom')) {
+      const v = parseFloat(String(t.value).replace(',', '.'));
+      if (v >= 0.5 && v <= 180) { s.polarInc = v; s.polar = true; s.ortho = false; }
+      sync(); opts.onChange && opts.onChange('polarInc');
+    }
     else if (t.dataset && t.dataset.mode) { s.modes[t.dataset.mode] = t.checked; if (t.checked && !s.osnap) s.osnap = true; sync(); opts.onChange && opts.onChange('modes'); }
     else if (t === q('aperture')) { s.aperture = +t.value || 12; opts.onChange && opts.onChange('aperture'); }
   });
@@ -140,6 +155,7 @@ export function mountStatusBar(host, opts) {
     handleKey,
     closeMenus,
     setCoords(text) { const c = q('coords'); if (c) c.textContent = text; },
+    openMenu(name) { const el = q(name === 'polar' ? 'polarPanel' : name === 'osnap' ? 'osnapPanel' : 'gridPanel'); closeMenus(); if (el) el.classList.add('show'); },
     destroy() { cleanups.forEach((fn) => fn()); if (bar.parentNode) bar.parentNode.removeChild(bar); },
   };
 }

@@ -42,6 +42,8 @@ const MODE_BY_KEY = Object.fromEntries(SNAP_MODES.map((m) => [m.key, m]));
    pri 2..4 uchun ko'paytma > 1 — ya'ni apertura chekkasidagi nuqta ham ularni yutadi. */
 const PRI_MUL = [0, 0.12, 1.05, 1.25, 1.6];
 export const POLAR_INCS = [5, 10, 15, 18, 22.5, 30, 45, 90];
+// Polar uzunlik qadami (AutoCAD PolarSnap), mm; 0 — o'chiq
+export const POLAR_DISTS = [0, 1, 5, 10, 50, 100];
 export const GRID_STEPS = [0, 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000];   // mm; 0 = avto
 
 export const DEFAULT_SNAP = {
@@ -50,6 +52,8 @@ export const DEFAULT_SNAP = {
   ortho: false,
   polar: true,
   polarInc: 15,
+  polarDist: 10,      // mm — polar/orto nuri bo'ylab uzunlik shu qadamga yaxlitlanadi (AutoCAD PolarSnap); 0 — o'chiq
+  polarAngTol: 3,     // ° — kursor nurdan shu burchakcha og'sa ham tutiladi (uzoqdagi uzun chiziqlar uchun); qadamning 1/3 idan oshmaydi
   otrack: true,
   grid: true,
   gridSnap: false,
@@ -79,7 +83,8 @@ export function loadSnap(storage) {
     const o = JSON.parse(st.getItem(SNAP_KEY) || 'null');
     if (!o || typeof o !== 'object') return s;
     for (const k of ['osnap', 'ortho', 'polar', 'otrack', 'grid', 'gridSnap', 'dyn']) if (typeof o[k] === 'boolean') s[k] = o[k];
-    if (POLAR_INCS.includes(o.polarInc)) s.polarInc = o.polarInc;
+    if (Number.isFinite(o.polarInc) && o.polarInc >= 0.5 && o.polarInc <= 180) s.polarInc = o.polarInc;   // ro'yxatdagisi yoki ixtiyoriy (masalan 7.5)
+    if (Number.isFinite(o.polarDist) && o.polarDist >= 0 && o.polarDist <= 10000) s.polarDist = o.polarDist;
     if (GRID_STEPS.includes(o.gridStep)) s.gridStep = o.gridStep;
     if (typeof o.aperture === 'number' && o.aperture >= 4 && o.aperture <= 40) s.aperture = o.aperture;
     if (o.modes && typeof o.modes === 'object') for (const m of SNAP_MODES) if (typeof o.modes[m.key] === 'boolean') s.modes[m.key] = o.modes[m.key];
@@ -326,13 +331,20 @@ export function osnapBest(geom, cur, opts) { const c = osnapCandidates(geom, cur
 /* ---------------- ORTO / POLAR ----------------
    from -> cur yo'nalishini yaqin burchakka tekislaydi. Polar: kursor nurdan
    apertura (px) ichida bo'lsa. Qaytaradi {x,y,ang,kind:'ortho'|'polar'} yoki null. */
+// Nur bo'ylab uzunlikni polar qadamiga yaxlitlash (AutoCAD PolarSnap); 0 ga tushsa — bir qadam
+export function polarLen(L, s) {
+  const pd = s && s.polarDist > 0 ? s.polarDist : 0;
+  if (!pd || !(L > 0)) return L;
+  const q = Math.round(L / pd) * pd;
+  return q > 0 ? q : pd;
+}
 export function polarSnap(from, cur, s, scale) {
   const dx = cur.x - from.x, dy = cur.y - from.y, L = Math.hypot(dx, dy);
   if (L < 1e-9) return null;
   const a = vecAng(dx, dy);
   if (s.ortho) {
     const ang = norm360(Math.round(a / 90) * 90), v = dirVec(ang);
-    const proj = Math.max(0, dx * v.dx + dy * v.dy);
+    const proj = polarLen(Math.max(0, dx * v.dx + dy * v.dy), s);
     return { x: from.x + v.dx * proj, y: from.y + v.dy * proj, ang, kind: 'ortho' };
   }
   if (s.polar) {
@@ -340,7 +352,13 @@ export function polarSnap(from, cur, s, scale) {
     const ang = norm360(Math.round(a / inc) * inc), v = dirVec(ang);
     const perp = Math.abs(dx * v.dy - dy * v.dx) * (scale || 1);
     const proj = dx * v.dx + dy * v.dy;
-    if (perp <= (s.aperture || 12) && proj > 0) return { x: from.x + v.dx * proj, y: from.y + v.dy * proj, ang, kind: 'polar' };
+    // Burchak tolerantligi: nurdan og'ish (°) — uzun chiziqda piksel masofa katta bo'lsa ham tutiladi
+    let dev = Math.abs(a - ang) % 360; if (dev > 180) dev = 360 - dev;
+    const angTol = s.polarAngTol > 0 ? Math.min(s.polarAngTol, inc / 3) : 0;
+    if (proj > 0 && (perp <= (s.aperture || 12) || dev <= angTol)) {
+      const Lq = polarLen(proj, s);
+      return { x: from.x + v.dx * Lq, y: from.y + v.dy * Lq, ang, kind: 'polar' };
+    }
   }
   return null;
 }

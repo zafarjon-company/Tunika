@@ -1344,6 +1344,13 @@ html.themed .cad-status button.on { background: color-mix(in srgb, var(--chz-acc
 }
 .cad-menu.show { display: block; }
 .cad-menu-wide { min-width: 250px; }
+.cad-menu .cad-incv { margin-left: 0; font-size: 11px; color: inherit; min-width: 34px; }
+.cad-menu .cad-incs { color: #94a3b8; font-size: 10.5px; }
+.cad-menu-sub { margin-top: 7px; padding-top: 6px; border-top: 1px solid #e2e8f0; }
+html.themed .cad-menu-sub { border-color: var(--c-line); }
+.cad-inc-custom { margin-left: 0 !important; padding: 3px 2px; }
+.cad-inc-custom input { width: 54px; font-size: 11px; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; }
+html.themed .cad-inc-custom input { background: var(--c-bg); color: var(--c-t1); border-color: var(--c-line); }
 html.themed .cad-menu { background: var(--c-surface); border-color: var(--c-line); color: var(--c-t2); box-shadow: 0 6px 22px rgba(0, 0, 0, .6); }
 .cad-menu-title { font-weight: 800; font-size: 11px; color: #0f172a; margin-bottom: 5px; }
 html.themed .cad-menu-title { color: var(--c-t1); }

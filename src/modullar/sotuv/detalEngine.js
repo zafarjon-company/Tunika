@@ -22,7 +22,7 @@
 import { sonMatn, sonQiymat } from '../../lib/helpers.js';
 import { computePalette } from './chizmaEngine.js';
 import { safeFileName, downloadDxf } from '../../lib/dxfExport.js';
-import { loadSnap, saveSnap, buildGeom, resolveSnap, updateAcquire, gridStepFor, snapMarkerShapes } from '../../lib/osnap.js';
+import { loadSnap, saveSnap, buildGeom, resolveSnap, updateAcquire, gridStepFor, snapMarkerShapes, POLAR_INCS, POLAR_DISTS } from '../../lib/osnap.js';
 import { mountStatusBar } from '../../lib/cadStatusBar.js';
 import { offsetSide, offsetSeries } from '../../lib/offsetGeom.js';
 import { chainOf, chainSide, offsetChainSeries, buildChains, offsetChainInward, piecesToEnts } from '../../lib/chainOffset.js';
@@ -257,6 +257,17 @@ function buildTemplate(V) {
       <option value="abs">mutlaq (0° o'ng, 90° tepa)</option>
       <option value="rel">nisbiy (oldingi chiziqdan burilish)</option>
     </select>
+    <span class="chz-tglbl">Burchak qadami:</span>
+    <select class="rowUnit" data-dtl="polarSel" title="Polar (AutoCAD): chiziq shu burchaklarga yopishadi — 5° → 5, 10, 15…; 15° → 15, 30, 45, 60…; 45° → 45, 90, 135, 180, 225… «O'chiq» — erkin burchak">
+      <option value="off">o'chiq (erkin)</option>
+      <option value="ortho">faqat 90° (orto)</option>
+      ${POLAR_INCS.filter((a) => a !== 90).map((a) => '<option value="' + a + '">' + a + '° — ' + [1, 2, 3, 4].map((k) => +(a * k).toFixed(1)).join(', ') + '…</option>').join('')}
+      <option value="custom">boshqa…</option>
+    </select>
+    <span class="chz-tglbl">Uzunlik qadami:</span>
+    <select class="rowUnit" data-dtl="pdistSel" title="Sichqoncha bilan chizganda uzunlik shu qadamga yaxlitlanadi (AutoCAD PolarSnap) — 109.96 emas, 110. Yozib kiritilgan qiymat aniq qoladi">
+      ${POLAR_DISTS.map((d) => '<option value="' + d + '">' + (d === 0 ? "o'chiq (aniq)" : (d >= 10 ? (d / 10) + ' sm' : d + ' mm')) + '</option>').join('')}
+    </select>
     <span class="sep"></span>
     <button type="button" class="tool tg" data-dtl="tgLen" title="Chiziqlardagi uzunlik yozuvlari">Uzunliklar</button>
     <button type="button" class="tool tg" data-dtl="tgAng" title="Uchlardagi gradus yozuvlari">Burchaklar</button>
@@ -423,6 +434,20 @@ export function mountDetal(root, opts) {
     syncButtons(); render();
   }
   const statusBar = mountStatusBar(canvasWrap, { settings: state.snapSet, onChange: onSnapChange });
+  // Variantlar qatoridagi «Burchak qadami» / «Uzunlik qadami» — holat panelidagi POLAR bilan bir sozlama
+  function syncPolarSel() {
+    const s = state.snapSet, ps = q('polarSel'), dsel = q('pdistSel');
+    if (ps) {
+      let v = s.ortho ? 'ortho' : (!s.polar ? 'off' : String(s.polarInc));
+      if (v !== 'off' && v !== 'ortho' && ![...ps.options].some((o) => o.value === v)) {
+        const o = document.createElement('option'); o.value = v; o.textContent = v + '° — ' + [1, 2, 3, 4].map((k) => +(s.polarInc * k).toFixed(1)).join(', ') + '…';
+        ps.insertBefore(o, ps.querySelector('option[value="custom"]'));
+      }
+      if (s.polar && !s.ortho && s.polarInc === 90) v = 'ortho';
+      ps.value = v;
+    }
+    if (dsel) dsel.value = String(s.polarDist || 0);
+  }
 
   function U() { return UNITS[state.unit]; }
   function fmtLen(mm) { return fmtNum(mm / U(), 2) + ' ' + UNIT_LABEL[state.unit]; }
@@ -2208,6 +2233,7 @@ export function mountDetal(root, opts) {
     q('btnStart0').style.display = (state.draft && state.draft.tool === 'pline') ? 'none' : '';
     q('unitSel').value = state.unit;
     q('angMode').value = state.angMode;
+    syncPolarSel();
     renderOptRow();
   }
   function updateScaleInfo() { const el = q('scaleInfo'); if (el) el.textContent = '1 sm = ' + fmtNum(10 * state.scale, 1) + ' px'; }
@@ -2434,6 +2460,22 @@ export function mountDetal(root, opts) {
   });
   on(q('btnStart0'), 'click', start0);
   on(q('unitSel'), 'change', (e) => { state.unit = UNITS[e.target.value] ? e.target.value : 'cm'; syncBoxLabels(); afterChange(); });
+  on(q('polarSel'), 'change', (e) => {
+    const s = state.snapSet, v = e.target.value;
+    if (v === 'off') { s.polar = false; s.ortho = false; }
+    else if (v === 'ortho') { s.ortho = true; s.polar = false; }
+    else if (v === 'custom') {
+      const t = window.prompt("Burchak qadami (°), masalan 7.5 yoki 12:", String(s.polarInc));
+      const n = parseFloat(String(t || '').replace(',', '.'));
+      if (n >= 0.5 && n <= 180) { s.polarInc = n; s.polar = true; s.ortho = false; }
+    } else { s.polarInc = +v; s.polar = true; s.ortho = false; }
+    statusBar.sync(); onSnapChange('polarInc'); e.target.blur();
+    setInfo(s.ortho ? 'Burchak: faqat 0° / 90° / 180° / 270° (orto)' : (s.polar ? 'Burchak qadami ' + s.polarInc + '° — chiziq ' + [1, 2, 3, 4].map((k) => +(s.polarInc * k).toFixed(1)).join('°, ') + "°… burchaklarga yopishadi" : 'Burchak erkin (polar o\'chiq)'));
+  });
+  on(q('pdistSel'), 'change', (e) => {
+    state.snapSet.polarDist = +e.target.value || 0; statusBar.sync(); onSnapChange('polarDist'); e.target.blur();
+    setInfo(state.snapSet.polarDist ? 'Uzunlik ' + fmtLen(state.snapSet.polarDist) + ' qadam bilan yaxlitlanadi (polar/orto nuri bo\'ylab)' : 'Uzunlik aniq (yaxlitlanmaydi)');
+  });
   on(q('angMode'), 'change', (e) => {
     state.angMode = e.target.value === 'rel' ? 'rel' : 'abs';
     if (state.box && state.box.pline) { state.box.f2.label = (state.angMode === 'rel' && state.draft && state.draft.pts.length >= 2) ? 'Burilish' : 'Burchak'; syncBoxLabels(); }
