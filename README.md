@@ -235,11 +235,24 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   g'ildirak 2× — markazga; Ctrl+A — hammasi; avval buyruq, keyin tanlash (verb-noun:
   Ko'chirish, Nusxa, Burish, Aks, Masshtab, Massiv, Tekislash); tanlov bilan O'chirish —
   darhol. «AutoCAD doska» tugmasi (variantlar qatorida) — mavzu ranglariga qaytish.
-- **Asboblar paneli** — AutoCAD lentasi kabi guruhlar: Tanlash · Chizish (Chiziq,
-  To'rtburchak, Ko'pburchak, Aylana, Yoy ▾, Halqa, Nuqta) · O'zgartirish (Ko'chirish,
-  Nusxa, Burish, Aks, Masshtab, Cho'zish, Tekislash, Massiv, Offset) · Tahrir (Kesish,
+- **Asboblar paneli** — AutoCAD lentasi kabi guruhlar (har guruh 3 qatorli ustunlar;
+  tor ekranda lenta suriladi): Tanlash · Chizish (Chiziq, To'rtburchak, Ko'pburchak,
+  Aylana, Yoy ▾, Halqa, Nuqta, Ellips, Splayn) · O'zgartirish (Ko'chirish, Nusxa,
+  Burish, Aks, Masshtab, Cho'zish, Tekislash, Massiv, Offset) · Tahrir (Kesish,
   Uzaytirish, Uzish, Uzunlik, Tutashtirish, Faska, Portlatish, Birlashtirish,
-  O'chirish) · O'lchash (O'lcham, Masofa, Yuza, Bo'lish, O'lchab qo'yish) · Chizma.
+  O'chirish) · Izoh (Matn, O'lchamlar: Chiziqli, Parallel, Burchak, Radius, Diametr) ·
+  O'lchash (Masofa, Yuza, Bo'lish, O'lchab qo'yish) · Chizma.
+- **4-to'lqin: egri chiziqlar va izohlar** (`src/lib/curveGeom.js`, `npm run test:curve`):
+  **Ellips** (EL — markaz / «O'q, uch»; silliq yopiq polyline, parametrlari saqlanadi:
+  griplar — markaz va o'q uchlari, 2 marta bosib yarim o'qlar; magnit — Markaz va
+  Kvadrant), **Splayn** (SPL — fit nuqtalar orqali silliq egri, yopiq variant, C / Backspace;
+  griplar — fit nuqtalar). Ikkalasi odatdagi polyline kabi Offset, Kesish, Tutashtirish,
+  avto-ofset bilan ishlaydi; yozuvi — bitta umumiy uzunlik, ichki tugunlarga END/MID
+  yopishmaydi. **Matn** (T / DT — joyni bosing, yozing, Enter — keyingi qator; balandlik
+  va burchak variantlar qatorida; 2 marta bosib tahrir; aks ettirishda o'qiladigan
+  qoladi — MIRRTEXT=0; DXF TEXT). **O'lchamlar**: Chiziqli (DLI — kursorga qarab
+  gorizontal/vertikal), Parallel (DAL), Burchak (DAN — ikki chiziq, yoy yoki 3 nuqta;
+  4 sektordan biri), Radius (DRA), Diametr (DDI).
 - **3-to'lqin asboblari** (`src/lib/editGeom.js`, `npm run test:edit`): Ko'pburchak
   (POL — ichki / tashqi / tomon bo'yicha), Halqa (DO — ikki aylana), Nuqta (PO —
   yangi `point` elementi: magnit Tugun, DXF POINT), Cho'zish (S — ramka ichidagi

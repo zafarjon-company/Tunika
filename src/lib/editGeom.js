@@ -136,9 +136,15 @@ export function stretchEnt(e, rect, dx, dy) {
     return any ? { pts } : null;
   }
   if (e.type === 'circle') return inside({ x: e.cx, y: e.cy }) ? { cx: e.cx + dx, cy: e.cy + dy } : null;
-  if (e.type === 'point') return inside(e) ? { x: e.x + dx, y: e.y + dy } : null;
+  if (e.type === 'point' || e.type === 'text') return inside(e) ? { x: e.x + dx, y: e.y + dy } : null;
   if (e.type === 'dim') {
     const a = { x: e.x1, y: e.y1 }, b = { x: e.x2, y: e.y2 }, ia = inside(a), ib = inside(b);
+    if (e.kind === 'ang') {   // burchak o'lchami: uch va yoy joyi ham
+      const c = { x: e.cx, y: e.cy }, l = { x: e.lx, y: e.ly }, ic = inside(c), il = inside(l);
+      if (!ia && !ib && !ic && !il) return null;
+      const m = (q, f) => (f ? mv(q) : q), na = m(a, ia), nb = m(b, ib), nc = m(c, ic), nl = m(l, il);
+      return { x1: na.x, y1: na.y, x2: nb.x, y2: nb.y, cx: nc.x, cy: nc.y, lx: nl.x, ly: nl.y };
+    }
     if (!ia && !ib) return null;
     const na = ia ? mv(a) : a, nb = ib ? mv(b) : b;
     return { x1: na.x, y1: na.y, x2: nb.x, y2: nb.y };

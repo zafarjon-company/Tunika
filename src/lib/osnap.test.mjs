@@ -295,7 +295,7 @@ console.log('\n=== 8) buildGeom ===\n');
 
 test('buildGeom: line → 1 seg, eid saqlanadi', () => {
   const g = buildGeom([line('l1', 0, 0, 10, 0)]);
-  assert.deepEqual(g, { segs: [{ a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, eid: 'l1' }], circles: [], nodes: [], ends: [], mids: [] });
+  assert.deepEqual(g, { segs: [{ a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, eid: 'l1' }], circles: [], nodes: [], ends: [], mids: [], cens: [], quas: [] });
 });
 test('buildGeom: polyline yopiq 3 nuqta → 3 seg (oxirgi p[2]→p[0])', () => {
   const pts = [P(0, 0), P(10, 0), P(0, 10)];
@@ -347,9 +347,9 @@ test('buildGeom: opts.nodes / opts.segs qo\'shiladi', () => {
   assert.equal(g.segs.length, 2); assert.equal(g.segs[1], s);
 });
 test('buildGeom: null / noma\'lum tur / entities yo\'q — xato bermaydi', () => {
-  assert.deepEqual(buildGeom([null, { id: 'z', type: 'text' }, undefined]), { segs: [], circles: [], nodes: [], ends: [], mids: [] });
-  assert.deepEqual(buildGeom(undefined), { segs: [], circles: [], nodes: [], ends: [], mids: [] });
-  assert.deepEqual(buildGeom(), { segs: [], circles: [], nodes: [], ends: [], mids: [] });
+  assert.deepEqual(buildGeom([null, { id: 'z', type: 'text' }, undefined]), { segs: [], circles: [], nodes: [], ends: [], mids: [], cens: [], quas: [] });
+  assert.deepEqual(buildGeom(undefined), { segs: [], circles: [], nodes: [], ends: [], mids: [], cens: [], quas: [] });
+  assert.deepEqual(buildGeom(), { segs: [], circles: [], nodes: [], ends: [], mids: [], cens: [], quas: [] });
 });
 
 /* ============================================================ */
@@ -1379,6 +1379,33 @@ test('resolveSnap: burchak tolerantligi to\'rni (SNAP) bosib ketmaydi; nur ustid
   assert.equal(r.kind, 'grid'); nearPt(r, 5000, 200);
   const r2 = resolveSnap({ geom: G_EMPTY, cur: P(5000, 50), scale: 0.1, settings: s, from: P(0, 0), gridStep: 50 });
   assert.equal(r2.kind, 'polar'); assert.equal(r2.tracks[0].ang, 0);
+});
+
+console.log('\n=== Silliq egri (ellips / splayn) va matn ===\n');
+test('Silliq polyline: ichki tugunlarda END/MID yo\'q, faqat ochiq uchlarida END (EXT yo\'nalishi bilan)', () => {
+  const g = buildGeom([{ id: 's1', type: 'pline', smooth: 'spline', closed: false, pts: [P(0, 0), P(10, -2), P(20, -3), P(30, -2), P(40, 0)] }]);
+  assert.ok(g.segs.every((s) => s.smooth));
+  assert.equal(g.ends.length, 2);
+  const inner = osnapCandidates(g, P(20, -3), OPT());
+  assert.ok(!inner.some((c) => c.kind === 'END' || c.kind === 'MID'));
+  const end = osnapBest(g, P(40.5, 0.5), OPT());
+  assert.equal(end.kind, 'END'); nearPt(end, 40, 0);
+  near(g.ends[1].dir, 360 - Math.atan2(2, 10) * 180 / Math.PI, 1e-6);
+});
+test('Ellips: markaz — CEN, o\'q uchlari — QUA; oddiy polyline END/MID o\'zgarmagan', () => {
+  const ell = { cx: 100, cy: 0, rx: 50, ry: 20, rot: 0 };
+  const g = buildGeom([{ id: 'e1', type: 'pline', smooth: 'ellipse', closed: true, ell, pts: [P(150, 0), P(100, -20), P(50, 0), P(100, 20)] }]);
+  assert.equal(g.cens.length, 1); assert.equal(g.quas.length, 4); assert.equal(g.ends.length, 0);
+  const c = osnapBest(g, P(101, 1), OPT({ modes: { ...klon(DEFAULT_SNAP.modes), CEN: true } }));
+  assert.equal(c.kind, 'CEN'); nearPt(c, 100, 0);
+  const q = osnapBest(g, P(149, 1), OPT({ modes: { ...klon(DEFAULT_SNAP.modes), QUA: true } }));
+  assert.equal(q.kind, 'QUA'); nearPt(q, 150, 0);
+  const plain = buildGeom([{ id: 'p1', type: 'pline', pts: [P(0, 0), P(10, 0)] }]);
+  assert.ok(osnapCandidates(plain, P(5, 0), OPT()).some((x) => x.kind === 'MID'));
+});
+test('Matn: qo\'yish nuqtasi — tugun (NOD)', () => {
+  const g = buildGeom([{ id: 't1', type: 'text', x: 7, y: -3, h: 5, rot: 0, text: 'Lola' }]);
+  assert.equal(g.nodes.length, 1); nearPt(g.nodes[0], 7, -3);
 });
 
 /* ============================================================ */

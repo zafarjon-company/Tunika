@@ -184,7 +184,7 @@ export function tangentPoints(p, c, r) {
    yo'nalishi), o'rtasi mids (MID)) · dim{x1,y1,x2,y2} (uchlari tugun).
    opts: { skip(e), nodes:[], segs:[] } */
 export function buildGeom(entities, opts = {}) {
-  const segs = [], circles = [], nodes = [], ends = [], mids = [];
+  const segs = [], circles = [], nodes = [], ends = [], mids = [], cens = [], quas = [];
   // Buzuq (yo'q/NaN koordinatali) yozuvlar TASHLAB YUBORILADI — aks holda bitta
   // nuqsonli element butun chizmada magnitni NaN qilib qo'yardi.
   const ok = (p) => !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
@@ -196,9 +196,24 @@ export function buildGeom(entities, opts = {}) {
     if (e.type === 'line') addSeg({ x: e.x1, y: e.y1 }, { x: e.x2, y: e.y2 }, id);
     else if (e.type === 'polyline' || e.type === 'pline') {
       const p = Array.isArray(e.pts) ? e.pts : [];
+      const s0 = segs.length;
       for (let i = 0; i + 1 < p.length; i++) addSeg(p[i], p[i + 1], id);
       if (e.closed && p.length > 2) addSeg(p[p.length - 1], p[0], id);
       if (p.length === 1) addNode(p[0], id);
+      if (e.smooth) {   // ellips / splayn (silliq egri): ichki tugunlar END/MID bermaydi — AutoCAD egri chizig'i kabi
+        for (let i = s0; i < segs.length; i++) segs[i].smooth = true;
+        const n = p.length;
+        if (!e.closed && n >= 2 && ok(p[0]) && ok(p[1]) && ok(p[n - 1]) && ok(p[n - 2])) {
+          ends.push({ x: p[0].x, y: p[0].y, eid: id, dir: vecAng(p[0].x - p[1].x, p[0].y - p[1].y) });
+          ends.push({ x: p[n - 1].x, y: p[n - 1].y, eid: id, dir: vecAng(p[n - 1].x - p[n - 2].x, p[n - 1].y - p[n - 2].y) });
+        }
+        const el = e.ell;
+        if (el && [el.cx, el.cy, el.rx, el.ry, el.rot].every(Number.isFinite)) {
+          cens.push({ x: el.cx, y: el.cy, eid: id });
+          const u = dirVec(el.rot), v = dirVec(el.rot + 90);
+          for (const [k, r] of [[u, el.rx], [v, el.ry]]) for (const sg of [1, -1]) quas.push({ x: el.cx + k.dx * r * sg, y: el.cy + k.dy * r * sg, eid: id });
+        }
+      }
     } else if (e.type === 'circle') {
       if (ok({ x: e.cx, y: e.cy }) && Number.isFinite(e.r) && e.r > 0) circles.push({ c: { x: e.cx, y: e.cy }, r: e.r, eid: id });
     } else if (e.type === 'arc') {
@@ -213,12 +228,12 @@ export function buildGeom(entities, opts = {}) {
         ends.push({ x: en.x, y: en.y, eid: id, dir: norm360(a0 + sw + 90) });
         mids.push({ x: mid.x, y: mid.y, eid: id });
       }
-    } else if (e.type === 'point') addNode({ x: e.x, y: e.y }, id);   // nuqta — tugun (NOD)
+    } else if (e.type === 'point' || e.type === 'text') addNode({ x: e.x, y: e.y }, id);   // nuqta / matn qo'yish nuqtasi — tugun (NOD)
     else if (e.type === 'dim') { addNode({ x: e.x1, y: e.y1 }, id); addNode({ x: e.x2, y: e.y2 }, id); }
   }
   for (const n of opts.nodes || []) if (ok(n)) nodes.push(n);
   for (const s of opts.segs || []) if (s && ok(s.a) && ok(s.b)) segs.push(s);
-  return { segs, circles, nodes, ends, mids };
+  return { segs, circles, nodes, ends, mids, cens, quas };
 }
 // Nuqtada tugaydigan segmentlarning yo'nalishlari (gradus, nuqtadan TASHQARIGA) — EXT kuzatish uchun
 export function endpointDirs(geom, pt, eps = 1e-6) {
@@ -258,14 +273,16 @@ export function osnapCandidates(geom, cur, opts) {
   if (m.NOD) for (const n of geom.nodes) if (!skip(n.eid)) push(n.x, n.y, 'NOD', n.eid);
   if (m.END) for (const p of geom.ends || []) if (!skip(p.eid)) push(p.x, p.y, 'END', p.eid);
   if (m.MID) for (const p of geom.mids || []) if (!skip(p.eid)) push(p.x, p.y, 'MID', p.eid);
+  if (m.CEN) for (const p of geom.cens || []) if (!skip(p.eid)) push(p.x, p.y, 'CEN', p.eid);   // ellips markazi
+  if (m.QUA) for (const p of geom.quas || []) if (!skip(p.eid)) push(p.x, p.y, 'QUA', p.eid);   // ellips o'q uchlari
   // Yoy (sweep bor) — nuqta yoyning burchak oralig'idami; oddiy aylana — har doim
   const inArc = (c, x, y) => c.sweep == null || norm360(vecAng(x - c.c.x, y - c.c.y) - c.a0) <= c.sweep + 1e-7;
 
   const nearSegs = [];      // kursor apertura ichida turgan segmentlar (INT/PER/NEA)
   for (const s of geom.segs) {
     if (skip(s.eid)) continue;
-    if (m.END) { push(s.a.x, s.a.y, 'END', s.eid); push(s.b.x, s.b.y, 'END', s.eid); }
-    if (m.MID) push((s.a.x + s.b.x) / 2, (s.a.y + s.b.y) / 2, 'MID', s.eid);
+    if (m.END && !s.smooth) { push(s.a.x, s.a.y, 'END', s.eid); push(s.b.x, s.b.y, 'END', s.eid); }
+    if (m.MID && !s.smooth) push((s.a.x + s.b.x) / 2, (s.a.y + s.b.y) / 2, 'MID', s.eid);
     const cl = segClosest(cur, s.a, s.b);
     if (cl.d * sc <= ap) nearSegs.push({ s, cl });
   }
@@ -280,7 +297,12 @@ export function osnapCandidates(geom, cur, opts) {
   // INT — kursorga yaqin element bilan qolganlarning kesishmasi
   if (m.INT) {
     for (const { s } of nearSegs) {
-      for (const t of geom.segs) { if (t === s || skip(t.eid)) continue; const p = segSegInt(s.a, s.b, t.a, t.b); if (p) push(p.x, p.y, 'INT', s.eid); }
+      for (const t of geom.segs) {
+        if (t === s || skip(t.eid)) continue;
+        // silliq egrining qo'shni bo'laklari (umumiy tugun) — kesishma emas
+        if (s.smooth && t.smooth && s.eid === t.eid && [s.a, s.b].some((q) => [t.a, t.b].some((r) => Math.abs(q.x - r.x) < 1e-9 && Math.abs(q.y - r.y) < 1e-9))) continue;
+        const p = segSegInt(s.a, s.b, t.a, t.b); if (p) push(p.x, p.y, 'INT', s.eid);
+      }
       for (const c of geom.circles) { if (skip(c.eid)) continue; for (const p of segCircleInts(s.a, s.b, c.c, c.r)) if (inArc(c, p.x, p.y)) push(p.x, p.y, 'INT', s.eid); }
     }
     for (const { c } of nearCirc) {

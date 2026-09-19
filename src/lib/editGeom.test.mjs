@@ -171,5 +171,14 @@ test('lengthenEnt: oxirgi segment nol uzunlikda (takror tugun) → NaN emas, old
   const z = lengthenEnt(pl([P(5, 5), P(5, 5)]), P(5, 5), 'delta', 10);
   assert.ok(z.reason);
 });
+test('stretchEnt: matn — qo\'yish nuqtasi ramkada bo\'lsa suriladi; burchak o\'lchamining uchi ham', () => {
+  const RECT = { x1: 80, y1: -20, x2: 120, y2: 20 };
+  const t = stretchEnt({ type: 'text', x: 90, y: 0, h: 5, text: 'A' }, RECT, 10, 0);
+  near(t.x, 100); near(t.y, 0);
+  assert.equal(stretchEnt({ type: 'text', x: 0, y: 0, h: 5, text: 'A' }, RECT, 10, 0), null);
+  const a = stretchEnt({ type: 'dim', kind: 'ang', cx: 100, cy: 0, x1: 200, y1: 0, x2: 100, y2: -100, lx: 150, ly: -50 }, RECT, 5, 5);
+  near(a.cx, 105); near(a.cy, 5); near(a.x1, 200); near(a.lx, 150);
+});
+
 console.log(`\nJami: ${jami}, xato: ${xato}`);
 if (xato) process.exit(1);
