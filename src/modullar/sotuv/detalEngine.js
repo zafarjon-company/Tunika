@@ -31,6 +31,7 @@ import { breakEnt, stretchEnt, lengthenEnt, polygonPts, polygonEdge, divideEnt, 
 import { curveOf, filletCurves, chamferLines, replaceSegEnd, adjacentSegs, cornerOp, filletPlineAll, chamferPlineAll, explodeEnt, joinEnts } from '../../lib/modifyGeom.js';
 import { arcSweep, arcLen, arcStart, arcEnd, arcMid, arcPt, angInArc, arcBounds, distToArc, arcSamples, arcDrawnEnd, arcSCA, arcSCE, arcSCL, arcSEA, arcSED, arcSER, arcFrom3, arcContinue, arcMap, arcSvgPath } from '../../lib/arcGeom.js';
 import { closedLoops, findRegion, pointInLoops, regionArea } from '../../lib/hatchGeom.js';
+import { TEXT_CAP } from '../../lib/curveGeom.js';
 import { ellipsePts, ellipseFromCenter, ellipseFromAxis, distToAxis, ellipseGrips, ellipseMap, splinePts, textBox, distToTextBox, textMap, linearRot, rotatedDim, rotatedOff, angularDim, lineInt, radialDim } from '../../lib/curveGeom.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -130,6 +131,7 @@ const CMDS = [
   { id: 'chamfer', nomi: 'Faska', al: ['CHA', 'CHAMFER'] },
   { id: 'explode', nomi: 'Portlatish', al: ['X', 'EXPLODE'] },
   { id: 'join', nomi: 'Birlashtirish', al: ['J', 'JOIN'] },
+  { id: 'pedit', nomi: 'Silliqlash (siniq chiziq ↔ splayn)', al: ['PE', 'PEDIT', 'SPE', 'SPLINEDIT'] },
   { id: 'erase', nomi: "O'chirish", al: ['E', 'ERASE', 'DEL'] },
   { id: '#undo', nomi: 'Orqaga', al: ['U', 'UNDO'] },
   { id: '#redo', nomi: 'Oldinga', al: ['REDO'] },
@@ -171,8 +173,8 @@ const GRIP_PX = 4;           // grip kvadratining yarim tomoni (px)
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 // DXF $INSUNITS kodi -> 1 birlik necha mm
 const INSUNITS_MM = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
-const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'erase', 'dist', 'area', 'divide', 'measure'];
-const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'lengthen', 'divide', 'measure'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
+const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'erase', 'dist', 'area', 'divide', 'measure'];
+const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'lengthen', 'divide', 'measure'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const PICK_FIRST = ['move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'align'];   // tanlovsiz tanlansa — avval obyektlar tanlanadi (AutoCAD verb-noun)
 // AutoCAD doskasi ranglari (model maydoni: 33,40,48)
 const ACAD_BOARD = { bg: '#212830', devor: '#ffffff', accent: '#5b9bff', edit: '#e8edf3', text: '#d5dde7', labelBg: 'rgba(33,40,48,.84)', ref: '#6b7686', kazirok: '#cfd8e3', offset: '#ff66e8', accentSoft: '#1b2230', qozon: '#5b9bff', cross: '#ffffff', snap: '#f2c200' };
@@ -283,6 +285,7 @@ function buildTemplate(V) {
       <button type="button" class="tool etool" data-tool="chamfer" title="Faska (CHA) — ikki chiziq burchagini qiya kesish: masofa 1 va masofa 2">&#9698; Faska</button>
       <button type="button" class="tool etool" data-tool="explode" title="Portlatish (X) — polyline'ni alohida chiziqlarga ajratish (tanlangan bo'lsa darhol)">&#10033; Portlatish</button>
       <button type="button" class="tool etool" data-tool="join" title="Birlashtirish (J) — uchlari tutashgan chiziqlar → bitta polyline, bir aylanadagi yoylar → bitta yoy">&#8734; Birlashtirish</button>
+      <button type="button" class="tool etool" data-tool="pedit" title="Silliqlash (PE) — siniq chiziqni (polyline) bosing: uchlari orqali silliq egriga (splayn) aylanadi; splaynni bosing — qaytadan siniq chiziq (AutoCAD PEDIT Spline / Decurve)">&#8767; Silliqlash</button>
       <button type="button" class="tool etool erase" data-tool="erase" title="O'chirish (E) — element ustiga bosing">O'chirish</button>
     </div><div class="chz-rlbl">Tahrir</div></div>
     <div class="chz-rgrp"><div class="chz-rbtns">
@@ -523,8 +526,8 @@ export function mountDetal(root, opts) {
   const _tctx = (() => { try { return document.createElement('canvas').getContext('2d'); } catch (e) { return null; } })();
   function textW(t) {
     const s = String(t.text || '');
-    if (_tctx) { _tctx.font = '100px ' + TEXT_FONT; return (_tctx.measureText(s).width / 100) * t.h; }
-    return s.length * 0.6 * t.h;
+    if (_tctx) { _tctx.font = '100px ' + TEXT_FONT; return (_tctx.measureText(s).width / 100) * (t.h / TEXT_CAP); }
+    return s.length * 0.6 * (t.h / TEXT_CAP);
   }
 
   // AutoCAD holat paneli (chizma maydoni pastida): SNAP/GRID/ORTHO/POLAR/OSNAP/OTRACK/DYN + koordinata
@@ -618,6 +621,10 @@ export function mountDetal(root, opts) {
       if (e.kind === 'ang') { const c = fn({ x: e.cx, y: e.cy }), l = fn({ x: e.lx, y: e.ly }); e.cx = c.x; e.cy = c.y; e.lx = l.x; e.ly = l.y; }
       const a = fn({ x: e.x1, y: e.y1 }), b = fn({ x: e.x2, y: e.y2 });
       e.x1 = a.x; e.y1 = a.y; e.x2 = b.x; e.y2 = b.y;
+      if (e.kind === 'ang' && e.arc) {   // yoy o'lchami CCW boshi→oxiri: aks ettirishda uchlari almashadi
+        const o0 = fn({ x: 0, y: 0 }), ox = fn({ x: 1, y: 0 }), oy = fn({ x: 0, y: 1 });
+        if ((ox.x - o0.x) * (oy.y - o0.y) - (ox.y - o0.y) * (oy.x - o0.x) < 0) { const tx = e.x1, ty = e.y1; e.x1 = e.x2; e.y1 = e.y2; e.x2 = tx; e.y2 = ty; }
+      }
       if (rFactor != null) { if (e.off != null) e.off *= Math.abs(rFactor); if (e.r != null) e.r = Math.abs(e.r * rFactor); }
     }
   }
@@ -738,7 +745,7 @@ export function mountDetal(root, opts) {
     return { x: x / vs.length, y: y / vs.length };
   }
   function viewOf(e) { return viewAt(entCenter(e)); }
-  function vertsOf(view) { const out = []; for (const e of state.ents) if (viewOf(e) === view) for (const p of entVerts(e)) out.push(p); return out; }
+  function vertsOf(view) { const out = []; for (const e of state.ents) if (viewOf(e) === view) for (const p of projVerts(e)) out.push(p); return out; }
   function projCounts() { const c = { V: 0, H: 0, W: 0 }; for (const e of state.ents) { const v = viewOf(e); if (v) c[v]++; } return c; }
   // Boshqa proyeksiyalardagi uchlardan BOG'LANISH chiziqlari — magnit (osnap guides)
   function projGuides(cur) {
@@ -1019,6 +1026,7 @@ export function mountDetal(root, opts) {
       fillet: state.opt.filletPoly ? "Tutashtirish (Polyline): polyline'ni bosing — barcha burchaklari R " + fmtLen(state.opt.filletR) + ' bilan yumaloqlanadi' : 'Tutashtirish (R ' + fmtLen(state.opt.filletR) + '): birinchi obyektni (chiziq, yoy, aylana) bosing',
       chamfer: state.opt.chamPoly ? "Faska (Polyline): polyline'ni bosing — barcha burchaklari kesiladi" : 'Faska (' + fmtLen(state.opt.chamD1) + ' × ' + fmtLen(state.opt.chamD2) + '): birinchi chiziqni bosing',
       explode: "Portlatish: polyline'ni bosing — alohida chiziqlarga ajraladi",
+      pedit: "Silliqlash: siniq chiziqni bosing — silliq egri (splayn) bo'ladi; splaynni bosing — qaytadan siniq chiziq",
       join: "Birlashtirish: uchlari tutashgan chiziqlarni (yoki bir aylanadagi yoylarni) bosib tanlang, so'ng Enter",
       erase: "O'chirish: element ustiga bosing",
       polygon: state.opt.polyMode === 'edge' ? "Ko'pburchak (" + state.opt.polyN + ' tomon, tomon bo\'yicha): tomonning 1-uchini bosing' : "Ko'pburchak (" + state.opt.polyN + ' tomon, ' + (state.opt.polyMode === 'out' ? 'tashqi' : 'ichki') + '): markazni bosing',
@@ -1414,7 +1422,7 @@ export function mountDetal(root, opts) {
         const hit = entAt(sx, sy), raw = screenToWorld(sx, sy);
         if (hit && hit.ent.type === 'arc') {
           const a = hit.ent;
-          state.draft = { tool: 'dim', kind: 'ang', V: { x: a.cx, y: a.cy }, p1: arcStart(a), p2: arcEnd(a) };
+          state.draft = { tool: 'dim', kind: 'ang', V: { x: a.cx, y: a.cy }, p1: arcStart(a), p2: arcEnd(a), arc: true };
           setInfo(nm + ": o'lcham yoyi joyini bosing"); render(); return;
         }
         const cv = hit && !isAnno(hit.ent) ? curveOf(hit.ent, hit.seg) : null;
@@ -1434,7 +1442,7 @@ export function mountDetal(root, opts) {
       }
       if (d.three && !d.p1) { if (dist(w, d.V) < 1e-6) return; d.p1 = WP(w); setInfo(nm + ': 2-nurdagi nuqtani bosing'); render(); return; }
       if (d.three && !d.p2) { if (dist(w, d.V) < 1e-6) return; d.p2 = WP(w); setInfo(nm + ": o'lcham yoyi joyini bosing"); render(); return; }
-      if (d.V && d.p1 && d.p2) commitDim({ kind: 'ang', cx: d.V.x, cy: d.V.y, x1: d.p1.x, y1: d.p1.y, x2: d.p2.x, y2: d.p2.y, lx: w.x, ly: w.y });
+      if (d.V && d.p1 && d.p2) commitDim(Object.assign({ kind: 'ang', cx: d.V.x, cy: d.V.y, x1: d.p1.x, y1: d.p1.y, x2: d.p2.x, y2: d.p2.y, lx: w.x, ly: w.y }, d.arc ? { arc: true } : {}));
       return;
     }
     if (!d) { state.draft = { tool: 'dim', kind: k, p1: WP(w) }; setInfo(nm + ': 2-nuqtani bosing'); render(); return; }
@@ -1468,7 +1476,8 @@ export function mountDetal(root, opts) {
         onCommit: (r2) => { if (r2 > 0) finishEllipse(r2 * U()); else setInfo("2-o'q yarim uzunligini yozing yoki bosing"); } });
       setInfo("Ellips: 2-o'q yarim uzunligini yozing yoki sichqoncha bilan bosing"); render(); return;
     }
-    finishEllipse(null);
+    const [v1] = boxVals();   // qutida yozilgan 2-o'q (jonli ko'rinishdagidek) — bo'sh bo'lsa sichqoncha
+    finishEllipse(v1 > 0 ? v1 * U() : null);
   }
   function finishEllipse(r2) {
     const d = state.draft; if (!d || d.tool !== 'ellipse') return;
@@ -1490,6 +1499,24 @@ export function mountDetal(root, opts) {
         ent.pts = ellipsePts(E); closeBox(); afterChange();
       } });
     setInfo("Ellips yarim o'qlarini o'zgartirib Enter (Esc — bekor)"); render();
+  }
+
+  /* ---- Silliqlash (PEDIT Spline / Decurve): siniq chiziq ↔ splayn (uchlari fit nuqtalar) ---- */
+  function peditEnt(e) {
+    if (e.type !== 'pline') { setInfo("Silliqlash: siniq chiziq (polyline) yoki splaynni bosing"); return; }
+    if (e.ell) { setInfo("Ellips allaqachon silliq — uni Portlatish (X) bilan siniq chiziqqa aylantirish mumkin"); return; }
+    if (e.fit) {   // Decurve — splayn → fit nuqtalar bo'yicha siniq chiziq
+      pushHistory();
+      e.pts = e.fit.map((p) => ({ x: p.x, y: p.y })); delete e.fit; delete e.smooth;
+      afterChange(); setInfo('Siniq chiziqqa qaytarildi: ' + e.pts.length + ' nuqta — ' + toolHint('pedit')); return;
+    }
+    if (e.smooth) { setInfo("Bu egrining fit nuqtalari yo'q (kesilgan / cho'zilgan) — qaytarib bo'lmaydi"); return; }
+    const n = e.pts.length, closed = !!e.closed && n > 2;
+    if (n < 3) { setInfo("Silliqlash uchun kamida 3 nuqtali siniq chiziq kerak"); return; }
+    pushHistory();
+    e.fit = e.pts.map((p) => ({ x: p.x, y: p.y })); e.smooth = 'spline'; e.closed = closed;
+    e.pts = splinePts(e.fit, closed);
+    afterChange(); setInfo('Silliq egri (splayn): ' + n + ' nuqta orqali — griplar bilan shaklini o\'zgartiring. ' + toolHint('pedit'));
   }
 
   /* ---- Splayn (SPL) — fit nuqtalar orqali silliq egri (polyline, fit nuqtalari saqlanadi) ---- */
@@ -1587,7 +1614,7 @@ export function mountDetal(root, opts) {
   function positionTextEd() {
     const d = state.draft; if (!d || d.tool !== 'text') return;
     const s = worldToScreen(d.p.x, d.p.y), r = svg.getBoundingClientRect();
-    const fs = Math.max(13, Math.min(34, d.h * state.scale));
+    const fs = Math.max(13, Math.min(34, (d.h / TEXT_CAP) * state.scale));
     textEd.style.fontSize = fs + 'px';
     textEd.style.left = Math.max(4, Math.min(s.x, r.width - 190)) + 'px';
     textEd.style.top = Math.max(4, Math.min(s.y + 10, r.height - fs * 1.6 - 34)) + 'px';
@@ -1629,7 +1656,7 @@ export function mountDetal(root, opts) {
     textStart(w, null);
   }
   function paintText(target, e, w2s, view, col, sel, opacity) {
-    const s = w2s(e.x, e.y), fs = e.h * view.scale;
+    const s = w2s(e.x, e.y), fs = (e.h / TEXT_CAP) * view.scale;   // h — bosh harf balandligi (AutoCAD)
     if (!(fs > 0.3)) return;
     const t = svgEl('text', { x: s.x, y: s.y, fill: col, 'font-size': fs, 'font-family': TEXT_FONT, 'pointer-events': 'none', style: 'white-space:pre' });
     if (e.rot) t.setAttribute('transform', 'rotate(' + (-e.rot) + ' ' + s.x + ' ' + s.y + ')');
@@ -1715,6 +1742,12 @@ export function mountDetal(root, opts) {
     const D = typed > 0 ? typed * U() : (d && d.dist != null ? d.dist : s.nd);
     return D * s.side;
   }
+  // Silliq egridan (ellips / splayn) hosil bo'lgan bo'laklar ham silliq: bitta uzunlik yozuvi, ichki tugunlarga magnit yo'q
+  function smoothFrom(srcs, list) {
+    if (!srcs.length || !srcs.every((s) => s && s.type === 'pline' && s.smooth)) return list;
+    for (const g of list) if (g && g.type === 'pline') g.smooth = 'curve';
+    return list;
+  }
   // Ofset natijasi: har qadam uchun elementlar guruhi (zanjir — bir nechta element, oddiy — bitta)
   function offsetMade(d, step, N) { return d.chain ? offsetChainSeries(d.chain, step, N) : offsetSeries(d.ent, step, N).map((o) => [o]); }
   function offsetClick(sx, sy, w) {
@@ -1736,7 +1769,8 @@ export function mountDetal(root, opts) {
     const made = offsetMade(d, step, N);
     if (!made.length) { setInfo("Ofset sig'madi — masofani kichraytiring"); return; }
     pushHistory();
-    for (const grp of made) for (const o of grp) state.ents.push(newEnt(o.type, o));
+    const srcs = d.chain ? [...d.chain.ids].map(getEnt) : [e];
+    for (const grp of made) for (const o of smoothFrom(srcs, grp)) state.ents.push(newEnt(o.type, o));
     const chTxt = d.chain ? ' — ' + d.chain.ids.size + ' ta element birga' : '';
     if (state.opt.offsetMulti) {   // variant «Ko'p»: o'sha element, o'sha masofa — yana tomonni bosing
       state.draft = { tool: 'offset', ent: e, chain: d.chain, dist: Math.abs(step) };
@@ -2179,7 +2213,7 @@ export function mountDetal(root, opts) {
       if (o.breakMode === '1p') {
         const r = breakEnt(hit.ent, WP(w));
         if (r.reason) { setInfo(r.reason); return; }
-        applyOp({ remove: [hit.ent.id], add: r.add, patch: [] }, 'Nuqtada uzildi — ' + r.add.length + ' bo\'lak. ' + toolHint('break')); return;
+        applyOp({ remove: [hit.ent.id], add: smoothFrom([hit.ent], r.add), patch: [] }, 'Nuqtada uzildi — ' + r.add.length + ' bo\'lak. ' + toolHint('break')); return;
       }
       state.draft = { tool: 'break', ent: hit.ent, p1: WP(w) };
       setInfo("Uzish: 2-nuqtani bosing — oralig'i olib tashlanadi (Esc — bekor)"); render(); return;
@@ -2187,7 +2221,7 @@ export function mountDetal(root, opts) {
     const r = breakEnt(d.ent, d.p1, WP(w));
     if (r.reason) { setInfo(r.reason); return; }
     state.draft = null;
-    applyOp({ remove: [d.ent.id], add: r.add, patch: [] }, 'Uzildi' + (r.add.length ? '' : ' — element butunlay olib tashlandi') + '. ' + toolHint('break'));
+    applyOp({ remove: [d.ent.id], add: smoothFrom([d.ent], r.add), patch: [] }, 'Uzildi' + (r.add.length ? '' : ' — element butunlay olib tashlandi') + '. ' + toolHint('break'));
   }
   // Uzunlik
   function lengthenCompute(hit, raw) {
@@ -2351,13 +2385,14 @@ export function mountDetal(root, opts) {
       if (!res || !res.remove) { setInfo(res && res.reason ? res.reason : 'Kesib bo\'lmadi'); return; }
       pushHistory();
       state.ents = state.ents.filter((e) => !res.remove.includes(e.id));
-      for (const o of res.add) state.ents.push(newEnt(o.type, o));
+      for (const o of smoothFrom([hit.ent], res.add)) state.ents.push(newEnt(o.type, o));
       state.sel.clear(); state.cont = null;
       afterChange(); setInfo('Kesildi' + (res.add.length ? '' : ' — element butunlay olib tashlandi') + '. ' + toolHint('trim'));
     } else {
       const res = extendAt(state.ents, hit.ent, raw);
       if (!res || !res.patch) { setInfo(res && res.reason ? res.reason : 'Uzaytirib bo\'lmadi'); return; }
       pushHistory();
+      if (res.patch.pts) { delete hit.ent.ell; delete hit.ent.fit; }   // tugunlari o'zgargan ellips/splayn — eskirgan parametrlar tashlanadi
       Object.assign(hit.ent, res.patch);
       afterChange(); setInfo('Uzaytirildi. ' + toolHint('extend'));
     }
@@ -2403,6 +2438,7 @@ export function mountDetal(root, opts) {
     if (t === 'dist') return distClick(w);
     if (t === 'area') return areaClick(sx, sy, w);
     if (t === 'explode') { const hit = entAt(sx, sy); if (hit) explodeEnts([hit.ent]); else setInfo(toolHint('explode')); return; }
+    if (t === 'pedit') { const hit = entAt(sx, sy); if (hit) peditEnt(hit.ent); else setInfo(toolHint('pedit')); return; }
     if (t === 'join') {
       const hit = entAt(sx, sy);
       if (!hit) { setInfo(toolHint('join')); return; }
@@ -2748,7 +2784,7 @@ export function mountDetal(root, opts) {
       if (k === 'rad' || k === 'dia') paintDim(target, { kind: k, x1: d.c.x, y1: d.c.y, x2: cur.x, y2: cur.y, r: d.r }, true, w2s, view, PP);
       else if (k === 'ang') {
         if (d.l1 && !d.V) { const a = w2s(d.l1.a.x, d.l1.a.y), b = w2s(d.l1.b.x, d.l1.b.y); target.appendChild(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: PP.accent, 'stroke-width': 3.5, opacity: 0.5, 'stroke-linecap': 'round', 'pointer-events': 'none' })); }
-        else if (d.V && d.p1 && d.p2) paintDim(target, { kind: 'ang', cx: d.V.x, cy: d.V.y, x1: d.p1.x, y1: d.p1.y, x2: d.p2.x, y2: d.p2.y, lx: cur.x, ly: cur.y }, true, w2s, view, PP);
+        else if (d.V && d.p1 && d.p2) paintDim(target, { kind: 'ang', arc: !!d.arc, cx: d.V.x, cy: d.V.y, x1: d.p1.x, y1: d.p1.y, x2: d.p2.x, y2: d.p2.y, lx: cur.x, ly: cur.y }, true, w2s, view, PP);
         else if (d.V) { dot(d.V); const sv = w2s(d.V.x, d.V.y); for (const p of [d.p1, cur]) if (p) { const s = w2s(p.x, p.y); target.appendChild(svgEl('line', Object.assign({ x1: sv.x, y1: sv.y, x2: s.x, y2: s.y }, dash))); } }
       } else if (!d.p2) { const s1 = w2s(d.p1.x, d.p1.y), s2 = w2s(cur.x, cur.y); target.appendChild(svgEl('line', Object.assign({ x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y }, dash))); }
       else paintDim(target, dimDraftEnt(d, cur), true, w2s, view, PP);
@@ -2969,7 +3005,7 @@ export function mountDetal(root, opts) {
   function paintHoverHighlight(target, w2s, view, PP) {
     if (!state.cursorIn || !state.cursorS || state.grip || selBoxEl.style.display === 'block') return;
     const t = state.tool;
-    const ok = state.picking || (!state.draft && ['select', 'erase', 'explode', 'join', 'offset', 'fillet', 'chamfer'].includes(t)) || (t === 'area' && state.opt.areaMode === 'obj' && !state.draft);
+    const ok = state.picking || (!state.draft && ['select', 'erase', 'explode', 'join', 'pedit', 'offset', 'fillet', 'chamfer'].includes(t)) || (t === 'area' && state.opt.areaMode === 'obj' && !state.draft);
     if (!ok) return;
     const hit = entAt(state.cursorS.sx, state.cursorS.sy); if (!hit) return;
     if (hit.ent.type === 'dim') { paintDim(target, hit.ent, true, w2s, view, PP); return; }

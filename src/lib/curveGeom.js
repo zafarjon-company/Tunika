@@ -100,10 +100,12 @@ export function splinePts(fit, closed, perSpan) {
 }
 
 /* ---------------- MATN ---------------- */
+// Balandlik h — AutoCAD kabi BOSH HARF balandligi; shrift o'lchami (em) = h / TEXT_CAP (Arial)
+export const TEXT_CAP = 0.716;
 // Matn qutisi: pastki chap — qo'yish nuqtasi (AutoCAD TEXT, chap tayanch chiziq). w — kengligi (mm).
 export function textBox(t, w) {
   const u = dirVec(t.rot || 0), v = dirVec((t.rot || 0) + 90), h = t.h;
-  const d = -0.22 * h;   // pastki osilgan harflar (y, g) uchun
+  const d = -0.3 * h;   // pastki osilgan harflar (y, g) uchun
   const P = (a, b) => ({ x: t.x + u.dx * a + v.dx * b, y: t.y + u.dy * a + v.dy * b });
   return [P(0, d), P(w, d), P(w, h), P(0, h)];
 }
@@ -112,7 +114,7 @@ export function distToTextBox(t, w, p) {
   const u = dirVec(t.rot || 0), v = dirVec((t.rot || 0) + 90), h = t.h;
   const dx = p.x - t.x, dy = p.y - t.y;
   const a = dx * u.dx + dy * u.dy, b = dx * v.dx + dy * v.dy;
-  const ca = Math.max(0, Math.min(w, a)), cb = Math.max(-0.22 * h, Math.min(h, b));
+  const ca = Math.max(0, Math.min(w, a)), cb = Math.max(-0.3 * h, Math.min(h, b));
   return Math.hypot(a - ca, b - cb);
 }
 // Akslantirishdan keyin matn: qo'yish nuqtasi, burchak, balandlik. Aks ettirishda matn
@@ -128,10 +130,10 @@ export function textMap(t, w, fn) {
   // world y pastga: oddiy (aks bo'lmagan) akslantirishda (u × v) < 0 bo'ladi
   const mirrored = (ux * vy - uy * vx) > 0;
   if (!mirrored) return { x: p2.x, y: p2.y, rot: nr, h };
-  const c = fn({ x: p.x + u.dx * w / 2 + v.dx * t.h * 0.39, y: p.y + u.dy * w / 2 + v.dy * t.h * 0.39 });
+  const c = fn({ x: p.x + u.dx * w / 2 + v.dx * t.h * 0.35, y: p.y + u.dy * w / 2 + v.dy * t.h * 0.35 });
   if (nr > 90 + 1e-9 && nr <= 270 + 1e-9) nr = norm360(nr + 180);
   const U = dirVec(nr), Vv = dirVec(nr + 90), W = w * s;
-  return { x: c.x - U.dx * W / 2 - Vv.dx * h * 0.39, y: c.y - U.dy * W / 2 - Vv.dy * h * 0.39, rot: nr, h };
+  return { x: c.x - U.dx * W / 2 - Vv.dx * h * 0.35, y: c.y - U.dy * W / 2 - Vv.dy * h * 0.35, rot: nr, h };
 }
 
 /* ---------------- O'LCHAMLAR ---------------- */
@@ -163,13 +165,19 @@ export function angularDim(e) {
   const V = { x: e.cx, y: e.cy };
   const al1 = vecAng(e.x1 - V.x, e.y1 - V.y), al2 = vecAng(e.x2 - V.x, e.y2 - V.y);
   const lam = vecAng(e.lx - V.x, e.ly - V.y), r = dist(V, { x: e.lx, y: e.ly });
+  if (e.arc) {   // yoy o'lchami: yoy boshidan oxirigacha CCW — 180° dan katta ham bo'ladi
+    const lo = { ang: al1, from: dist(V, { x: e.x1, y: e.y1 }) }, hi = { ang: al2, from: dist(V, { x: e.x2, y: e.y2 }) };
+    return { a0: al1, a1: al2, sweep: norm360(al2 - al1) || 360, r, lo, hi, V };
+  }
   const dirs = [
     { ang: al1, from: dist(V, { x: e.x1, y: e.y1 }) }, { ang: norm360(al1 + 180), from: 0 },
     { ang: al2, from: dist(V, { x: e.x2, y: e.y2 }) }, { ang: norm360(al2 + 180), from: 0 },
   ];
   let lo = null, hi = null;
   for (const d of dirs) {
-    const below = norm360(lam - d.ang), above = norm360(d.ang - lam);
+    const below = norm360(lam - d.ang);
+    let above = norm360(d.ang - lam);
+    if (above < 1e-9) above = 360;   // joy nur ustida (magnit END/MID/NEA) — o'sha nur pastki chegara, yuqorisi keyingi nur
     if (!lo || below < lo.k) lo = { k: below, d };
     if (!hi || above < hi.k) hi = { k: above, d };
   }

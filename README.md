@@ -240,7 +240,7 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   Aylana, Yoy ▾, Halqa, Nuqta, Ellips, Splayn, Yordamchi chiziq, Nur, Shtrix, Kontur) · O'zgartirish (Ko'chirish, Nusxa,
   Burish, Aks, Masshtab, Cho'zish, Tekislash, Massiv, Offset) · Tahrir (Kesish,
   Uzaytirish, Uzish, Uzunlik, Tutashtirish, Faska, Portlatish, Birlashtirish,
-  O'chirish) · Izoh (Matn, O'lchamlar: Chiziqli, Parallel, Burchak, Radius, Diametr) ·
+  Silliqlash, O'chirish) · Izoh (Matn, O'lchamlar: Chiziqli, Parallel, Burchak, Radius, Diametr) ·
   O'lchash (Masofa, Yuza, Bo'lish, O'lchab qo'yish) · Chizma.
 - **4-to'lqin: egri chiziqlar va izohlar** (`src/lib/curveGeom.js`, `npm run test:curve`):
   **Ellips** (EL — markaz / «O'q, uch»; silliq yopiq polyline, parametrlari saqlanadi:
@@ -253,6 +253,10 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   qoladi — MIRRTEXT=0; DXF TEXT). **O'lchamlar**: Chiziqli (DLI — kursorga qarab
   gorizontal/vertikal), Parallel (DAL), Burchak (DAN — ikki chiziq, yoy yoki 3 nuqta;
   4 sektordan biri), Radius (DRA), Diametr (DDI).
+- **Silliqlash (PEDIT, PE)** — siniq chiziqni bosing: uchlari fit nuqta bo'lib silliq
+  splaynga aylanadi; splaynni bosing — qaytadan siniq chiziq (AutoCAD PEDIT Spline /
+  Decurve). Ellips/splayndan Offset, Kesish, Uzish bilan hosil bo'lgan bo'laklar ham
+  silliq qoladi (bitta uzunlik yozuvi). Matn balandligi — bosh harf balandligi (AutoCAD).
 - **Yordamchi chiziq (XLINE, XL) / Nur (RAY)** — ikki / bir tomonga cheksiz chiziqlar
   (`{ x, y, ang }`): nuqta orqali (asos + har bosishda yangi yo'nalish), gorizontal,
   vertikal yoki berilgan burchak. Ko'rinish oynasiga qirqib chiziladi, Kesish/Uzaytirish

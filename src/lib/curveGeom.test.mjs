@@ -96,7 +96,7 @@ test('splinePts: kollinear nuqtalar — egri chiziq ustida qoladi (tebranmaydi)'
 console.log('\n— Matn —');
 test('textBox: rot 0 — pastki chap qo\'yish nuqtasi, tepaga h', () => {
   const b = textBox({ x: 10, y: 0, h: 5, rot: 0 }, 20);
-  ptNear(b[0], P(10, 1.1)); ptNear(b[1], P(30, 1.1)); ptNear(b[2], P(30, -5)); ptNear(b[3], P(10, -5));
+  ptNear(b[0], P(10, 1.5)); ptNear(b[1], P(30, 1.5)); ptNear(b[2], P(30, -5)); ptNear(b[3], P(10, -5));
 });
 test('distToTextBox: ichida 0, tashqarida — qutigacha', () => {
   const t = { x: 0, y: 0, h: 10, rot: 0 };
@@ -151,6 +151,17 @@ test('angularDim: 30° va 150° sektorlar', () => {
   const e = { cx: 0, cy: 0, x1: 100, y1: 0, x2: c, y2: -s, lx: 50, ly: -10 };
   near(angularDim(e).sweep, 30, 1e-9);
   near(angularDim(Object.assign({}, e, { lx: 0, ly: -50 })).sweep, 150, 1e-9);
+});
+test('angularDim: joy nur ustida (magnit) — 0° emas, qo\'shni sektor', () => {
+  const e = { cx: 0, cy: 0, x1: 100, y1: 0, x2: 0, y2: -100, lx: 50, ly: 0 };
+  near(angularDim(e).sweep, 90); near(angularDim(e).a0, 0);
+  near(angularDim(Object.assign({}, e, { lx: 0, ly: -40 })).sweep, 90);
+});
+test('angularDim (yoy, arc:true): 270° va 200° yoy — to\'liq burchak (180° dan katta)', () => {
+  const a = angularDim({ arc: true, cx: 0, cy: 0, x1: 100, y1: 0, x2: 0, y2: 100, lx: -70, ly: -70 });
+  near(a.sweep, 270); near(a.a0, 0); near(a.a1, 270);
+  const c = Math.cos(200 * Math.PI / 180) * 50, s = Math.sin(200 * Math.PI / 180) * 50;
+  near(angularDim({ arc: true, cx: 0, cy: 0, x1: 50, y1: 0, x2: c, y2: -s, lx: 0, ly: -60 }).sweep, 200, 1e-9);
 });
 test('lineInt: kesishma; parallel → null', () => {
   ptNear(lineInt(P(0, 0), P(10, 0), P(5, -5), P(5, 5)), P(5, 0));
