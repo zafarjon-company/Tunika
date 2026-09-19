@@ -1428,12 +1428,56 @@ html.themed .chz-arcitem.on { color: var(--chz-accent); }
 html.themed .chz-arcitem:hover { color: var(--c-t1); }
 html.themed .chz-arcsep { background: var(--c-line); }
 
+/* Doska (AutoCAD): krestik kursor o'zi chiziladi, buyruq satri pastda, o'ng tugma menyusi */
+.dtl .chz-canvas svg { cursor: none; }
+.chz-cmdline { position: absolute; left: 0; right: 0; bottom: 28px; z-index: 7; padding: 2px 8px 4px; background: rgba(248, 250, 252, .93); border-top: 1px solid #e2e8f0; font-size: 11.5px; cursor: default; }
+.chz-cmdhist div { color: #94a3b8; font-size: 10.5px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chz-cmdrow { display: flex; align-items: center; gap: 8px; }
+.chz-cmdprompt { flex: 1; min-width: 0; color: #334155; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chz-cmdprompt::before { content: '» '; color: #94a3b8; }
+.chz-cmdline .chz-cmdwrap { margin-left: 0; flex: none; }
+.dtl .chz-cmdline .chz-cmd { width: 230px; max-width: 42vw; }
+.chz-cmdline .chz-cmdlist { top: auto; bottom: calc(100% + 4px); right: 0; }
+html.themed .chz-cmdline { background: color-mix(in srgb, var(--c-surface) 92%, transparent); border-color: var(--c-line); }
+html.themed .chz-cmdprompt { color: var(--c-t2); }
+.acad-board .chz-cmdline { background: rgba(26, 31, 39, .95); border-top-color: #333c48; }
+.acad-board .chz-cmdprompt { color: #d5dde7; }
+.acad-board .chz-cmdhist div { color: #7d8896; }
+.acad-board .chz-cmdline .chz-cmd { background: #161b22; color: #e6edf3; border-color: #3a4452; }
+.chz-ctxmenu { position: absolute; z-index: 45; display: none; min-width: 200px; padding: 4px; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 8px 24px rgba(15, 23, 42, .22); }
+.chz-ctxmenu.show { display: block; }
+.chz-ctxmenu button { display: block; width: 100%; padding: 5px 10px; border: 0; border-radius: 5px; background: transparent; color: #334155; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; white-space: nowrap; }
+.chz-ctxmenu button:hover:not(:disabled) { background: color-mix(in srgb, var(--chz-accent) 12%, transparent); color: #0f172a; }
+.chz-ctxmenu button:disabled { opacity: .4; cursor: default; }
+.chz-ctxsep { height: 1px; margin: 4px 2px; background: #e2e8f0; }
+html.themed .chz-ctxmenu { background: var(--c-surface); border-color: var(--c-line); box-shadow: 0 8px 24px rgba(0, 0, 0, .6); }
+html.themed .chz-ctxmenu button { color: var(--c-t2); }
+html.themed .chz-ctxmenu button:hover:not(:disabled) { color: var(--c-t1); }
+html.themed .chz-ctxsep { background: var(--c-line); }
+.acad-board .cad-status { background: rgba(26, 31, 39, .96); border-top-color: #333c48; color: #c9d1d9; }
+
 /* Asboblar paneli — AutoCAD lentasi kabi guruhlar (Chizish / O'zgartirish / Tahrir / O'lchash / Chizma) */
-.chz-toolbar.chz-ribbon { align-items: stretch; gap: 6px; padding: 6px 8px; }
-.chz-rgrp { display: flex; flex-direction: column; justify-content: space-between; padding: 4px 5px 2px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
-.chz-rbtns { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+/* Lenta bitta qatorda (sig'masa — gorizontal suriladi), har panel ichida 2 qatorgacha — chizma maydoni siqilmaydi */
+.chz-toolbar.chz-ribbon { align-items: stretch; gap: 6px; padding: 6px 8px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.chz-toolbar.chz-ribbon::-webkit-scrollbar { height: 5px; }
+.chz-toolbar.chz-ribbon::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.chz-rgrp { flex: none; display: flex; flex-direction: column; justify-content: space-between; padding: 4px 5px 2px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+.chz-rbtns { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, auto); gap: 2px 3px; align-items: center; justify-items: stretch; }
+.chz-rbtns > .tool, .chz-rbtns > .chz-arcwrap { text-align: left; white-space: nowrap; }
+.chz-rbtns > .chz-arcwrap { display: flex; }
+.chz-rbtns > .chz-arcwrap > .tool.etool { flex: 1; text-align: left; }
+.dtl.chz { position: relative; height: auto; min-height: 700px; }
+/* Paneller siqilmaydi — chizma maydoni kafolatlangan balandlikda (tor ekranda sahifa suriladi) */
+.dtl .chz-toolbar, .dtl .chz-edittoolbar, .dtl .chz-optrow { flex: none; }
+.dtl .chz-main { min-height: 380px; }
+.chz-full-wrap .dtl.chz { min-height: 0; overflow-y: auto; }
+@media (max-width: 700px) {
+  .dtl .chz-main { min-height: 0; flex: none; }
+  .dtl .chz-canvas { flex: none; height: 380px; }
+  .chz-full-wrap .dtl .chz-canvas { height: 62vh; }
+}
 .chz-rlbl { margin-top: 3px; font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; text-align: center; color: #94a3b8; }
-.chz-ribbon button.tool { padding: 4px 8px; font-size: 11.5px; }
+.chz-ribbon button.tool { padding: 2px 7px; font-size: 11.5px; line-height: 1.35; }
 .chz-ribbon .chz-cmdwrap { align-self: center; }
 .chz-ribbon .chz-scale { align-self: center; }
 html.themed .chz-rgrp { background: var(--c-surface); border-color: var(--c-line); }

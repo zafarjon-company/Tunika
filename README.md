@@ -227,6 +227,14 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   ustun, oraliqlar; qatorlar tepaga) yoki qutbiy (markazni bosing, soni,
   to'ldirish burchagi — 360° bo'lsa teng taqsim; gul yaproqlari) ko'paytirish,
   jonli ko'rinish, «Bajarish» yoki Enter. Variantlar chizma bilan saqlanadi.
+- **Doska (AutoCAD'dagidek)** — to'q kulrang model maydoni (33,40,48), oq chiziqlar,
+  ko'k tanlov, sariq magnit belgisi; krestik kursor (obyekt tanlashda quticha); UCS
+  belgisi; kursor ostidagi obyekt ajraladi; tanlash ramkasi ko'k (oyna) / yashil punktir
+  (kesib o'tish); pastda buyruq satri (tarix + buyruq qidirish, ro'yxat tepaga
+  ochiladi); o'ng tugma — kontekst menyusi (surilsa — surish); Probel = Enter;
+  g'ildirak 2× — markazga; Ctrl+A — hammasi; avval buyruq, keyin tanlash (verb-noun:
+  Ko'chirish, Nusxa, Burish, Aks, Masshtab, Massiv, Tekislash); tanlov bilan O'chirish —
+  darhol. «AutoCAD doska» tugmasi (variantlar qatorida) — mavzu ranglariga qaytish.
 - **Asboblar paneli** — AutoCAD lentasi kabi guruhlar: Tanlash · Chizish (Chiziq,
   To'rtburchak, Ko'pburchak, Aylana, Yoy ▾, Halqa, Nuqta) · O'zgartirish (Ko'chirish,
   Nusxa, Burish, Aks, Masshtab, Cho'zish, Tekislash, Massiv, Offset) · Tahrir (Kesish,
