@@ -227,6 +227,21 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   ustun, oraliqlar; qatorlar tepaga) yoki qutbiy (markazni bosing, soni,
   to'ldirish burchagi — 360° bo'lsa teng taqsim; gul yaproqlari) ko'paytirish,
   jonli ko'rinish, «Bajarish» yoki Enter. Variantlar chizma bilan saqlanadi.
+- **Asboblar paneli** — AutoCAD lentasi kabi guruhlar: Tanlash · Chizish (Chiziq,
+  To'rtburchak, Ko'pburchak, Aylana, Yoy ▾, Halqa, Nuqta) · O'zgartirish (Ko'chirish,
+  Nusxa, Burish, Aks, Masshtab, Cho'zish, Tekislash, Massiv, Offset) · Tahrir (Kesish,
+  Uzaytirish, Uzish, Uzunlik, Tutashtirish, Faska, Portlatish, Birlashtirish,
+  O'chirish) · O'lchash (O'lcham, Masofa, Yuza, Bo'lish, O'lchab qo'yish) · Chizma.
+- **3-to'lqin asboblari** (`src/lib/editGeom.js`, `npm run test:edit`): Ko'pburchak
+  (POL — ichki / tashqi / tomon bo'yicha), Halqa (DO — ikki aylana), Nuqta (PO —
+  yangi `point` elementi: magnit Tugun, DXF POINT), Cho'zish (S — ramka ichidagi
+  tugunlar; yoy bitta uchi bilan — sagitta saqlanadi), Tekislash (AL — 2 juft nuqta:
+  ko'chirish + burish, masshtab ixtiyoriy; Enter 1 juftdan keyin — faqat ko'chirish),
+  Uzish (BR — ikki nuqta orasi / nuqtada; yopiq polyline ochiladi, aylana yoyga),
+  Uzunlik (LEN — delta / foiz / umumiy; chiziq va yoy), Masofa (DI), Yuza (AA —
+  yopiq polyline, aylana, tutash chiziq/yoylar zanjiri yoki nuqtalar; sm² va m²),
+  Bo'lish (DIV) / O'lchab qo'yish (ME) — nuqtalar. Buyruq qisqartmalari AutoCAD'dek
+  (S endi Cho'zish, Tanlash — SEL).
 - **Tutashtirish (Fillet, F) / Faska (Chamfer, CHA) / Portlatish (Explode, X) /
   Birlashtirish (Join, J)** (Detal va Gul chizish, `src/lib/modifyGeom.js`,
   `npm run test:modify`). Tutashtirish: ikki obyekt (chiziq, polyline segmenti, yoy,

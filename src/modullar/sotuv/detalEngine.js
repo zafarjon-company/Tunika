@@ -27,6 +27,7 @@ import { mountStatusBar } from '../../lib/cadStatusBar.js';
 import { offsetSide, offsetSeries } from '../../lib/offsetGeom.js';
 import { chainOf, chainSide, offsetChainSeries, buildChains, offsetChainInward, piecesToEnts } from '../../lib/chainOffset.js';
 import { trimAt, extendAt } from '../../lib/trimExtend.js';
+import { breakEnt, stretchEnt, lengthenEnt, polygonPts, polygonEdge, divideEnt, measureEnt, polyArea, polyPerim, chainArea, areaOfEnt } from '../../lib/editGeom.js';
 import { curveOf, filletCurves, chamferLines, replaceSegEnd, adjacentSegs, cornerOp, filletPlineAll, chamferPlineAll, explodeEnt, joinEnts } from '../../lib/modifyGeom.js';
 import { arcSweep, arcLen, arcStart, arcEnd, arcMid, arcPt, angInArc, arcBounds, distToArc, arcSamples, arcDrawnEnd, arcSCA, arcSCE, arcSCL, arcSEA, arcSED, arcSER, arcFrom3, arcContinue, arcMap, arcSvgPath } from '../../lib/arcGeom.js';
 
@@ -85,9 +86,12 @@ const ARC_METHODS = [
 const ARC_BY_KEY = Object.fromEntries(ARC_METHODS.map((m) => [m.key, m]));
 // Buyruq qidirish ro'yxati: o'zbekcha nomi + AutoCAD qisqartmalari (id — asbob yoki #amal)
 const CMDS = [
-  { id: 'select', nomi: 'Tanlash', al: ['SEL', 'S'] },
+  { id: 'select', nomi: 'Tanlash', al: ['SEL'] },
   { id: 'pline', nomi: 'Chiziq', al: ['L', 'PL', 'LINE', 'PLINE'] },
   { id: 'rect', nomi: "To'rtburchak", al: ['REC', 'RECTANG'] },
+  { id: 'polygon', nomi: "Ko'pburchak", al: ['POL', 'POLYGON'] },
+  { id: 'donut', nomi: 'Halqa', al: ['DO', 'DONUT'] },
+  { id: 'point', nomi: 'Nuqta', al: ['PO', 'POINT'] },
   { id: 'circle', nomi: 'Aylana', al: ['C', 'CIRCLE'] },
   { id: 'arc', nomi: 'Yoy', al: ['A', 'ARC'] },
   { id: 'dim', nomi: "O'lcham", al: ['DIM', 'DLI', 'DAL'] },
@@ -97,6 +101,14 @@ const CMDS = [
   { id: 'mirror', nomi: 'Aks ettirish', al: ['MI', 'MIRROR'] },
   { id: 'scale', nomi: 'Masshtab', al: ['SC', 'SCALE'] },
   { id: 'array', nomi: 'Massiv', al: ['AR', 'ARRAY'] },
+  { id: 'stretch', nomi: "Cho'zish", al: ['S', 'STRETCH'] },
+  { id: 'align', nomi: 'Tekislash', al: ['AL', 'ALIGN'] },
+  { id: 'break', nomi: 'Uzish', al: ['BR', 'BREAK'] },
+  { id: 'lengthen', nomi: "Uzunlikni o'zgartirish", al: ['LEN', 'LENGTHEN'] },
+  { id: 'dist', nomi: "Masofa (o'lchash)", al: ['DI', 'DIST'] },
+  { id: 'area', nomi: 'Yuza (maydon)', al: ['AA', 'AREA'] },
+  { id: 'divide', nomi: "Bo'lish (nuqtalar)", al: ['DIV', 'DIVIDE'] },
+  { id: 'measure', nomi: "O'lchab qo'yish (nuqtalar)", al: ['ME', 'MEASURE'] },
   { id: 'offset', nomi: 'Offset', al: ['O', 'OFFSET'] },
   { id: 'trim', nomi: 'Kesish', al: ['TR', 'TRIM'] },
   { id: 'extend', nomi: 'Uzaytirish', al: ['EX', 'EXTEND'] },
@@ -145,8 +157,9 @@ const GRIP_PX = 4;           // grip kvadratining yarim tomoni (px)
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 // DXF $INSUNITS kodi -> 1 birlik necha mm
 const INSUNITS_MM = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
-const TOOLS = ['select', 'pline', 'rect', 'circle', 'arc', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'offset', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'erase'];
-const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
+const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'erase', 'dist', 'area', 'divide', 'measure'];
+const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'lengthen', 'divide', 'measure'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
+const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const CIRCLE_MODES = { cr: 'Markaz, radius', dia: 'Markaz, diametr', '2p': '2 nuqta', '3p': '3 nuqta' };
 // Eksport (PNG) uchun mavzudan mustaqil OCH palitra — oq fonda doim o'qiladi.
 const EXPORT_P = {
@@ -212,37 +225,57 @@ function plineSegs(e) {
 /* ---------------- DOM SHABLONI (V — rejim varianti) ---------------- */
 function buildTemplate(V) {
   return `
-  <div class="chz-toolbar">
-    <span class="chz-tglbl">Asbob:</span>
-    <button type="button" class="tool etool" data-tool="select" title="Tanlash — bosing (har bosish qo'shiladi, Shift — olib tashlash, bo'sh joy/Esc — bo'shatish) yoki ramka torting; uchlarini (grip) sudrab o'zgartiring; chiziqqa 2 marta bosing — uzunlik/burchak tahriri">&#10530; Tanlash</button>
-    <button type="button" class="tool etool" data-tool="pline" title="Chiziq — boshlang'ich nuqtani bosing, so'ng uzunlik (sm) va burchak (°) yozib Enter bosing. Esc — tugatish, C — konturni yopish">&#9998; Chiziq</button>
-    <button type="button" class="tool etool" data-tool="rect" title="To'rtburchak — burchakni bosing; eni/bo'yini yozing yoki qarama-qarshi burchakni bosing">&#9645; To'rtburchak</button>
-    <button type="button" class="tool etool" data-tool="circle" title="Aylana — markazni bosing; radiusni yozing yoki bosing">&#9711; Aylana</button>
-    <span class="chz-arcwrap" data-dtl="arcWrap">
-      <button type="button" class="tool etool" data-tool="arc" data-dtl="arcBtn" title="Yoy — usulni yonidagi ▾ dan tanlang (oxirgi usul eslab qolinadi)">&#9696; Yoy</button><button type="button" class="tool arcdd" data-dtl="arcMenuBtn" title="Yoy chizish usullari (AutoCAD Arc)">&#9662;</button>
-      <div class="chz-arcmenu" data-dtl="arcMenu"></div>
-    </span>
-    <button type="button" class="tool etool" data-tool="dim" title="O'lcham chizig'i — 1-nuqta, 2-nuqta, so'ng o'lcham chizig'i turadigan joyni bosing">&#8596; O'lcham</button>
-    <span class="sep"></span>
-    <button type="button" class="tool etool" data-tool="move" title="Ko'chirish — tanlanganlarni: tayanch nuqta → yangi joy (yoki masofa + burchak yozing)">Ko'chirish</button>
-    <button type="button" class="tool etool" data-tool="copy" title="Nusxa — tayanch nuqta → nusxa joyi (yoki masofa + burchak yozing)">Nusxa</button>
-    <button type="button" class="tool etool" data-tool="rotate" title="Burish — tayanch nuqta → burchak (gradus yozing yoki bosing)">Burish</button>
-    <button type="button" class="tool etool" data-tool="mirror" title="Aks ettirish — o'qning 2 nuqtasini bosing (asl nusxa qoladi; kerak bo'lmasa Delete)">Aks</button>
-    <button type="button" class="tool etool" data-tool="scale" title="Masshtab — tayanch nuqta → koeffitsient (yozing yoki bosing)">Masshtab</button>
-    <button type="button" class="tool etool" data-tool="array" title="Massiv (ARRAY) — tanlanganlarni to'rtburchak (qator × ustun) yoki qutbiy (markaz atrofida — gul yaproqlari) ko'paytirish; parametrlar pastdagi qatorda">&#9638; Massiv</button>
-    <button type="button" class="tool etool" data-tool="offset" title="${V.offTitle}">Offset</button>
-    <button type="button" class="tool etool" data-tool="trim" title="Kesish (TRIM, AutoCAD tez rejim) — chegarani tanlamasdan: olib tashlanadigan qismga bosing, u eng yaqin kesishmalargacha o'chadi (kesishma yo'q tomonda — uchigacha); chizma elementlari o'zaro chegara">&#9986; Kesish</button>
-    <button type="button" class="tool etool" data-tool="extend" title="Uzaytirish (EXTEND, tez rejim) — chiziq yoki yoyning uchiga yaqin bosing, u yo'nalishidagi eng yaqin elementgacha cho'ziladi">&#10145; Uzaytirish</button>
-    <button type="button" class="tool etool" data-tool="fillet" title="Tutashtirish (FILLET, F) — ikki obyektni radiusli yoy bilan ulash: birinchisini, so'ng ikkinchisini bosing (Shift — radius 0, burchakka tutashtirish). Variantlar: Radius, Polyline (butun kontur), Kesish">&#8978; Tutashtirish</button>
-    <button type="button" class="tool etool" data-tool="chamfer" title="Faska (CHAMFER, CHA) — ikki chiziq burchagini qiya kesish: masofa 1 va masofa 2">&#9698; Faska</button>
-    <button type="button" class="tool etool" data-tool="explode" title="Portlatish (EXPLODE, X) — polyline'ni alohida chiziqlarga ajratish (tanlangan bo'lsa darhol)">&#10033; Portlatish</button>
-    <button type="button" class="tool etool" data-tool="join" title="Birlashtirish (JOIN, J) — uchlari tutashgan chiziqlarni bitta polyline'ga, bir aylanadagi yoylarni bitta yoyga">&#8734; Birlashtirish</button>
-    <button type="button" class="tool etool erase" data-tool="erase" title="O'chirish — element ustiga bosing">O'chirish</button>
-    <span class="sep"></span>
-    <button type="button" class="tool" data-dtl="btnUndo" title="Ctrl+Z">&#8630; Orqaga</button>
-    <button type="button" class="tool" data-dtl="btnRedo" title="Ctrl+Y">&#8631; Oldinga</button>
-    <button type="button" class="tool" data-dtl="btnClear" title="Butun chizmani tozalash (Orqaga bilan qaytariladi)">&#10005; Tozalash</button>
-    <button type="button" class="tool" data-dtl="btnFit" title="Chizma chegarasigacha avtozoom — Ctrl+E">&#10530; Markazga</button>
+  <div class="chz-toolbar chz-ribbon">
+    <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool etool" data-tool="select" title="Tanlash — bosing (har bosish qo'shiladi, Shift+bosish — olib tashlash, bo'sh joy/Esc — bo'shatish) yoki ramka torting; uchlarini (grip) sudrab o'zgartiring; chiziqqa 2 marta bosing — uzunlik/burchak tahriri">&#10530; Tanlash</button>
+    </div><div class="chz-rlbl">Tanlash</div></div>
+    <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool etool" data-tool="pline" title="Chiziq (L) — boshlang'ich nuqtani bosing, so'ng uzunlik (sm) va burchak (°) yozib Enter bosing. Esc — tugatish, C — konturni yopish">&#9998; Chiziq</button>
+      <button type="button" class="tool etool" data-tool="rect" title="To'rtburchak (REC) — burchakni bosing; eni/bo'yini yozing yoki qarama-qarshi burchakni bosing">&#9645; To'rtburchak</button>
+      <button type="button" class="tool etool" data-tool="polygon" title="Ko'pburchak (POL) — muntazam: tomonlar soni, markaz → radius (ichki / tashqi) yoki tomon bo'yicha">&#11041; Ko'pburchak</button>
+      <button type="button" class="tool etool" data-tool="circle" title="Aylana (C) — markaz+radius, markaz+diametr, 2 nuqta, 3 nuqta (pastdagi variantlar)">&#9711; Aylana</button>
+      <span class="chz-arcwrap" data-dtl="arcWrap">
+        <button type="button" class="tool etool" data-tool="arc" data-dtl="arcBtn" title="Yoy (A) — usulni yonidagi ▾ dan tanlang (oxirgi usul eslab qolinadi)">&#9696; Yoy</button><button type="button" class="tool arcdd" data-dtl="arcMenuBtn" title="Yoy chizish usullari (AutoCAD Arc)">&#9662;</button>
+        <div class="chz-arcmenu" data-dtl="arcMenu"></div>
+      </span>
+      <button type="button" class="tool etool" data-tool="donut" title="Halqa (DO) — ichki va tashqi diametrli ikki aylana; markazni bosing (takrorlanadi)">&#9678; Halqa</button>
+      <button type="button" class="tool etool" data-tool="point" title="Nuqta (PO) — nuqta qo'yish (magnit: Tugun)">&#8226; Nuqta</button>
+    </div><div class="chz-rlbl">Chizish</div></div>
+    <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool etool" data-tool="move" title="Ko'chirish (M) — tanlanganlarni: tayanch nuqta → yangi joy (yoki masofa + burchak yozing)">Ko'chirish</button>
+      <button type="button" class="tool etool" data-tool="copy" title="Nusxa (CO) — tayanch nuqta → nusxa joyi (yoki masofa + burchak yozing)">Nusxa</button>
+      <button type="button" class="tool etool" data-tool="rotate" title="Burish (RO) — tayanch nuqta → burchak (gradus yozing yoki bosing)">Burish</button>
+      <button type="button" class="tool etool" data-tool="mirror" title="Aks ettirish (MI) — o'qning 2 nuqtasini bosing">Aks</button>
+      <button type="button" class="tool etool" data-tool="scale" title="Masshtab (SC) — tayanch nuqta → koeffitsient (yozing yoki bosing)">Masshtab</button>
+      <button type="button" class="tool etool" data-tool="stretch" title="Cho'zish (S) — ramka torting: ichidagi tugunlar suriladi, qolgani joyida (chiziqlar cho'ziladi); tayanch → yangi joy">&#8660; Cho'zish</button>
+      <button type="button" class="tool etool" data-tool="align" title="Tekislash (AL) — tanlanganlarni 2 juft nuqta bo'yicha ko'chirish + burish (masshtab ixtiyoriy)">&#8646; Tekislash</button>
+      <button type="button" class="tool etool" data-tool="array" title="Massiv (AR) — to'rtburchak (qator × ustun) yoki qutbiy (markaz atrofida — gul yaproqlari)">&#9638; Massiv</button>
+      <button type="button" class="tool etool" data-tool="offset" title="${V.offTitle}">Offset</button>
+    </div><div class="chz-rlbl">O'zgartirish</div></div>
+    <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool etool" data-tool="trim" title="Kesish (TR) — olib tashlanadigan qismga bosing, eng yaqin kesishmalargacha o'chadi">&#9986; Kesish</button>
+      <button type="button" class="tool etool" data-tool="extend" title="Uzaytirish (EX) — chiziq yoki yoy uchiga yaqin bosing, yo'nalishidagi eng yaqin elementgacha cho'ziladi">&#10145; Uzaytirish</button>
+      <button type="button" class="tool etool" data-tool="break" title="Uzish (BR) — obyektni ikki nuqta orasida uzish (oralig'i olib tashlanadi) yoki bitta nuqtada ikkiga bo'lish">&#8942; Uzish</button>
+      <button type="button" class="tool etool" data-tool="lengthen" title="Uzunlikni o'zgartirish (LEN) — chiziq/yoy uchini: delta, foiz yoki umumiy uzunlik bo'yicha">&#8596;&#xFE0E; Uzunlik</button>
+      <button type="button" class="tool etool" data-tool="fillet" title="Tutashtirish (F) — ikki obyektni radiusli yoy bilan ulash (Shift — radius 0). Variantlar: Radius, Polyline, Kesish">&#8978; Tutashtirish</button>
+      <button type="button" class="tool etool" data-tool="chamfer" title="Faska (CHA) — ikki chiziq burchagini qiya kesish: masofa 1 va masofa 2">&#9698; Faska</button>
+      <button type="button" class="tool etool" data-tool="explode" title="Portlatish (X) — polyline'ni alohida chiziqlarga ajratish (tanlangan bo'lsa darhol)">&#10033; Portlatish</button>
+      <button type="button" class="tool etool" data-tool="join" title="Birlashtirish (J) — uchlari tutashgan chiziqlar → bitta polyline, bir aylanadagi yoylar → bitta yoy">&#8734; Birlashtirish</button>
+      <button type="button" class="tool etool erase" data-tool="erase" title="O'chirish (E) — element ustiga bosing">O'chirish</button>
+    </div><div class="chz-rlbl">Tahrir</div></div>
+    <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool etool" data-tool="dim" title="O'lcham chizig'i — 1-nuqta, 2-nuqta, so'ng o'lcham chizig'i turadigan joyni bosing">&#8596; O'lcham</button>
+      <button type="button" class="tool etool" data-tool="dist" title="Masofa (DI) — ikki nuqta orasidagi masofa, ΔX, ΔY va burchak">&#128207; Masofa</button>
+      <button type="button" class="tool etool" data-tool="area" title="Yuza (AA) — yopiq kontur (polyline, aylana, tutash chiziq/yoylar) yoki nuqtalar bo'yicha yuza va perimetr">&#9634; Yuza</button>
+      <button type="button" class="tool etool" data-tool="divide" title="Bo'lish (DIV) — obyektni teng bo'laklarga bo'lib nuqtalar qo'yish">&#8759; Bo'lish</button>
+      <button type="button" class="tool etool" data-tool="measure" title="O'lchab qo'yish (ME) — obyekt bo'ylab har N masofada nuqta qo'yish">&#8285; O'lchab qo'yish</button>
+    </div><div class="chz-rlbl">O'lchash</div></div>
+    <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool" data-dtl="btnUndo" title="Orqaga (Ctrl+Z, U)">&#8630; Orqaga</button>
+      <button type="button" class="tool" data-dtl="btnRedo" title="Oldinga (Ctrl+Y)">&#8631; Oldinga</button>
+      <button type="button" class="tool" data-dtl="btnClear" title="Butun chizmani tozalash (Orqaga bilan qaytariladi)">&#10005; Tozalash</button>
+      <button type="button" class="tool" data-dtl="btnFit" title="Chizma chegarasigacha avtozoom — Ctrl+E (Z)">&#10530; Markazga</button>
+    </div><div class="chz-rlbl">Chizma</div></div>
     <span class="chz-cmdwrap" data-dtl="cmdWrap">
       <input class="chz-cmd" data-dtl="cmd" placeholder="Buyruq: chiziq, L, yoy, O…" autocomplete="off" spellcheck="false" title="Buyruqni yozib qidiring (o'zbekcha nomi yoki AutoCAD qisqartmasi) — maydon ustida harf bossangiz o'zi tushadi" />
       <div class="chz-cmdlist" data-dtl="cmdList"></div>
@@ -353,6 +386,7 @@ function buildTemplate(V) {
         ${V.autoOffset ? OFFSET_HINT : ''}
         ${ARC_HINT}
         &bull; <b>Ichki buyruqlar qatori</b> (asboblar ostida, AutoCAD variantlari): Chiziq — Yopish / Orqaga / Yoy (davomida); Aylana — Markaz+radius / Markaz+diametr / 2 nuqta / 3 nuqta; Nusxa — Rejim Ko'p/Bitta, Massiv; Ko'chirish, Burish, Masshtab — Nusxa (asli qoladi); Aks — Aslini o'chirish; Offset — Ko'p; <b>Massiv</b> — to'rtburchak (qator × ustun, oraliqlar) yoki qutbiy (markazni bosing, soni, to'ldirish burchagi — gul yaproqlari), jonli ko'rinish, «Bajarish» yoki Enter.<br>
+        &bull; <b>Chizish</b>: <b>Ko'pburchak</b> (POL — tomonlar soni; ichki / tashqi / tomon bo'yicha), <b>Halqa</b> (DO — ichki va tashqi diametrli aylanalar), <b>Nuqta</b> (PO). <b>O'zgartirish</b>: <b>Cho'zish</b> (S — ramka ichidagi tugunlar suriladi, chiziqlar cho'ziladi), <b>Tekislash</b> (AL — tanlanganlarni 2 juft nuqta bo'yicha ko'chirish + burish, masshtab ixtiyoriy). <b>Tahrir</b>: <b>Uzish</b> (BR — ikki nuqta orasini olib tashlash yoki nuqtada ikkiga bo'lish), <b>Uzunlik</b> (LEN — delta / foiz / umumiy). <b>O'lchash</b>: <b>Masofa</b> (DI — masofa, ΔX, ΔY, burchak), <b>Yuza</b> (AA — yopiq kontur yoki nuqtalar), <b>Bo'lish</b> (DIV — teng bo'laklarga nuqtalar), <b>O'lchab qo'yish</b> (ME — har N masofada nuqta).<br>
         &bull; <b>Tutashtirish</b> (F, FILLET): birinchi, so'ng ikkinchi obyektni bosing — radiusli yoy bilan ulanadi (chiziq, polyline segmenti, yoy, aylana; bosilgan qismlar saqlanadi, qolgani kesiladi/uzayadi); <b>Shift</b>+bosish yoki radius 0 — burchakka tutashtirish; parallel chiziqlar — yarim aylana; variantlar: <b>Radius</b>, <b>Polyline</b> (butun konturning barcha burchaklari), <b>Kesish</b> Ha/Yo'q. Ikkinchi obyekt ustida natija jonli ko'rinadi. <b>Faska</b> (CHA): masofa 1 va 2 bilan qiya kesish. <b>Portlatish</b> (X): polyline → alohida chiziqlar. <b>Birlashtirish</b> (J): uchlari tutashgan chiziqlar → bitta polyline, bir aylanadagi yoylar → bitta yoy.<br>
         &bull; <b>Kesish</b> (TR) va <b>Uzaytirish</b> (EX) — AutoCAD tez rejimi: chegara tanlanmaydi, chizmadagi boshqa elementlar chegara. Kesishda olib tashlanadigan qismga bosing — eng yaqin kesishmalargacha o'chadi (kursor ostida qizil ko'rinadi; yopiq kontur ochiq polyline bo'lib qoladi, aylana yoyga aylanadi). Uzaytirishda chiziq/yoy uchiga yaqin bosing — yo'nalishidagi (yoy — aylanasi bo'ylab) eng yaqin elementgacha cho'ziladi.<br>
         &bull; <b>Saqlash</b> — nomlab kutubxonaga (${V.saveEx}...); ro'yxatdan bosib qayta ochasiz. <b>DXF</b> — lazer/AutoCAD (mm); <b>Rasm</b> — PNG.
@@ -418,6 +452,8 @@ export function mountDetal(root, opts) {
     // Asbob variantlari (AutoCAD buyruq variantlari — pastdagi ichki buyruqlar qatori)
     opt: { circleMode: 'cr', copyMulti: true, moveCopy: false, rotateCopy: false, mirrorErase: false, scaleCopy: false, offsetMulti: false,
       filletR: 10, filletPoly: false, filletTrim: true, chamD1: 10, chamD2: 10, chamPoly: false, chamTrim: true,
+      polyN: 6, polyMode: 'in', donutIn: 10, donutOut: 20, breakMode: '2p', lenMode: 'delta', lenDelta: 10, lenPct: 110, lenTotal: 1000,
+      divN: 5, measLen: 100, areaMode: 'obj', alignScale: false,
       arr: { kind: 'polar', rows: 2, cols: 2, dr: 200, dc: 200, n: 6, fill: 360 } },
   };
 
@@ -477,9 +513,11 @@ export function mountDetal(root, opts) {
     if (e.type === 'arc') { const o = [arcStart(e), arcEnd(e)]; for (const qd of [0, 90, 180, 270]) if (angInArc(e, qd)) o.push(arcPt(e, qd)); return o; }   // uchlari + kvadrant chekkalari (gabarit, proyeksiya, tanlash)
     if (e.type === 'circle') return [{ x: e.cx - e.r, y: e.cy }, { x: e.cx + e.r, y: e.cy }, { x: e.cx, y: e.cy - e.r }, { x: e.cx, y: e.cy + e.r }];
     if (e.type === 'dim') return [{ x: e.x1, y: e.y1 }, { x: e.x2, y: e.y2 }];
+    if (e.type === 'point') return [{ x: e.x, y: e.y }];
     return [];
   }
   function mapEnt(e, fn, rFactor) {
+    if (e.type === 'point') { const q2 = fn({ x: e.x, y: e.y }); e.x = q2.x; e.y = q2.y; return; }
     if (e.type === 'pline') e.pts = e.pts.map(fn);
     else if (e.type === 'arc') { const a = arcMap(e, fn); if (a) Object.assign(e, a); }   // aks ettirishda yo'nalish ham tuzatiladi
     else if (e.type === 'circle') { const c = fn({ x: e.cx, y: e.cy }); e.cx = c.x; e.cy = c.y; if (rFactor != null) e.r = Math.abs(e.r * rFactor); }
@@ -499,6 +537,7 @@ export function mountDetal(root, opts) {
     }
     if (e.type === 'circle') return { d: Math.abs(Math.hypot(wx - e.cx, wy - e.cy) - e.r), seg: -1 };
     if (e.type === 'arc') return { d: distToArc(e, { x: wx, y: wy }), seg: -1 };
+    if (e.type === 'point') return { d: Math.hypot(wx - e.x, wy - e.y), seg: -1 };
     if (e.type === 'dim') {
       const n = dimNormal(e);
       const a = { x: e.x1 + n.x * e.off, y: e.y1 + n.y * e.off }, b = { x: e.x2 + n.x * e.off, y: e.y2 + n.y * e.off };
@@ -746,6 +785,11 @@ export function mountDetal(root, opts) {
     if (d.tool === 'dim') return d.p2 ? null : (d.p1 || null);
     if (d.tool === 'circle') return d.c || d.p2 || d.p1 || null;
     if (d.tool === 'array') return d.center || null;
+    if (d.tool === 'polygon') return d.c || d.p1 || null;
+    if (d.tool === 'stretch') return d.base || null;
+    if (d.tool === 'align') return d.pts.length % 2 === 1 ? d.pts[d.pts.length - 1] : null;
+    if (d.tool === 'break' || d.tool === 'dist') return d.p1 || null;
+    if (d.tool === 'area') return d.pts.length ? d.pts[d.pts.length - 1] : null;
     if (['move', 'copy', 'rotate', 'mirror', 'scale'].includes(d.tool)) return d.base || null;
     return null;
   }
@@ -861,6 +905,17 @@ export function mountDetal(root, opts) {
       explode: "Portlatish: polyline'ni bosing — alohida chiziqlarga ajraladi",
       join: "Birlashtirish: uchlari tutashgan chiziqlarni (yoki bir aylanadagi yoylarni) bosib tanlang, so'ng Enter",
       erase: "O'chirish: element ustiga bosing",
+      polygon: state.opt.polyMode === 'edge' ? "Ko'pburchak (" + state.opt.polyN + ' tomon, tomon bo\'yicha): tomonning 1-uchini bosing' : "Ko'pburchak (" + state.opt.polyN + ' tomon, ' + (state.opt.polyMode === 'out' ? 'tashqi' : 'ichki') + '): markazni bosing',
+      donut: 'Halqa (D ' + fmtLen(state.opt.donutOut) + ' / d ' + fmtLen(state.opt.donutIn) + '): markazni bosing',
+      point: "Nuqta: joyini bosing (magnit: Tugun — NOD)",
+      stretch: "Cho'zish: ramkaning 1-burchagini bosing — ramka ichidagi tugunlar suriladi",
+      align: state.sel.size ? 'Tekislash: 1-manba nuqtani bosing' : "Tekislash: avval obyektlarni «Tanlash» bilan belgilang",
+      break: state.opt.breakMode === '1p' ? "Uzish (nuqtada): obyektni uziladigan joyidan bosing" : "Uzish: obyektni 1-nuqtadan bosing, so'ng 2-nuqtani — oralig'i olib tashlanadi",
+      lengthen: "Uzunlik (" + (state.opt.lenMode === 'percent' ? state.opt.lenPct + '%' : (state.opt.lenMode === 'total' ? 'umumiy ' + fmtLen(state.opt.lenTotal) : 'delta ' + fmtLen(state.opt.lenDelta))) + "): chiziq/yoyning o'zgaradigan uchiga yaqin bosing",
+      dist: "Masofa: 1-nuqtani bosing",
+      area: state.opt.areaMode === 'pts' ? "Yuza (nuqtalar): burchaklarni bosing, Enter — hisoblash" : 'Yuza: yopiq kontur (polyline, aylana yoki tutash chiziq/yoylar) ustiga bosing',
+      divide: "Bo'lish (" + state.opt.divN + " bo'lak): obyektni bosing",
+      measure: "O'lchab qo'yish (har " + fmtLen(state.opt.measLen) + "): obyektni boshlanadigan uchiga yaqin bosing",
     };
     return m[t] || '';
   }
@@ -870,6 +925,7 @@ export function mountDetal(root, opts) {
     cancelDraft(true);
     state.tool = t;
     if (t !== 'select') state.lastTool = t;   // Enter/Tab bilan takrorlash uchun
+    state.measureShow = null;
     if ((t === 'explode' || t === 'join') && state.sel.size) {   // oldin tanlangan bo'lsa — darhol bajariladi
       const list = selectedEnts(); state.tool = 'select'; syncButtons();
       if (t === 'explode') explodeEnts(list); else joinSelected(list);
@@ -1333,6 +1389,7 @@ export function mountDetal(root, opts) {
       else if (g.type === 'circle') { const c = w2s(g.cx, g.cy); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: g.r * view.scale }, dash))); }
       else if (g.type === 'arc') target.appendChild(svgEl('path', Object.assign({ d: arcSvgPath(g, w2s, view.scale) }, dash)));
       else if (g.type === 'dim') paintDim(target, g, true, w2s, view, PP);
+      else if (g.type === 'point') drawEntShape(target, g, w2s, view, dash);
     }
     if (d && d.tool === 'array' && d.center) { const c = w2s(d.center.x, d.center.y); target.appendChild(svgEl('circle', { cx: c.x, cy: c.y, r: 4, fill: PP.accent, 'pointer-events': 'none' })); }
   }
@@ -1370,7 +1427,35 @@ export function mountDetal(root, opts) {
       num('Masofa 2', o.chamD2 / U(), (v) => { o.chamD2 = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
       tog('Polyline (butun kontur)', 'chamPoly'); tog('Kesish (Trim)', 'chamTrim');
       btn('Tutashtirish\u2026', () => setTool('fillet'));
-    } else if (t === 'explode') btn('Tanlanganlarni portlatish', () => explodeEnts(selectedEnts()), { disabled: !state.sel.size });
+    } else if (t === 'polygon') {
+      num('Tomonlar', o.polyN, (v) => { o.polyN = Math.max(3, Math.min(1024, Math.round(v))); }, '');
+      btn('Ichki (aylanaga)', () => { o.polyMode = 'in'; cancelDraft(false); setInfo(toolHint('polygon')); }, { on: o.polyMode === 'in' });
+      btn('Tashqi (aylana atrofida)', () => { o.polyMode = 'out'; cancelDraft(false); setInfo(toolHint('polygon')); }, { on: o.polyMode === 'out' });
+      btn("Tomon bo'yicha", () => { o.polyMode = 'edge'; cancelDraft(false); setInfo(toolHint('polygon')); }, { on: o.polyMode === 'edge' });
+    } else if (t === 'donut') {
+      num('Ichki diametr', o.donutIn / U(), (v) => { o.donutIn = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
+      num('Tashqi diametr', o.donutOut / U(), (v) => { o.donutOut = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
+    } else if (t === 'break') {
+      btn('Ikki nuqta', () => { o.breakMode = '2p'; cancelDraft(false); setInfo(toolHint('break')); }, { on: o.breakMode === '2p' });
+      btn('Nuqtada (ikkiga bo\'lish)', () => { o.breakMode = '1p'; cancelDraft(false); setInfo(toolHint('break')); }, { on: o.breakMode === '1p' });
+    } else if (t === 'lengthen') {
+      btn('Delta', () => { o.lenMode = 'delta'; }, { on: o.lenMode === 'delta' });
+      btn('Foiz', () => { o.lenMode = 'percent'; }, { on: o.lenMode === 'percent' });
+      btn('Umumiy', () => { o.lenMode = 'total'; }, { on: o.lenMode === 'total' });
+      if (o.lenMode === 'percent') num('Foiz', o.lenPct, (v) => { o.lenPct = Math.max(0, v); }, '%');
+      else if (o.lenMode === 'total') num('Umumiy uzunlik', o.lenTotal / U(), (v) => { o.lenTotal = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
+      else num('Delta (− qisqartiradi)', o.lenDelta / U(), (v) => { o.lenDelta = v * U(); }, UNIT_LABEL[state.unit]);
+    } else if (t === 'divide') num("Bo'laklar soni", o.divN, (v) => { o.divN = Math.max(2, Math.min(32767, Math.round(v))); }, '');
+    else if (t === 'measure') num('Masofa', o.measLen / U(), (v) => { o.measLen = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
+    else if (t === 'area') {
+      btn('Obyekt', () => { o.areaMode = 'obj'; cancelDraft(false); setInfo(toolHint('area')); }, { on: o.areaMode === 'obj' });
+      btn('Nuqtalar', () => { o.areaMode = 'pts'; cancelDraft(false); setInfo(toolHint('area')); }, { on: o.areaMode === 'pts' });
+      if (o.areaMode === 'pts') btn('Hisoblash (Enter)', () => finishAreaPts(), { primary: true, disabled: !(d && d.tool === 'area' && d.pts.length >= 3) });
+    } else if (t === 'align') {
+      tog('Masshtab (2-juft bo\'yicha)', 'alignScale');
+      items.push({ kind: 'txt', text: 'Nuqtalar: ' + (d && d.tool === 'align' ? d.pts.length : 0) + ' / 4 — Enter 2 tadan keyin: faqat ko\'chirish' });
+    } else if (t === 'stretch') items.push({ kind: 'txt', text: d && d.tool === 'stretch' ? (d.base ? 'Yangi joyni bosing' : (d.rect ? 'Tayanch nuqtani bosing' : '2-burchakni bosing')) : 'Ramka: 1-burchak → 2-burchak → tayanch → yangi joy' });
+    else if (t === 'explode') btn('Tanlanganlarni portlatish', () => explodeEnts(selectedEnts()), { disabled: !state.sel.size });
     else if (t === 'join') {
       items.push({ kind: 'txt', text: 'Tanlangan: ' + state.sel.size });
       btn('Birlashtirish (Enter)', () => joinSelected(selectedEnts()), { primary: true, disabled: state.sel.size < 2 });
@@ -1541,6 +1626,270 @@ export function mountDetal(root, opts) {
     applyOp({ remove: r.remove, add: r.add, patch: [] }, r.remove.length + ' ta element ' + r.add.length + ' taga birlashtirildi');
   }
 
+  /* ---- 3-to'lqin asboblari — geometriya: src/lib/editGeom.js ---- */
+  const WP = (w) => ({ x: w.x, y: w.y });
+  function fmtArea(mm2) {
+    const base = state.unit === 'mm' ? fmtNum(mm2, 1) + ' mm²' : fmtNum(mm2 / 100, 2) + ' sm²';
+    return mm2 >= 1e5 ? base + ' (' + fmtNum(mm2 / 1e6, 4) + ' m²)' : base;
+  }
+  // Ko'pburchak
+  function polyFrom(d, cur) {
+    const o = state.opt;
+    if (o.polyMode === 'edge') return d.p1 ? polygonEdge(d.p1, cur, o.polyN) : null;
+    if (!d.c) return null;
+    const [r, a] = state.box ? boxVals() : [null, null];
+    const dd = dist(d.c, cur), R = r > 0 ? r * U() : dd;
+    if (!(R > 1e-9)) return null;
+    const ang = a != null ? a : (dd > 1e-9 ? vecAng(cur.x - d.c.x, cur.y - d.c.y) : 90);
+    return polygonPts(d.c, o.polyN, R, o.polyMode, ang);
+  }
+  function makePolygon(pts) {
+    state.draft = null; closeBox();
+    if (!pts) { render(); return; }
+    pushHistory(); state.ents.push(newEnt('pline', { pts, closed: true }));
+    afterChange(); setInfo("Ko'pburchak: " + pts.length + ' tomon. ' + toolHint('polygon'));
+  }
+  function polygonClick(w) {
+    const o = state.opt, d = state.draft;
+    if (!d) {
+      if (o.polyMode === 'edge') { state.draft = { tool: 'polygon', p1: WP(w) }; setInfo("Ko'pburchak: tomonning 2-uchini bosing (ko'pburchak chap tomonda quriladi)"); render(); return; }
+      state.draft = { tool: 'polygon', c: WP(w) };
+      openBox({ anchor: w, f1: { label: 'Radius', unit: 'len' }, f2: { label: 'Burchak', unit: 'ang' },
+        onCommit: () => { const pts = polyFrom(state.draft, state.cursor); if (pts) makePolygon(pts); else setInfo('Radius yozing yoki bosing'); } });
+      setInfo("Ko'pburchak: radiusni yozing (burchak ixtiyoriy) yoki bosing"); render(); return;
+    }
+    const pts = polyFrom(d, w);
+    if (!pts) { setInfo("Ko'pburchak hosil bo'lmadi — nuqtalar bir xil"); return; }
+    makePolygon(pts);
+  }
+  // Halqa, Nuqta
+  function donutClick(w) {
+    const o = state.opt;
+    if (!(o.donutOut > 0)) { setInfo('Halqa: tashqi diametrni kiriting'); return; }
+    pushHistory();
+    state.ents.push(newEnt('circle', { cx: w.x, cy: w.y, r: o.donutOut / 2 }));
+    if (o.donutIn > 0 && o.donutIn < o.donutOut) state.ents.push(newEnt('circle', { cx: w.x, cy: w.y, r: o.donutIn / 2 }));
+    afterChange(); setInfo('Halqa qo\'yildi (D ' + fmtLen(o.donutOut) + ' / d ' + fmtLen(o.donutIn) + ') — yana markazni bosing');
+  }
+  function pointClick(w) {
+    pushHistory(); state.ents.push(newEnt('point', { x: w.x, y: w.y }));
+    afterChange(); setInfo('Nuqta: X ' + fmtNum(w.x / U(), 2) + '  Y ' + fmtNum(-w.y / U(), 2) + ' ' + UNIT_LABEL[state.unit] + ' — yana bosing');
+  }
+  // Cho'zish
+  function stretchTarget() {
+    const d = state.draft, [L, a] = state.box ? boxVals() : [null, null];
+    if (L > 0) { const v = dirVec(norm360(a || 0)); return { x: d.base.x + v.dx * L * U(), y: d.base.y + v.dy * L * U() }; }
+    return state.cursor;
+  }
+  function stretchClick(w) {
+    const d = state.draft;
+    if (!d) { state.draft = { tool: 'stretch', c1: WP(w) }; setInfo("Cho'zish: ramkaning 2-burchagini bosing"); render(); return; }
+    if (!d.rect) {
+      const rect = { x1: Math.min(d.c1.x, w.x), y1: Math.min(d.c1.y, w.y), x2: Math.max(d.c1.x, w.x), y2: Math.max(d.c1.y, w.y) };
+      const hits = state.ents.filter((e) => stretchEnt(e, rect, 1, 0));
+      if (!hits.length) { state.draft = null; setInfo("Ramka ichida tugun yo'q — qaytadan 1-burchakni bosing"); render(); return; }
+      d.rect = rect; d.ids = hits.map((e) => e.id);
+      setInfo("Cho'zish: " + hits.length + ' ta obyekt — tayanch nuqtani bosing'); render(); return;
+    }
+    if (!d.base) {
+      d.base = WP(w);
+      openBox({ anchor: w, f1: { label: 'Masofa', unit: 'len' }, f2: { label: 'Burchak', unit: 'ang' },
+        onCommit: (L) => { if (L > 0) applyStretch(stretchTarget()); else setInfo('Masofa (+ burchak) yozing yoki yangi joyni bosing'); } });
+      setInfo("Cho'zish: yangi joyni bosing yoki masofa + burchak yozing"); render(); return;
+    }
+    applyStretch(stretchTarget());
+  }
+  function applyStretch(target) {
+    const d = state.draft; if (!d || !d.rect || !d.base) return;
+    const dx = target.x - d.base.x, dy = target.y - d.base.y, patches = [];
+    for (const id of d.ids) { const e = getEnt(id); const p = e && stretchEnt(e, d.rect, dx, dy); if (p) patches.push({ id, patch: p }); }
+    state.draft = null; closeBox();
+    applyOp({ remove: [], add: [], patch: patches }, "Cho'zildi: " + patches.length + ' ta obyekt. ' + toolHint('stretch'));
+  }
+  // Tekislash (ALIGN)
+  function alignFnFull(pts) {
+    const s1 = pts[0], d1 = pts[1], s2 = pts[2], d2 = pts[3];
+    if (!s2 || !d2 || dist(s1, s2) < 1e-9) return { fn: (p) => ({ x: p.x + d1.x - s1.x, y: p.y + d1.y - s1.y }), k: 1 };
+    const ang = vecAng(d2.x - d1.x, d2.y - d1.y) - vecAng(s2.x - s1.x, s2.y - s1.y);
+    const k = state.opt.alignScale ? dist(d1, d2) / dist(s1, s2) : 1;
+    return { k, fn: (p) => { const t = { x: p.x - s1.x + d1.x, y: p.y - s1.y + d1.y }, r = rotPt(t, d1, ang); return { x: d1.x + (r.x - d1.x) * k, y: d1.y + (r.y - d1.y) * k }; } };
+  }
+  function applyAlign(pts) {
+    if (!state.sel.size) { setInfo("Tekislash: obyektlar tanlanmagan"); return; }
+    const { fn, k } = alignFnFull(pts);
+    pushHistory(); for (const e of selectedEnts()) mapEnt(e, fn, Math.abs(k - 1) > 1e-12 ? k : null);
+    state.draft = null; afterChange();
+    setInfo('Tekislandi' + (pts.length >= 4 ? (Math.abs(k - 1) > 1e-12 ? ' (masshtab ×' + fmtNum(k, 3) + ')' : ' (ko\'chirish + burish)') : ' (faqat ko\'chirish)') + '. ' + toolHint('align'));
+  }
+  function alignClick(w) {
+    if (!state.sel.size) { setInfo("Tekislash: avval obyektlarni «Tanlash» bilan belgilang"); return; }
+    const d = state.draft || (state.draft = { tool: 'align', pts: [] });
+    d.pts.push(WP(w));
+    if (d.pts.length >= 4) { applyAlign(d.pts); return; }
+    const names = ['1-manba nuqta', '1-maqsad nuqta', '2-manba nuqta', '2-maqsad nuqta'];
+    setInfo('Tekislash: ' + names[d.pts.length] + 'ni bosing' + (d.pts.length === 2 ? " (yoki Enter — faqat ko'chirish)" : '')); render();
+  }
+  // Uzish
+  function breakClick(sx, sy, w) {
+    const d = state.draft, o = state.opt;
+    if (!d) {
+      const hit = entAt(sx, sy);
+      if (!hit || !['pline', 'arc', 'circle'].includes(hit.ent.type)) { setInfo('Uzish: chiziq, yoy yoki aylanani bosing'); return; }
+      if (o.breakMode === '1p') {
+        const r = breakEnt(hit.ent, WP(w));
+        if (r.reason) { setInfo(r.reason); return; }
+        applyOp({ remove: [hit.ent.id], add: r.add, patch: [] }, 'Nuqtada uzildi — ' + r.add.length + ' bo\'lak. ' + toolHint('break')); return;
+      }
+      state.draft = { tool: 'break', ent: hit.ent, p1: WP(w) };
+      setInfo("Uzish: 2-nuqtani bosing — oralig'i olib tashlanadi (Esc — bekor)"); render(); return;
+    }
+    const r = breakEnt(d.ent, d.p1, WP(w));
+    if (r.reason) { setInfo(r.reason); return; }
+    state.draft = null;
+    applyOp({ remove: [d.ent.id], add: r.add, patch: [] }, 'Uzildi' + (r.add.length ? '' : ' — element butunlay olib tashlandi') + '. ' + toolHint('break'));
+  }
+  // Uzunlik
+  function lengthenCompute(hit, raw) {
+    const o = state.opt;
+    return lengthenEnt(hit.ent, raw, o.lenMode, o.lenMode === 'percent' ? o.lenPct : (o.lenMode === 'total' ? o.lenTotal : o.lenDelta));
+  }
+  function lengthenClick(sx, sy) {
+    const hit = entAt(sx, sy); if (!hit) { setInfo(toolHint('lengthen')); return; }
+    const r = lengthenCompute(hit, screenToWorld(sx, sy));
+    if (r.reason) { setInfo(r.reason); return; }
+    applyOp({ remove: [], add: [], patch: [{ id: hit.ent.id, patch: r.patch }] }, "Uzunlik o'zgartirildi (" + (r.delta >= 0 ? '+' : '−') + fmtLen(Math.abs(r.delta)) + '). ' + toolHint('lengthen'));
+  }
+  // Bo'lish / O'lchab qo'yish
+  function divMeasCompute(t, e, raw) { return t === 'divide' ? divideEnt(e, state.opt.divN) : measureEnt(e, state.opt.measLen, raw); }
+  function divMeasClick(t, sx, sy) {
+    const hit = entAt(sx, sy);
+    if (!hit || !['pline', 'arc', 'circle'].includes(hit.ent.type)) { setInfo(toolHint(t)); return; }
+    const r = divMeasCompute(t, hit.ent, screenToWorld(sx, sy));
+    if (r.reason) { setInfo(r.reason); return; }
+    if (!r.pts.length) { setInfo("Masofa obyekt uzunligidan katta — nuqta qo'yilmadi"); return; }
+    pushHistory(); for (const q of r.pts) state.ents.push(newEnt('point', { x: q.x, y: q.y }));
+    afterChange(); setInfo(r.pts.length + " ta nuqta qo'yildi (magnit: Tugun — NOD). " + toolHint(t));
+  }
+  // Masofa / Yuza
+  function distClick(w) {
+    const d = state.draft;
+    if (!d) { state.draft = { tool: 'dist', p1: WP(w) }; state.measureShow = null; setInfo('Masofa: 2-nuqtani bosing'); render(); return; }
+    const a = d.p1, b = WP(w);
+    state.draft = null; state.measureShow = { a, b };
+    setInfo('Masofa = ' + fmtLen(dist(a, b)) + ',  ΔX = ' + fmtLen(b.x - a.x) + ',  ΔY = ' + fmtLen(a.y - b.y) + ',  burchak = ' + fmtAng(vecAng(b.x - a.x, b.y - a.y)));
+    render();
+  }
+  function areaClick(sx, sy, w) {
+    if (state.opt.areaMode === 'pts') {
+      const d = state.draft || (state.draft = { tool: 'area', pts: [] });
+      d.pts.push(WP(w)); state.measureShow = null;
+      setInfo('Yuza (nuqtalar): ' + d.pts.length + ' nuqta — keyingisini bosing, Enter — hisoblash'); render(); return;
+    }
+    const hit = entAt(sx, sy); if (!hit) { setInfo(toolHint('area')); return; }
+    let r = areaOfEnt(hit.ent), ids = [hit.ent.id];
+    if (!r) { const ch = chainOf(state.ents, hit.ent.id); if (ch && ch.closed) { r = chainArea(ch.pieces); ids = [...ch.ids]; } }
+    if (!r) { setInfo("Yopiq kontur emas — yopiq polyline, aylana yoki uchlari tutashgan yopiq zanjirni bosing"); return; }
+    state.measureShow = { ids };
+    setInfo('Yuza = ' + fmtArea(r.area) + ',  perimetr = ' + fmtLen(r.perim)); render();
+  }
+  function finishAreaPts() {
+    const d = state.draft; if (!d || d.tool !== 'area') return;
+    if (d.pts.length < 3) { setInfo('Yuza: kamida 3 nuqta kerak'); return; }
+    state.measureShow = { poly: d.pts.slice() }; state.draft = null;
+    setInfo('Yuza = ' + fmtArea(polyArea(d.pts)) + ',  perimetr = ' + fmtLen(polyPerim(d.pts, true))); render();
+  }
+  // Umumiy shakl chizuvchi (jonli ko'rinishlar uchun)
+  function drawEntShape(target, g, w2s, view, attrs) {
+    if (g.type === 'pline') target.appendChild(svgEl(g.closed && g.pts.length > 2 ? 'polygon' : 'polyline', Object.assign({ points: ptsAttr(g.pts, w2s) }, attrs)));
+    else if (g.type === 'arc') target.appendChild(svgEl('path', Object.assign({ d: arcSvgPath(g, w2s, view.scale) }, attrs)));
+    else if (g.type === 'circle') { const c = w2s(g.cx, g.cy); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: g.r * view.scale }, attrs))); }
+    else if (g.type === 'point') { const c = w2s(g.x, g.y); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: 3.5 }, attrs))); }
+  }
+  function paintEditPreview(target, w2s, view, PP, d) {
+    const cur = state.cursor;
+    const dash = { stroke: PP.edit, 'stroke-width': 1.8, 'stroke-dasharray': '6 4', fill: 'none', 'pointer-events': 'none' };
+    const thin = { stroke: PP.accent, 'stroke-width': 1, 'stroke-dasharray': '3 3', 'pointer-events': 'none' };
+    const hl = { stroke: PP.accent, 'stroke-width': 3.5, fill: 'none', opacity: 0.45, 'stroke-linecap': 'round', 'pointer-events': 'none' };
+    const seg = (a, b, attrs) => { const p = w2s(a.x, a.y), q2 = w2s(b.x, b.y); target.appendChild(svgEl('line', Object.assign({ x1: p.x, y1: p.y, x2: q2.x, y2: q2.y }, attrs))); };
+    const dot = (p) => { const s = w2s(p.x, p.y); target.appendChild(svgEl('circle', { cx: s.x, cy: s.y, r: 3.5, fill: PP.accent, 'pointer-events': 'none' })); };
+    const cs = w2s(cur.x, cur.y);
+    if (d.tool === 'polygon') {
+      const pts = polyFrom(d, cur);
+      if (pts) drawEntShape(target, { type: 'pline', pts, closed: true }, w2s, view, dash);
+      if (d.c) { dot(d.c); seg(d.c, cur, thin); label(target, cs.x + 30, cs.y - 22, 'R ' + fmtLen(dist(d.c, cur)) + '  · ' + state.opt.polyN + ' tomon', PP.edit, 11, PP, true); }
+      if (d.p1) { dot(d.p1); label(target, cs.x + 30, cs.y - 22, 'Tomon ' + fmtLen(dist(d.p1, cur)), PP.edit, 11, PP, true); }
+      return;
+    }
+    if (d.tool === 'break') {
+      drawEntShape(target, d.ent, w2s, view, hl);
+      const r = breakEnt(d.ent, d.p1, cur);
+      if (r.add) for (const g of r.add) drawEntShape(target, g, w2s, view, dash);
+      dot(d.p1); return;
+    }
+    if (d.tool === 'stretch') {
+      const r = d.rect || { x1: Math.min(d.c1.x, cur.x), y1: Math.min(d.c1.y, cur.y), x2: Math.max(d.c1.x, cur.x), y2: Math.max(d.c1.y, cur.y) };
+      const a = w2s(r.x1, r.y1), b = w2s(r.x2, r.y2);
+      target.appendChild(svgEl('rect', { x: a.x, y: a.y, width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y), fill: 'rgba(34,197,94,.10)', stroke: '#16a34a', 'stroke-width': 1.2, 'stroke-dasharray': '5 4', 'pointer-events': 'none' }));
+      if (d.base) {
+        const t = stretchTarget();
+        for (const id of d.ids) { const e = getEnt(id), p = e && stretchEnt(e, r, t.x - d.base.x, t.y - d.base.y); if (p) drawEntShape(target, Object.assign({}, e, p), w2s, view, dash); }
+        seg(d.base, t, thin); dot(d.base);
+      }
+      return;
+    }
+    if (d.tool === 'align') {
+      const Pt = d.pts;
+      for (let i = 0; i + 1 < Pt.length; i += 2) seg(Pt[i], Pt[i + 1], thin);
+      if (Pt.length % 2 === 1) seg(Pt[Pt.length - 1], cur, thin);
+      Pt.forEach(dot);
+      if (Pt.length === 1 || Pt.length === 3) {
+        const fk = alignFnFull(Pt.concat([cur]));
+        for (const e of selectedEnts()) { const g = JSON.parse(JSON.stringify(e)); mapEnt(g, fk.fn, Math.abs(fk.k - 1) > 1e-12 ? fk.k : null); drawEntShape(target, g, w2s, view, dash); }
+      }
+      return;
+    }
+    if (d.tool === 'dist') {
+      seg(d.p1, cur, Object.assign({}, dash, { stroke: PP.accent })); dot(d.p1);
+      label(target, cs.x + 34, cs.y - 22, fmtLen(dist(d.p1, cur)) + '   ∠ ' + fmtAng(vecAng(cur.x - d.p1.x, cur.y - d.p1.y)), PP.accent, 11, PP, true);
+      return;
+    }
+    if (d.tool === 'area') {
+      const pts = d.pts.concat([WP(cur)]);
+      target.appendChild(svgEl('polygon', { points: ptsAttr(pts, w2s), fill: 'color-mix(in srgb, ' + PP.accent + ' 14%, transparent)', stroke: PP.accent, 'stroke-width': 1.4, 'stroke-dasharray': '6 4', 'pointer-events': 'none' }));
+      d.pts.forEach(dot);
+      if (pts.length >= 3) label(target, cs.x + 40, cs.y - 22, fmtArea(polyArea(pts)), PP.accent, 11, PP, true);
+    }
+  }
+  // Tanlovsiz asboblar: kursor ostidagi obyekt bo'yicha natija (Uzunlik, Bo'lish, O'lchab qo'yish, Halqa, Uzish nuqtada)
+  function paintHoverPreview(target, w2s, view, PP) {
+    const t = state.tool, s = state.cursorS; if (!s) return;
+    const dash = { stroke: PP.edit, 'stroke-width': 1.8, 'stroke-dasharray': '6 4', fill: 'none', 'pointer-events': 'none' };
+    if (t === 'donut') {
+      const o = state.opt, c = state.cursor;
+      if (o.donutOut > 0) drawEntShape(target, { type: 'circle', cx: c.x, cy: c.y, r: o.donutOut / 2 }, w2s, view, dash);
+      if (o.donutIn > 0 && o.donutIn < o.donutOut) drawEntShape(target, { type: 'circle', cx: c.x, cy: c.y, r: o.donutIn / 2 }, w2s, view, dash);
+      return;
+    }
+    if (!['lengthen', 'divide', 'measure', 'break'].includes(t)) return;
+    const hit = entAt(s.sx, s.sy); if (!hit || hit.ent.type === 'dim' || hit.ent.type === 'point') return;
+    const raw = screenToWorld(s.sx, s.sy);
+    drawEntShape(target, hit.ent, w2s, view, { stroke: PP.accent, 'stroke-width': 3.5, fill: 'none', opacity: 0.35, 'pointer-events': 'none' });
+    if (t === 'lengthen') { const r = lengthenCompute(hit, raw); if (r.patch) drawEntShape(target, Object.assign({}, hit.ent, r.patch), w2s, view, dash); }
+    else if (t === 'break') { if (state.opt.breakMode === '1p') { const c = w2s(state.cursor.x, state.cursor.y); target.appendChild(svgEl('circle', { cx: c.x, cy: c.y, r: 4, fill: 'none', stroke: '#ef4444', 'stroke-width': 1.6, 'pointer-events': 'none' })); } }
+    else { const r = divMeasCompute(t, hit.ent, raw); if (r.pts) for (const q of r.pts) { const c = w2s(q.x, q.y); target.appendChild(svgEl('circle', { cx: c.x, cy: c.y, r: 3, fill: PP.accent, 'pointer-events': 'none' })); } }
+  }
+  // Masofa / Yuza natijasi (keyingi asbobgacha ko'rinib turadi)
+  function paintMeasureShow(target, w2s, view, PP) {
+    const m = state.measureShow; if (!m) return;
+    if (m.a && m.b) {
+      const p = w2s(m.a.x, m.a.y), q2 = w2s(m.b.x, m.b.y);
+      target.appendChild(svgEl('line', { x1: p.x, y1: p.y, x2: q2.x, y2: q2.y, stroke: PP.accent, 'stroke-width': 1.6, 'stroke-dasharray': '6 3', 'pointer-events': 'none' }));
+      label(target, (p.x + q2.x) / 2, (p.y + q2.y) / 2 - 14, fmtLen(dist(m.a, m.b)), PP.accent, 11, PP, true);
+    }
+    if (m.poly) target.appendChild(svgEl('polygon', { points: ptsAttr(m.poly, w2s), fill: 'color-mix(in srgb, ' + PP.accent + ' 16%, transparent)', stroke: PP.accent, 'stroke-width': 1.6, 'pointer-events': 'none' }));
+    if (m.ids) for (const id of m.ids) { const e = getEnt(id); if (e) drawEntShape(target, e, w2s, view, { stroke: PP.accent, 'stroke-width': 4, fill: 'none', opacity: 0.5, 'pointer-events': 'none' }); }
+  }
+
   /* ---- Kesish / Uzaytirish (AutoCAD tez rejim) — geometriya: src/lib/trimExtend.js ---- */
   function trimExtendClick(t, sx, sy) {
     const hit = entAt(sx, sy);
@@ -1586,6 +1935,16 @@ export function mountDetal(root, opts) {
   function toolClick(sx, sy, w) {
     const t = state.tool;
     if (t === 'fillet' || t === 'chamfer') return filletClick(t, sx, sy);
+    if (t === 'polygon') return polygonClick(w);
+    if (t === 'donut') return donutClick(w);
+    if (t === 'point') return pointClick(w);
+    if (t === 'stretch') return stretchClick(w);
+    if (t === 'align') return alignClick(w);
+    if (t === 'break') return breakClick(sx, sy, w);
+    if (t === 'lengthen') return lengthenClick(sx, sy);
+    if (t === 'divide' || t === 'measure') return divMeasClick(t, sx, sy);
+    if (t === 'dist') return distClick(w);
+    if (t === 'area') return areaClick(sx, sy, w);
     if (t === 'explode') { const hit = entAt(sx, sy); if (hit) explodeEnts([hit.ent]); else setInfo(toolHint('explode')); return; }
     if (t === 'join') {
       const hit = entAt(sx, sy);
@@ -1660,6 +2019,7 @@ export function mountDetal(root, opts) {
     if (e.type === 'pline') return e.pts.map((p, i) => ({ x: p.x, y: p.y, kind: 'v', idx: i }));
     if (e.type === 'circle') return [{ x: e.cx, y: e.cy, kind: 'c' }, { x: e.cx + e.r, y: e.cy, kind: 'r' }];
     if (e.type === 'arc') { const s = arcStart(e), en = arcEnd(e), m = arcMid(e); return [{ x: s.x, y: s.y, kind: 'as' }, { x: en.x, y: en.y, kind: 'ae' }, { x: m.x, y: m.y, kind: 'am' }, { x: e.cx, y: e.cy, kind: 'ac' }]; }
+    if (e.type === 'point') return [{ x: e.x, y: e.y, kind: 'pt' }];
     if (e.type === 'dim') { const n = dimNormal(e); return [{ x: e.x1, y: e.y1, kind: 'p1' }, { x: e.x2, y: e.y2, kind: 'p2' }, { x: (e.x1 + e.x2) / 2 + n.x * e.off, y: (e.y1 + e.y2) / 2 + n.y * e.off, kind: 'off' }]; }
     return [];
   }
@@ -1690,6 +2050,7 @@ export function mountDetal(root, opts) {
     }
     else if (g.kind === 'am') { const a = arcFrom3(arcStart(e), w, arcEnd(e)); if (a) { e.cx = a.cx; e.cy = a.cy; e.r = a.r; e.a0 = a.a0; e.a1 = a.a1; } }   // o'rtasi — bo'rtish
     else if (g.kind === 'ac') { e.cx = w.x; e.cy = w.y; }   // markaz — butun yoy suriladi
+    else if (g.kind === 'pt') { e.x = w.x; e.y = w.y; }
   }
 
   /* ---- Ramka bilan tanlash yordamchilari ---- */
@@ -1802,6 +2163,7 @@ export function mountDetal(root, opts) {
     const d = state.draft, cur = state.cursor;
     const dash = { stroke: PP.edit, 'stroke-width': 1.6, 'stroke-dasharray': '6 4', fill: 'none', 'pointer-events': 'none' };
     if (d.tool === 'fillet' || d.tool === 'chamfer') { paintFilletPreview(target, w2s, view, PP, d); return; }
+    if (['polygon', 'break', 'stretch', 'align', 'dist', 'area'].includes(d.tool)) { paintEditPreview(target, w2s, view, PP, d); return; }
     if (d.tool === 'pline') {
       const t = previewTarget();
       if (d.pts.length >= 2) target.appendChild(svgEl('polyline', { points: ptsAttr(d.pts, w2s), stroke: PP.edit, 'stroke-width': 2, fill: 'none', 'stroke-linejoin': 'round', 'pointer-events': 'none' }));
@@ -1864,6 +2226,7 @@ export function mountDetal(root, opts) {
         else if (g.type === 'pline') target.appendChild(svgEl(g.closed && g.pts.length > 2 ? 'polygon' : 'polyline', Object.assign({ points: ptsAttr(g.pts, w2s) }, dash, { stroke: PP.accent })));
         else if (g.type === 'circle') { const c = w2s(g.cx, g.cy); target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: g.r * view.scale }, dash, { stroke: PP.accent }))); }
         else if (g.type === 'arc') target.appendChild(svgEl('path', Object.assign({ d: arcSvgPath(g, w2s, view.scale) }, dash, { stroke: PP.accent })));
+        else if (g.type === 'point') drawEntShape(target, g, w2s, view, Object.assign({}, dash, { stroke: PP.accent }));
       }
       if (d.tool === 'mirror') { const s1 = w2s(base.x, base.y), s2 = w2s(cur.x, cur.y); target.appendChild(svgEl('line', { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y, stroke: PP.accent, 'stroke-width': 1, 'stroke-dasharray': '2 3', 'pointer-events': 'none' })); }
       const sb = w2s(base.x, base.y);
@@ -1955,6 +2318,11 @@ export function mountDetal(root, opts) {
         target.appendChild(svgEl('circle', Object.assign({ cx: c.x, cy: c.y, r: e.r * view.scale }, attrs)));
       } else if (e.type === 'arc') {
         target.appendChild(svgEl('path', Object.assign({ d: arcSvgPath(e, w2s, view.scale) }, attrs)));
+      } else if (e.type === 'point') {   // AutoCAD PDMODE 34 kabi: aylana + krestik
+        const s = w2s(e.x, e.y), k = 4.5 * m, pa = { stroke: col, 'stroke-width': 1.3 * m, 'pointer-events': 'none' };
+        target.appendChild(svgEl('line', Object.assign({ x1: s.x - k, y1: s.y, x2: s.x + k, y2: s.y }, pa)));
+        target.appendChild(svgEl('line', Object.assign({ x1: s.x, y1: s.y - k, x2: s.x, y2: s.y + k }, pa)));
+        target.appendChild(svgEl('circle', Object.assign({ cx: s.x, cy: s.y, r: k * 0.6, fill: 'none' }, pa)));
       }
     }
     // 2) yozuvlar (uzunlik + burchak)
@@ -1975,6 +2343,8 @@ export function mountDetal(root, opts) {
     // 3) chizilayotgan (jonli)
     if (state.draft) paintDraft(target, w2s, view, PP);
     else if (state.tool === 'trim' || state.tool === 'extend') paintTrimExtendPreview(target, w2s, view, PP);
+    else paintHoverPreview(target, w2s, view, PP);
+    if (state.measureShow) paintMeasureShow(target, w2s, view, PP);
     if (state.tool === 'array') paintArrayPreview(target, w2s, view, PP);
     // 4) griplar (Tanlash asbobida, tanlanganlarga)
     if (state.tool === 'select') for (const e of selectedEnts()) for (const g of gripsOf(e)) {
@@ -2100,6 +2470,7 @@ export function mountDetal(root, opts) {
       for (const e of ents) {
         if (e.type === 'pline') { for (const s of plineSegs(e)) if (dist(s.a, s.b) > 1e-6) L(s.a.x, s.a.y, s.b.x, s.b.y); }
         else if (e.type === 'circle') out += '0\nCIRCLE\n8\n' + lay + '\n10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n';
+        else if (e.type === 'point') out += '0\nPOINT\n8\n' + lay + '\n10\n' + num(e.x) + '\n20\n' + num(-e.y) + '\n30\n0\n';
         else if (e.type === 'arc') out += '0\nARC\n8\n' + lay + '\n10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n50\n' + num(e.a0) + '\n51\n' + num(e.a1) + '\n';
       }
     };
@@ -2213,7 +2584,15 @@ export function mountDetal(root, opts) {
         const p = o.opt, so = state.opt;
         if (CIRCLE_MODES[p.circleMode]) so.circleMode = p.circleMode;
         for (const k of ['copyMulti', 'moveCopy', 'rotateCopy', 'mirrorErase', 'scaleCopy', 'offsetMulti', 'filletPoly', 'filletTrim', 'chamPoly', 'chamTrim']) if (typeof p[k] === 'boolean') so[k] = p[k];
-        for (const k of ['filletR', 'chamD1', 'chamD2']) if (Number.isFinite(p[k]) && p[k] >= 0) so[k] = p[k];
+        for (const k of ['filletR', 'chamD1', 'chamD2', 'donutIn', 'donutOut', 'lenPct', 'lenTotal', 'measLen']) if (Number.isFinite(p[k]) && p[k] >= 0) so[k] = p[k];
+        if (Number.isFinite(p.lenDelta)) so.lenDelta = p.lenDelta;
+        if (Number.isFinite(p.polyN) && p.polyN >= 3 && p.polyN <= 1024) so.polyN = Math.round(p.polyN);
+        if (Number.isFinite(p.divN) && p.divN >= 2 && p.divN <= 32767) so.divN = Math.round(p.divN);
+        if (['in', 'out', 'edge'].includes(p.polyMode)) so.polyMode = p.polyMode;
+        if (['2p', '1p'].includes(p.breakMode)) so.breakMode = p.breakMode;
+        if (['delta', 'percent', 'total'].includes(p.lenMode)) so.lenMode = p.lenMode;
+        if (['obj', 'pts'].includes(p.areaMode)) so.areaMode = p.areaMode;
+        if (typeof p.alignScale === 'boolean') so.alignScale = p.alignScale;
         if (p.arr && typeof p.arr === 'object') {
           if (p.arr.kind === 'rect' || p.arr.kind === 'polar') so.arr.kind = p.arr.kind;
           for (const k of ['rows', 'cols', 'dr', 'dc', 'n', 'fill']) if (Number.isFinite(p.arr[k])) so.arr[k] = p.arr[k];
@@ -2367,7 +2746,7 @@ export function mountDetal(root, opts) {
     state.cursorS = { sx, sy };
     if (PICK_TOOLS.includes(state.tool)) { state.snapHit = null; state.snapRes = null; }
     statusBar.setCoords('X ' + fmtNum(state.cursor.x / U(), 2) + '   Y ' + fmtNum(-state.cursor.y / U(), 2) + '  ' + UNIT_LABEL[state.unit]);
-    if (state.draft || ['pline', 'rect', 'circle', 'arc', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer'].includes(state.tool) || MODIFY.includes(state.tool)) render();
+    if (state.draft || LIVE_TOOLS.includes(state.tool) || MODIFY.includes(state.tool)) render();
   });
   on(window, 'mouseup', (e) => {
     if (panning) { panning = false; return; }
@@ -2415,6 +2794,7 @@ export function mountDetal(root, opts) {
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
     if (e.key === 'Escape') {
       if (arcMenu.classList.contains('show')) { e.preventDefault(); showArcMenu(false); return; }
+      if (state.measureShow) { state.measureShow = null; render(); }
       if (state.draft || state.box) { e.preventDefault(); cancelCurrent(); }
       else if (state.sel.size) { e.preventDefault(); state.sel.clear(); render(); renderTable(); }
       return;
@@ -2431,6 +2811,8 @@ export function mountDetal(root, opts) {
       if (state.draft && state.draft.tool === 'pline') { finishPline(false); return; }
       if (state.tool === 'array' && state.sel.size && (state.opt.arr.kind === 'rect' || (state.draft && state.draft.center))) { applyArray(); return; }
       if (state.tool === 'join' && state.sel.size && !state.draft) { joinSelected(selectedEnts()); return; }
+      if (state.draft && state.draft.tool === 'align' && state.draft.pts.length >= 2) { applyAlign(state.draft.pts.slice(0, 2)); return; }
+      if (state.draft && state.draft.tool === 'area') { finishAreaPts(); return; }
       if (state.draft) { cancelCurrent(); return; }
       if (state.tool !== 'select') setTool('select');
       else if (state.lastTool && TOOLS.includes(state.lastTool)) setTool(state.lastTool);

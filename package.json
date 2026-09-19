@@ -14,7 +14,8 @@
     "test:arc": "node src/lib/arcGeom.test.mjs",
     "test:chain": "node src/lib/chainOffset.test.mjs",
     "test:trim": "node src/lib/trimExtend.test.mjs",
-    "test:modify": "node src/lib/modifyGeom.test.mjs"
+    "test:modify": "node src/lib/modifyGeom.test.mjs",
+    "test:edit": "node src/lib/editGeom.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",

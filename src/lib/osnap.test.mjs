@@ -322,6 +322,10 @@ test('buildGeom: circle → circles[{c,r,eid}]', () => {
   assert.deepEqual(g.circles, [{ c: { x: 3, y: 4 }, r: 7, eid: 'c1' }]);
   assert.equal(g.segs.length, 0);
 });
+test('buildGeom: point → 1 tugun (NOD)', () => {
+  const g = buildGeom([{ id: 'n1', type: 'point', x: 3, y: -4 }]);
+  assert.equal(g.nodes.length, 1); nearPt(g.nodes[0], 3, -4); assert.equal(g.nodes[0].eid, 'n1'); assert.equal(g.segs.length, 0);
+});
 test('buildGeom: dim → 2 tugun (uchlari), seg emas', () => {
   const g = buildGeom([{ id: 'd1', type: 'dim', x1: 1, y1: 2, x2: 3, y2: 4 }]);
   assert.deepEqual(g.nodes, [{ x: 1, y: 2, eid: 'd1' }, { x: 3, y: 4, eid: 'd1' }]);
@@ -490,6 +494,12 @@ test('PER: oyoq uch nuqtada (t=1) yoki davomida (t>1) — nomzod bor, joyi to\'g
 test('PER: oyoq tayanchning O\'ZIGA tushsa (from chiziq ustida) → nomzod yo\'q (nol uzunlik)', () => {
   const g = buildGeom([line('l1', 0, 0, 1000, 0)]);
   assert.ok(!osnapCandidates(g, P(300, 2), OPT({ from: P(500, 0) })).some((x) => x.kind === 'PER'));
+});
+test('PER: tayanch chiziqdan 1 px dan kam og\'gan (0.0001 mm; 0.2 mm scale 4 → 0.8 px) → nomzod yo\'q; 0.5 mm (2 px) → bor', () => {
+  const g = buildGeom([line('l1', 0, 0, 1000, 0)]);
+  assert.ok(!osnapCandidates(g, P(300, 1), OPT({ from: P(500, -0.0001) })).some((x) => x.kind === 'PER'));
+  assert.ok(!osnapCandidates(g, P(300, 0.5), OPT({ from: P(500, -0.2), scale: 4 })).some((x) => x.kind === 'PER'));
+  assert.ok(osnapCandidates(g, P(300, 0.5), OPT({ from: P(500, -0.5), scale: 4 })).some((x) => x.kind === 'PER'));
 });
 test('PER: kursor obyektdan uzoq (13 px) → PER yo\'q, umuman nomzod yo\'q', () => {
   const g = buildGeom([line('l1', 0, 0, 20, 0)]);

@@ -213,7 +213,8 @@ export function buildGeom(entities, opts = {}) {
         ends.push({ x: en.x, y: en.y, eid: id, dir: norm360(a0 + sw + 90) });
         mids.push({ x: mid.x, y: mid.y, eid: id });
       }
-    } else if (e.type === 'dim') { addNode({ x: e.x1, y: e.y1 }, id); addNode({ x: e.x2, y: e.y2 }, id); }
+    } else if (e.type === 'point') addNode({ x: e.x, y: e.y }, id);   // nuqta — tugun (NOD)
+    else if (e.type === 'dim') { addNode({ x: e.x1, y: e.y1 }, id); addNode({ x: e.x2, y: e.y2 }, id); }
   }
   for (const n of opts.nodes || []) if (ok(n)) nodes.push(n);
   for (const s of opts.segs || []) if (s && ok(s.a) && ok(s.b)) segs.push(s);
@@ -300,14 +301,16 @@ export function osnapCandidates(geom, cur, opts) {
         if (L2 < 1e-12) continue;
         const t = ((f.x - s.a.x) * dxs + (f.y - s.a.y) * dys) / L2;
         const fx = s.a.x + t * dxs, fy = s.a.y + t * dys;
-        if (Math.hypot(fx - f.x, fy - f.y) > 1e-6) add(fx, fy, 'PER', s.eid, cl.d * sc);
+        // Tayanch obyekt ustida (1 px ichida) bo'lsa — oyoq tayanchning o'zi: nomzod berilmaydi (aks holda kursor
+        // birinchi nuqtaga qaytib yopishadi — masalan Uzish/Masofa da 2-nuqta)
+        if (Math.hypot(fx - f.x, fy - f.y) * sc > 1) add(fx, fy, 'PER', s.eid, cl.d * sc);
       }
       for (const { c, dPx } of nearCirc) {
         // Ikki oyoqdan KURSORGA YAQINI (AutoCAD kursor turgan tomonni beradi)
         const dx = f.x - c.c.x, dy = f.y - c.c.y, L = Math.hypot(dx, dy);
         if (L < 1e-9) continue;
         const p = nearest([{ x: c.c.x + dx / L * c.r, y: c.c.y + dy / L * c.r }, { x: c.c.x - dx / L * c.r, y: c.c.y - dy / L * c.r }].filter((q) => inArc(c, q.x, q.y)));
-        if (p && Math.hypot(p.x - f.x, p.y - f.y) > 1e-6) add(p.x, p.y, 'PER', c.eid, dPx);
+        if (p && Math.hypot(p.x - f.x, p.y - f.y) * sc > 1) add(p.x, p.y, 'PER', c.eid, dPx);
       }
     }
     // TAN — ikki tangens nuqtasidan kursorga yaqini
