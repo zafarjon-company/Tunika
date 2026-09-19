@@ -227,6 +227,18 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   ustun, oraliqlar; qatorlar tepaga) yoki qutbiy (markazni bosing, soni,
   to'ldirish burchagi — 360° bo'lsa teng taqsim; gul yaproqlari) ko'paytirish,
   jonli ko'rinish, «Bajarish» yoki Enter. Variantlar chizma bilan saqlanadi.
+- **Tutashtirish (Fillet, F) / Faska (Chamfer, CHA) / Portlatish (Explode, X) /
+  Birlashtirish (Join, J)** (Detal va Gul chizish, `src/lib/modifyGeom.js`,
+  `npm run test:modify`). Tutashtirish: ikki obyekt (chiziq, polyline segmenti, yoy,
+  aylana) radiusli urinma yoy bilan ulanadi; bosilgan qismlar saqlanadi, qolgani
+  kesiladi/uzayadi (AutoCAD); Shift+bosish yoki radius 0 — burchakka; parallel
+  chiziqlar — yarim aylana; bir polyline'ning qo'shni segmentlari — burchak
+  yumaloqlanadi (polyline yoy joyida ajraladi); variantlar Radius / Polyline (butun
+  konturning barcha burchaklari, qisqa segmentlar o'tkazib yuboriladi) / Kesish
+  Ha-Yo'q; natija jonli ko'rinadi. Faska: masofa 1 va 2 (polyline bitta qoladi).
+  Portlatish: polyline → alohida chiziqlar. Birlashtirish: uchlari tutashgan
+  chiziqlar → bitta polyline (halqa — yopiq), bir aylanadagi tutash yoylar → bitta
+  yoy (to'liq bo'lsa aylana).
 - **Kesish (Trim) / Uzaytirish (Extend)** (Detal va Gul chizish, `src/lib/trimExtend.js`,
   `npm run test:trim`) — AutoCAD tez rejimi: chegara tanlanmaydi, chizmadagi
   boshqa elementlar (chiziq segmentlari, yoylar, aylanalar, polyline'ning boshqa
