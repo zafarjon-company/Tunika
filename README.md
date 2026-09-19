@@ -237,7 +237,7 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   darhol. «AutoCAD doska» tugmasi (variantlar qatorida) — mavzu ranglariga qaytish.
 - **Asboblar paneli** — AutoCAD lentasi kabi guruhlar (har guruh 3 qatorli ustunlar;
   tor ekranda lenta suriladi): Tanlash · Chizish (Chiziq, To'rtburchak, Ko'pburchak,
-  Aylana, Yoy ▾, Halqa, Nuqta, Ellips, Splayn) · O'zgartirish (Ko'chirish, Nusxa,
+  Aylana, Yoy ▾, Halqa, Nuqta, Ellips, Splayn, Shtrix, Kontur) · O'zgartirish (Ko'chirish, Nusxa,
   Burish, Aks, Masshtab, Cho'zish, Tekislash, Massiv, Offset) · Tahrir (Kesish,
   Uzaytirish, Uzish, Uzunlik, Tutashtirish, Faska, Portlatish, Birlashtirish,
   O'chirish) · Izoh (Matn, O'lchamlar: Chiziqli, Parallel, Burchak, Radius, Diametr) ·
@@ -253,6 +253,13 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   qoladi — MIRRTEXT=0; DXF TEXT). **O'lchamlar**: Chiziqli (DLI — kursorga qarab
   gorizontal/vertikal), Parallel (DAL), Burchak (DAN — ikki chiziq, yoy yoki 3 nuqta;
   4 sektordan biri), Radius (DRA), Diametr (DDI).
+- **Shtrix (HATCH, H) / Kontur (BOUNDARY, BO)** (`src/lib/hatchGeom.js`, `npm run test:hatch`):
+  yopiq soha ichiga bosing — soha yopiq polyline, uchlari tutashgan chiziq/yoylar zanjiri,
+  aylana yoki ellipsdan topiladi (eng kichik o'rovchi halqa); ichidagi yopiq konturlar —
+  orollar (juft-toq qoida, AutoCAD «Normal»). Naqshlar: Yaxlit, Qiya (ANSI31), To'r,
+  Gorizontal — oraliq va burchak bilan; kursor ostida soha oldindan ko'rinadi; shtrix
+  boshqa chiziqlar ostida chiziladi, rasmga (PNG) kiradi, «Yuza» asbobi shtrix yuzasini
+  beradi. Kontur — soha chegarasi (va orollari) yangi element sifatida nusxalanadi.
 - **3-to'lqin asboblari** (`src/lib/editGeom.js`, `npm run test:edit`): Ko'pburchak
   (POL — ichki / tashqi / tomon bo'yicha), Halqa (DO — ikki aylana), Nuqta (PO —
   yangi `point` elementi: magnit Tugun, DXF POINT), Cho'zish (S — ramka ichidagi
