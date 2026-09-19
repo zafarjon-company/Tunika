@@ -17,7 +17,7 @@
 //    cho'ziladi: chiziq/ochiq polyline — oxirgi segment yo'nalishida nur; yoy —
 //    aylanasi bo'ylab. Natija { id, patch } yoki { reason } / null.
 // ============================================================
-import { lineLineInt, segCircleInts, circleCircleInts, norm360, vecAng } from './osnap.js';
+import { lineLineInt, segCircleInts, circleCircleInts, norm360, vecAng, dirVec } from './osnap.js';
 import { angInArc, arcSweep, arcStart, arcEnd } from './arcGeom.js';
 import { distToSeg } from './offsetGeom.js';
 
@@ -35,6 +35,10 @@ function cutters(ents, skipId) {
       if (e.closed && p.length > 2) segs.push({ a: p[p.length - 1], b: p[0] });
     } else if (e.type === 'arc') circs.push({ c: { x: e.cx, y: e.cy }, r: e.r, a0: e.a0, a1: e.a1 });
     else if (e.type === 'circle') circs.push({ c: { x: e.cx, y: e.cy }, r: e.r });
+    else if ((e.type === 'xline' || e.type === 'ray') && [e.x, e.y, e.ang].every(Number.isFinite)) {   // yordamchi chiziq / nur — cheksiz chegara
+      const u = dirVec(e.ang), F = 1e6;
+      segs.push({ a: e.type === 'ray' ? { x: e.x, y: e.y } : { x: e.x - u.dx * F, y: e.y - u.dy * F }, b: { x: e.x + u.dx * F, y: e.y + u.dy * F } });
+    }
   }
   return { segs, circs };
 }

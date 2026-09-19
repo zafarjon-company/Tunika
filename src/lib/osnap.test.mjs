@@ -1403,6 +1403,14 @@ test('Ellips: markaz — CEN, o\'q uchlari — QUA; oddiy polyline END/MID o\'zg
   const plain = buildGeom([{ id: 'p1', type: 'pline', pts: [P(0, 0), P(10, 0)] }]);
   assert.ok(osnapCandidates(plain, P(5, 0), OPT()).some((x) => x.kind === 'MID'));
 });
+test('Yordamchi chiziq: boshqa chiziq bilan kesishma (INT), asos — NOD; nur orqasida kesishma yo\'q', () => {
+  const g = buildGeom([{ id: 'x1', type: 'xline', x: 0, y: 0, ang: 45 }, { id: 'l', type: 'pline', pts: [P(100, -200), P(100, 200)] }]);
+  const c = osnapBest(g, P(101, -99), OPT());
+  assert.equal(c.kind, 'INT'); nearPt(c, 100, -100, 1e-6);
+  assert.equal(g.nodes.length, 1);
+  const g2 = buildGeom([{ id: 'r1', type: 'ray', x: 0, y: 0, ang: 225 }, { id: 'l', type: 'pline', pts: [P(100, -200), P(100, 200)] }]);
+  assert.ok(!osnapCandidates(g2, P(101, -99), OPT()).some((x) => x.kind === 'INT'));
+});
 test('Matn: qo\'yish nuqtasi — tugun (NOD)', () => {
   const g = buildGeom([{ id: 't1', type: 'text', x: 7, y: -3, h: 5, rot: 0, text: 'Lola' }]);
   assert.equal(g.nodes.length, 1); nearPt(g.nodes[0], 7, -3);

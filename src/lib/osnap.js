@@ -229,6 +229,11 @@ export function buildGeom(entities, opts = {}) {
         mids.push({ x: mid.x, y: mid.y, eid: id });
       }
     } else if (e.type === 'point' || e.type === 'text') addNode({ x: e.x, y: e.y }, id);   // nuqta / matn qo'yish nuqtasi — tugun (NOD)
+    else if ((e.type === 'xline' || e.type === 'ray') && Number.isFinite(e.ang)) {   // yordamchi chiziq / nur: juda uzun segment (INT/PER/NEA), asos — tugun
+      const u = dirVec(e.ang), F = 1e6, b = { x: e.x, y: e.y };
+      addSeg(e.type === 'ray' ? b : { x: b.x - u.dx * F, y: b.y - u.dy * F }, { x: b.x + u.dx * F, y: b.y + u.dy * F }, id);
+      addNode(b, id);
+    }
     else if (e.type === 'dim') { addNode({ x: e.x1, y: e.y1 }, id); addNode({ x: e.x2, y: e.y2 }, id); }
   }
   for (const n of opts.nodes || []) if (ok(n)) nodes.push(n);

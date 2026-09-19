@@ -158,5 +158,20 @@ test('yoy uzaytirish: chegara faqat yoyning o\'z oralig\'ida bo\'lsa (davomida y
   assert.ok(extendAt([c, b2], c, P(9.85, 1.7)).reason);
 });
 
+console.log('\n— Yordamchi chiziq (XLINE) / Nur (RAY) — chegara —');
+test('xline (vertikal, x=50) — kesish chegarasi; ray orqa tomonida kesmaydi', () => {
+  const xl = { id: 'x', type: 'xline', x: 50, y: 500, ang: 90 };
+  const r = trimAt([H, xl], H, P(25, 0));
+  ptsNear(r.add[0].pts, [P(50, 0), P(100, 0)]);
+  const ray = { id: 'r', type: 'ray', x: 50, y: -10, ang: 90 };   // (50,-10) dan tepaga — H ga yetmaydi
+  const r2 = trimAt([H, ray], H, P(25, 0));
+  assert.ok(!r2.add || r2.add.length === 0 || r2.add[0].pts.length === 2 && Math.abs(r2.add[0].pts[0].x - 50) > 1e-6);
+});
+test('extendAt: xline gacha uzayadi', () => {
+  const l = pl('l', [P(0, 0), P(50, 0)]);
+  const r = extendAt([l, { id: 'x', type: 'xline', x: 120, y: 0, ang: 60 }], l, P(45, 0));
+  near(r.patch.pts[1].x, 120, 1e-6); near(r.patch.pts[1].y, 0, 1e-6);
+});
+
 console.log(`\nJami: ${jami}, xato: ${xato}`);
 if (xato) process.exit(1);

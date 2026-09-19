@@ -237,7 +237,7 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   darhol. «AutoCAD doska» tugmasi (variantlar qatorida) — mavzu ranglariga qaytish.
 - **Asboblar paneli** — AutoCAD lentasi kabi guruhlar (har guruh 3 qatorli ustunlar;
   tor ekranda lenta suriladi): Tanlash · Chizish (Chiziq, To'rtburchak, Ko'pburchak,
-  Aylana, Yoy ▾, Halqa, Nuqta, Ellips, Splayn, Shtrix, Kontur) · O'zgartirish (Ko'chirish, Nusxa,
+  Aylana, Yoy ▾, Halqa, Nuqta, Ellips, Splayn, Yordamchi chiziq, Nur, Shtrix, Kontur) · O'zgartirish (Ko'chirish, Nusxa,
   Burish, Aks, Masshtab, Cho'zish, Tekislash, Massiv, Offset) · Tahrir (Kesish,
   Uzaytirish, Uzish, Uzunlik, Tutashtirish, Faska, Portlatish, Birlashtirish,
   O'chirish) · Izoh (Matn, O'lchamlar: Chiziqli, Parallel, Burchak, Radius, Diametr) ·
@@ -253,6 +253,11 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   qoladi — MIRRTEXT=0; DXF TEXT). **O'lchamlar**: Chiziqli (DLI — kursorga qarab
   gorizontal/vertikal), Parallel (DAL), Burchak (DAN — ikki chiziq, yoy yoki 3 nuqta;
   4 sektordan biri), Radius (DRA), Diametr (DDI).
+- **Yordamchi chiziq (XLINE, XL) / Nur (RAY)** — ikki / bir tomonga cheksiz chiziqlar
+  (`{ x, y, ang }`): nuqta orqali (asos + har bosishda yangi yo'nalish), gorizontal,
+  vertikal yoki berilgan burchak. Ko'rinish oynasiga qirqib chiziladi, Kesish/Uzaytirish
+  chegarasi (`trimExtend.js`), magnitda kesishma/perpendikulyar (`osnap.js`), griplar —
+  asos va yo'nalish; PNG rasmga chiqmaydi, gabaritga (Ctrl+E) faqat asosi kiradi.
 - **Shtrix (HATCH, H) / Kontur (BOUNDARY, BO)** (`src/lib/hatchGeom.js`, `npm run test:hatch`):
   yopiq soha ichiga bosing — soha yopiq polyline, uchlari tutashgan chiziq/yoylar zanjiri,
   aylana yoki ellipsdan topiladi (eng kichik o'rovchi halqa); ichidagi yopiq konturlar —
