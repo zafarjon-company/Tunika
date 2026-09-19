@@ -163,5 +163,13 @@ test('zanjir (stadion: 2 chiziq + 2 yarim aylana) yuzasi ≈ 100·50 + π·25²,
   near(r.area, 5000 + Math.PI * 625, 0.2); near(r.perim, 200 + 50 * Math.PI, 1e-9);
 });
 
+
+test('lengthenEnt: oxirgi segment nol uzunlikda (takror tugun) → NaN emas, oldingi yo\'nalishda uzayadi', () => {
+  const r = lengthenEnt(pl([P(0, 0), P(100, 0), P(100, 0)]), P(99, 0), 'delta', 10);
+  assert.ok(!r.reason); ptsNear(r.patch.pts, [P(0, 0), P(110, 0)]);
+  assert.ok(r.patch.pts.every((q) => Number.isFinite(q.x) && Number.isFinite(q.y)));
+  const z = lengthenEnt(pl([P(5, 5), P(5, 5)]), P(5, 5), 'delta', 10);
+  assert.ok(z.reason);
+});
 console.log(`\nJami: ${jami}, xato: ${xato}`);
 if (xato) process.exit(1);

@@ -1349,6 +1349,38 @@ test('resolveSnap: yoy uchi END ustunlik bilan (QUA bilan bir nuqta — takror e
   assert.equal(r.kind, 'END'); nearPt(r, 10, 0);
 });
 
+console.log('\n=== Ko\'rik tuzatishlari: polar qadam va ustunlik ===\n');
+test('polarSnap: 360 ni bo\'lmaydigan qadam (7°) — 359.5° da 0° nuri tutiladi', () => {
+  const s = { polar: true, polarInc: 7, aperture: 12, polarAngTol: 3, polarDist: 0 };
+  const a = 359.5 * Math.PI / 180, cur = P(500 * Math.cos(a), -500 * Math.sin(a));
+  const r = polarSnap(P(0, 0), cur, s, 1);
+  assert.ok(r); assert.equal(r.ang, 0);
+});
+test('polarSnap: katta qadam (100°) — 355° da 0° (40° ga o\'ralmaydi)', () => {
+  const s = { polar: true, polarInc: 100, aperture: 12, polarAngTol: 3, polarDist: 0 };
+  const a = 355 * Math.PI / 180, cur = P(15 * Math.cos(a), -15 * Math.sin(a));
+  const r = polarSnap(P(0, 0), cur, s, 1);
+  assert.ok(r); assert.equal(r.ang, 0);
+});
+test('trackAngles 7°: polar burchaklar chiziq sifatida (182° → 2° ham bor), takrorsiz, tartiblangan', () => {
+  const t = trackAngles({ polar: true, polarInc: 7 });
+  assert.ok(t.includes(2) && t.includes(7) && t.includes(0));
+  assert.equal(new Set(t).size, t.length);
+  for (let i = 1; i < t.length; i++) assert.ok(t[i] > t[i - 1]);
+});
+test('resolveSnap: burchak tolerantligi OTRACK chizig\'ini bosib ketmaydi (uzoqda ham kuzatish)', () => {
+  const s = SET({ polar: true, polarInc: 15, polarAngTol: 3, polarDist: 0, otrack: true });
+  const r = resolveSnap({ geom: G_EMPTY, cur: P(1180, -300), scale: 1, settings: s, from: P(0, 0), acquired: [P(1000, -300)] });
+  assert.equal(r.kind, 'otrack'); nearPt(r, 1180, -300);
+});
+test('resolveSnap: burchak tolerantligi to\'rni (SNAP) bosib ketmaydi; nur ustida (apertura ichida) — polar', () => {
+  const s = SET({ polar: true, polarInc: 15, polarAngTol: 3, polarDist: 0, gridSnap: true, otrack: false });
+  const r = resolveSnap({ geom: G_EMPTY, cur: P(5000, 200), scale: 0.1, settings: s, from: P(0, 0), gridStep: 50 });
+  assert.equal(r.kind, 'grid'); nearPt(r, 5000, 200);
+  const r2 = resolveSnap({ geom: G_EMPTY, cur: P(5000, 50), scale: 0.1, settings: s, from: P(0, 0), gridStep: 50 });
+  assert.equal(r2.kind, 'polar'); assert.equal(r2.tracks[0].ang, 0);
+});
+
 /* ============================================================ */
 console.log(`\n${'='.repeat(46)}`);
 console.log(xato === 0 ? `✅ HAMMASI O'TDI — ${jami} ta test` : `❌ ${xato} / ${jami} TEST O'TMADI`);

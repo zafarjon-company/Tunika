@@ -162,7 +162,7 @@ const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'e
 const PICK_FIRST = ['move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'align'];   // tanlovsiz tanlansa — avval obyektlar tanlanadi (AutoCAD verb-noun)
 // AutoCAD doskasi ranglari (model maydoni: 33,40,48)
 const ACAD_BOARD = { bg: '#212830', devor: '#ffffff', accent: '#5b9bff', edit: '#e8edf3', text: '#d5dde7', labelBg: 'rgba(33,40,48,.84)', ref: '#6b7686', kazirok: '#cfd8e3', offset: '#ff66e8', accentSoft: '#1b2230', qozon: '#5b9bff', cross: '#ffffff', snap: '#f2c200' };
-const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
+const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const CIRCLE_MODES = { cr: 'Markaz, radius', dia: 'Markaz, diametr', '2p': '2 nuqta', '3p': '3 nuqta' };
 // Eksport (PNG) uchun mavzudan mustaqil OCH palitra — oq fonda doim o'qiladi.
 const EXPORT_P = {
@@ -293,7 +293,7 @@ function buildTemplate(V) {
     <select class="rowUnit" data-dtl="polarSel" title="Polar (AutoCAD): chiziq shu burchaklarga yopishadi — 5° → 5, 10, 15…; 15° → 15, 30, 45, 60…; 45° → 45, 90, 135, 180, 225… «O'chiq» — erkin burchak">
       <option value="off">o'chiq (erkin)</option>
       <option value="ortho">faqat 90° (orto)</option>
-      ${POLAR_INCS.filter((a) => a !== 90).map((a) => '<option value="' + a + '">' + a + '° — ' + [1, 2, 3, 4].map((k) => +(a * k).toFixed(1)).join(', ') + '…</option>').join('')}
+      ${POLAR_INCS.map((a) => '<option value="' + a + '">' + a + '° — ' + [1, 2, 3, 4].map((k) => +(a * k).toFixed(1)).join(', ') + '…</option>').join('')}
       <option value="custom">boshqa…</option>
     </select>
     <span class="chz-tglbl">Uzunlik qadami:</span>
@@ -500,7 +500,6 @@ export function mountDetal(root, opts) {
         const o = document.createElement('option'); o.value = v; o.textContent = v + '° — ' + [1, 2, 3, 4].map((k) => +(s.polarInc * k).toFixed(1)).join(', ') + '…';
         ps.insertBefore(o, ps.querySelector('option[value="custom"]'));
       }
-      if (s.polar && !s.ortho && s.polarInc === 90) v = 'ortho';
       ps.value = v;
     }
     if (dsel) dsel.value = String(s.polarDist || 0);
@@ -1341,7 +1340,7 @@ export function mountDetal(root, opts) {
     const d = state.draft;
     if (!d) {
       const hit = entAt(sx, sy);
-      if (!hit || hit.ent.type === 'dim') { setInfo('Offset uchun chiziq, yoy yoki aylanani bosing'); return; }
+      if (!hit || hit.ent.type === 'dim' || hit.ent.type === 'point') { setInfo('Offset uchun chiziq, yoy yoki aylanani bosing'); return; }
       // Gul rejimi: uchlari tutashgan elementlar (chiziqlar, yoylar) bitta kontur — AutoCAD JOIN + OFFSET
       const ch = (V.joinOffset && hit.ent.type !== 'circle') ? chainOf(state.ents, hit.ent.id) : null;
       state.draft = { tool: 'offset', ent: hit.ent, chain: (ch && ch.ids.size > 1) ? ch : null, dist: null };
@@ -1516,7 +1515,7 @@ export function mountDetal(root, opts) {
       const v = sonQiymat(i.value);
       if (Math.abs(v - it.val) > 1e-9) { it.set(v); it.val = v; changed = true; }
     });
-    if (changed) { saveLS(); render(); syncOptRow(); }
+    if (changed) { syncFilletBox(); saveLS(); render(); syncOptRow(); }
     return changed;
   }
   // Qatorni qayta qurmasdan yangilash (fokus va bosilayotgan tugma yo'qolmasin): tugma holati, matn
@@ -1542,6 +1541,13 @@ export function mountDetal(root, opts) {
 
   /* ---- Tutashtirish (FILLET) / Faska (CHAMFER) / Portlatish / Birlashtirish — geometriya: src/lib/modifyGeom.js ---- */
   // Joriy qiymatlar: qutida yozilgan bo'lsa u (hali Enter bosilmagan), aks holda variantlar qatoridagi
+  // Tutashtirish/Faska: 1-tanlovdan keyin variantlar qatorida o'zgartirilgan qiymat ochiq qutiga ham yoziladi
+  function syncFilletBox() {
+    const d = state.draft, o = state.opt;
+    if (!state.box || !d || (d.tool !== 'fillet' && d.tool !== 'chamfer')) return;
+    if (d.tool === 'fillet') in1.value = fmtNum(o.filletR / U(), 2);
+    else { in1.value = fmtNum(o.chamD1 / U(), 2); in2.value = fmtNum(o.chamD2 / U(), 2); }
+  }
   function filletVals(kind) {
     const o = state.opt, [v1, v2] = state.box ? boxVals() : [null, null];
     if (kind === 'fillet') return { R: v1 != null && v1 >= 0 ? v1 * U() : o.filletR };
@@ -1551,6 +1557,7 @@ export function mountDetal(root, opts) {
   function computeFillet(kind, h1, P1, h2, P2, zero) {
     const e1 = h1.ent, e2 = h2.ent;
     if (e1.type === 'dim' || e2.type === 'dim') return { reason: "O'lcham chizig'i tanlanmaydi" };
+    if (e1.type === 'point' || e2.type === 'point') return { reason: 'Nuqtani tutashtirib bo\'lmaydi — chiziq, yoy yoki aylana tanlang' };
     if (e1 === e2 && (e1.type !== 'pline' || h1.seg === h2.seg)) return { reason: 'Ikkinchi (boshqa) obyekt yoki segmentni tanlang' };
     const c1 = curveOf(e1, h1.seg), c2 = curveOf(e2, h2.seg);
     if (!c1 || !c2) return { reason: 'Tanlangan obyekt mos emas' };
@@ -1599,7 +1606,7 @@ export function mountDetal(root, opts) {
     const hit = entAt(sx, sy), raw = screenToWorld(sx, sy), o = state.opt, d = state.draft;
     const nm = kind === 'fillet' ? 'Tutashtirish' : 'Faska';
     if (!d) {
-      if (!hit || hit.ent.type === 'dim') { setInfo(toolHint(kind)); return; }
+      if (!hit || hit.ent.type === 'dim' || hit.ent.type === 'point') { setInfo(toolHint(kind)); return; }
       if (kind === 'fillet' ? o.filletPoly : o.chamPoly) {   // «Polyline» — butun konturning barcha burchaklari
         if (hit.ent.type !== 'pline') { setInfo(nm + " (Polyline): polyline'ni bosing"); return; }
         const res = kind === 'fillet' ? filletPlineAll(hit.ent, o.filletR) : chamferPlineAll(hit.ent, o.chamD1, o.chamD2);
@@ -2429,6 +2436,7 @@ export function mountDetal(root, opts) {
     const r = svg.getBoundingClientRect();
     paint(svg, { scale: state.scale, panX: state.panX, panY: state.panY }, r.width, r.height, false);
     positionBox(); updateScaleInfo(); saveLS();
+    if (state.tool === 'area' || state.tool === 'align' || state.tool === 'stretch') syncOptRow();
   }
   function afterChange() { computeAutoOff(); render(); updatePanel(); }
 
@@ -3232,7 +3240,7 @@ export function mountDetal(root, opts) {
   on(q('optRow'), 'change', (e) => {
     const i = e.target.closest('input[data-opt]'); if (!i) return;
     const it = optRowItems[+i.dataset.opt];
-    if (it && it.set) { const v = sonQiymat(i.value); it.set(v); it.val = v; i.value = fmtNum(v, 2); saveLS(); render(); syncOptRow(); }   // qator qayta qurilmaydi — fokus/tugma saqlanadi
+    if (it && it.set) { const v = sonQiymat(i.value); it.set(v); it.val = v; i.value = fmtNum(v, 2); syncFilletBox(); saveLS(); render(); syncOptRow(); }   // qator qayta qurilmaydi — fokus/tugma saqlanadi
   });
   on(q('optRow'), 'keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); e.target.blur(); if (state.tool === 'array') applyArray(); } });
   on(q('libList'), 'click', (e) => {

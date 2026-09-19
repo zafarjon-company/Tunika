@@ -210,5 +210,35 @@ test('joinEnts: tegmaydigan chiziqlar birlashmaydi; bir aylanadagi tutash yoylar
   assert.equal(c.add[0].type, 'circle');
 });
 
+
+console.log('\n— Ko\'rik tuzatishlari —');
+test('filletPlineAll: teskari (CCW) kvadrat — har burchakda 90° yoy, kontur ichida (uzun tomondan emas)', () => {
+  const r = filletPlineAll(pl([P(0, 100), P(100, 100), P(100, 0), P(0, 0)], true), 10);
+  const arcs = r.ents.filter((e) => e.type === 'arc');
+  assert.equal(arcs.length, 4);
+  for (const a of arcs) { near(sweep(a), 90, 1e-6); }
+  const a = arcs.find((x) => Math.abs(x.cx - 90) < 1e-6 && Math.abs(x.cy - 90) < 1e-6);
+  const mid = arcPt(a, a.a0 + 45);
+  near(mid.x, 90 + 10 * Math.SQRT1_2, 1e-6); near(mid.y, 90 + 10 * Math.SQRT1_2, 1e-6);
+});
+test('filletPlineAll: uchburchak va ochiq L — hamma yoylar < 180° (180 − burchak)', () => {
+  const t = filletPlineAll(pl([P(0, 0), P(100, 0), P(30, 70)], true), 5);
+  const sw = t.ents.filter((e) => e.type === 'arc').map(sweep);
+  assert.equal(sw.length, 3); sw.forEach((x) => assert.ok(x < 180, 'sweep ' + x));
+  near(sw.reduce((s, x) => s + x, 0), 360, 1e-6);   // tashqi burchaklar yig'indisi
+  const l = filletPlineAll(pl([P(0, 0), P(100, 0), P(100, -100)]), 10);
+  near(sweep(l.ents.find((e) => e.type === 'arc')), 90, 1e-6);
+});
+test('filletCurves / chamferLines: radius yoki masofa segmentdan katta → rad etiladi (chiziq ag\'darilmaydi)', () => {
+  const L = pl([P(0, 0), P(10, 0), P(10, 100)]);
+  const f = filletCurves(curveOf(L, 0), P(5, 0), curveOf(L, 1), P(10, 50), 20);
+  assert.ok(f.reason && /Radius juda katta/.test(f.reason));
+  const ok = filletCurves(curveOf(L, 0), P(5, 0), curveOf(L, 1), P(10, 50), 5);
+  assert.ok(!ok.reason); ptNear(ok.t1, P(5, 0)); ptNear(ok.t2, P(10, 5));
+  const c = chamferLines(curveOf(L, 0), P(5, 0), curveOf(L, 1), P(10, 50), 30, 30);
+  assert.ok(c.reason && /Masofa juda katta/.test(c.reason));
+  const c2 = chamferLines(curveOf(L, 0), P(5, 0), curveOf(L, 1), P(10, 50), 10, 30);
+  assert.ok(!c2.reason); ptNear(c2.t1, P(0, 0)); ptNear(c2.t2, P(10, 30));
+});
 console.log(`\nJami: ${jami}, xato: ${xato}`);
 if (xato) process.exit(1);

@@ -352,22 +352,32 @@ export function polarSnap(from, cur, s, scale) {
   }
   if (s.polar) {
     const inc = s.polarInc || 15;
-    const ang = norm360(Math.round(a / inc) * inc), v = dirVec(ang);
+    // Polar burchaklar — k·inc < 360 (va 0°). 360 ni bo'lmaydigan qadamda ham eng yaqini: pastki / yuqori karrali
+    const lo = Math.floor(a / inc) * inc, hi = lo + inc;
+    const angDev = (x) => { let d = Math.abs(a - x) % 360; return d > 180 ? 360 - d : d; };
+    const hiA = hi >= 360 - 1e-9 ? 0 : hi;
+    const ang = norm360(angDev(lo) <= angDev(hiA) ? lo : hiA), v = dirVec(ang);
     const perp = Math.abs(dx * v.dy - dy * v.dx) * (scale || 1);
     const proj = dx * v.dx + dy * v.dy;
     // Burchak tolerantligi: nurdan og'ish (°) — uzun chiziqda piksel masofa katta bo'lsa ham tutiladi
-    let dev = Math.abs(a - ang) % 360; if (dev > 180) dev = 360 - dev;
+    const dev = angDev(ang);
     const angTol = s.polarAngTol > 0 ? Math.min(s.polarAngTol, inc / 3) : 0;
-    if (proj > 0 && (perp <= (s.aperture || 12) || dev <= angTol)) {
+    const inAp = perp <= (s.aperture || 12);
+    if (proj > 0 && (inAp || dev <= angTol)) {
       const Lq = polarLen(proj, s);
-      return { x: from.x + v.dx * Lq, y: from.y + v.dy * Lq, ang, kind: 'polar' };
+      // byTol — faqat burchak tolerantligi bilan tutildi: kuzatish/proyeksiya chizig'i va to'r ustun
+      return { x: from.x + v.dx * Lq, y: from.y + v.dy * Lq, ang, kind: 'polar', byTol: !inAp };
     }
   }
   return null;
 }
 // Kuzatish burchaklari to'plami (0..180 — chiziq ikki tomonga davom etadi)
 export function trackAngles(s) {
-  if (s.polar && !s.ortho) { const inc = s.polarInc || 15, out = []; for (let a = 0; a < 180 - 1e-9; a += inc) out.push(norm360(a)); return out; }
+  if (s.polar && !s.ortho) {   // polar burchaklar (k·inc < 360) chiziq sifatida: mod 180, takrorsiz
+    const inc = s.polarInc || 15, set = new Map();
+    for (let k = 0; k * inc < 360 - 1e-9; k++) { const a = +((k * inc) % 180).toFixed(6); set.set(a, a); }
+    return [...set.values()].sort((x, y) => x - y);
+  }
   return [0, 90];
 }
 
@@ -448,7 +458,7 @@ export function resolveSnap(ctx) {
   const tr = trackOn ? trackSnap(acq, cur, s, scale, polarRes, from, guides) : null;
   // KESISHMA (kuzatish yoki proyeksiya) hammadan ustun; oddiy chiziq esa polar nurdan keyin
   // (AutoCAD: polar nur ustida bo'lsa polar, kesishma bo'lsa kesishma).
-  if (tr && (tr.kind === 'otrack-int' || tr.kind === 'proj-int' || !polarRes)) {
+  if (tr && (tr.kind === 'otrack-int' || tr.kind === 'proj-int' || !polarRes || polarRes.byTol)) {
     res.x = tr.x; res.y = tr.y; res.kind = tr.kind;
     res.tracks = tr.lines.map((L) => ({ from: { x: L.A.x, y: L.A.y }, to: { x: tr.x, y: tr.y }, ang: L.ang, polar: !!(L.polar || L.fwd), guide: !!L.guide }));
     res.tip = tr.kind === 'otrack-int' ? 'Kuzatish kesishmasi'
@@ -457,13 +467,14 @@ export function resolveSnap(ctx) {
           : (tr.kind === 'EXT' ? 'Davomi ' + fmtAng(tr.lines[0].ang) : 'Kuzatish ' + fmtAng(tr.lines[0].ang));
     return res;
   }
-  if (polarRes) {
+  const gridOn = !!(s.gridSnap && ctx.gridStep > 0);
+  if (polarRes && !(polarRes.byTol && gridOn)) {
     res.x = polarRes.x; res.y = polarRes.y; res.kind = polarRes.kind;
     res.tracks = [{ from: { x: from.x, y: from.y }, to: { x: polarRes.x, y: polarRes.y }, ang: polarRes.ang, polar: true }];
     res.tip = (polarRes.kind === 'ortho' ? 'Orto ' : 'Polar ') + fmtAng(polarRes.ang);
     return res;
   }
-  if (s.gridSnap && ctx.gridStep > 0) {
+  if (gridOn) {
     const g = ctx.gridStep;
     res.x = Math.round(cur.x / g) * g; res.y = Math.round(cur.y / g) * g; res.kind = 'grid';
   }

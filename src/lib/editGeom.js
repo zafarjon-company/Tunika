@@ -185,7 +185,10 @@ export function lengthenEnt(e, Q, mode, val) {
   else delta = val;
   if (e.type === 'pline') {
     if (e.closed && e.pts.length > 2) return { reason: "Yopiq kontur uzunligi o'zgartirilmaydi" };
-    const p = e.pts.map(P), n = p.length;
+    const p = [];   // ketma-ket takrorlangan tugunlar tashlanadi (nol uzunlikdagi segment yo'nalish bermaydi)
+    for (const q of e.pts) if (!p.length || dist(p[p.length - 1], q) > 1e-9) p.push(P(q));
+    const n = p.length;
+    if (n < 2) return { reason: "Chiziq uzunligi nol" };
     const atEnd = dist(Q, p[n - 1]) <= dist(Q, p[0]);
     const A = atEnd ? p[n - 2] : p[1], B = atEnd ? p[n - 1] : p[0];
     const l = dist(A, B), nl = l + delta;

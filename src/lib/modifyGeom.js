@@ -131,6 +131,8 @@ function tangentArc(C, R, T1, T2, d1, d2) {
 }
 
 /* ---------------- FILLET ---------------- */
+// Chiziq: X dan k yo'nalishida saqlanadigan qismning uzunligi (segmentning uzoq uchigacha)
+function keptLen(cv, X, k) { return Math.max(dot(sub(cv.a, X), k), dot(sub(cv.b, X), k)); }
 export function filletCurves(c1, P1, c2, P2, R) {
   if (!c1 || !c2 || !P1 || !P2) return { reason: 'Ikki obyekt tanlang (chiziq, yoy yoki aylana)' };
   R = Number.isFinite(R) && R > 0 ? R : 0;
@@ -150,6 +152,7 @@ export function filletCurves(c1, P1, c2, P2, R) {
     const cosT = Math.max(-1, Math.min(1, dot(k1, k2))), th = Math.acos(cosT);   // nurlar orasidagi burchak
     if (th < 1e-6) return { reason: "Chiziqlar ustma-ust" };
     const tl = R / Math.tan(th / 2);
+    if (tl > keptLen(c1, X, k1) + 1e-6 || tl > keptLen(c2, X, k2) + 1e-6) return { reason: 'Radius juda katta — segment uzunligidan oshib ketadi' };
     const T1 = { x: X.x + k1.x * tl, y: X.y + k1.y * tl }, T2 = { x: X.x + k2.x * tl, y: X.y + k2.y * tl };
     const bis = unit({ x: k1.x + k2.x, y: k1.y + k2.y }), h = R / Math.sin(th / 2);
     const C = { x: X.x + bis.x * h, y: X.y + bis.y * h };
@@ -196,6 +199,7 @@ export function chamferLines(c1, P1, c2, P2, d1, d2) {
   const k1 = dot(sub(P1, X), u1) >= 0 ? u1 : { x: -u1.x, y: -u1.y };
   const k2 = dot(sub(P2, X), u2) >= 0 ? u2 : { x: -u2.x, y: -u2.y };
   d1 = Math.max(0, Number(d1) || 0); d2 = Math.max(0, Number(d2) || 0);
+  if (d1 > keptLen(c1, X, k1) + 1e-6 || d2 > keptLen(c2, X, k2) + 1e-6) return { reason: 'Masofa juda katta — segment uzunligidan oshib ketadi' };
   const T1 = { x: X.x + k1.x * d1, y: X.y + k1.y * d1 }, T2 = { x: X.x + k2.x * d2, y: X.y + k2.y * d2 };
   return { t1: T1, t2: T2, trim1: trimOf(c1, T1, k1, P1), trim2: trimOf(c2, T2, k2, P2), seg: dist(T1, T2) > 1e-9 ? { a: T1, b: T2 } : null };
 }
@@ -291,7 +295,7 @@ export function filletPlineAll(ent, R) {
     const tl = R / Math.tan(c.th / 2), h = R / Math.sin(c.th / 2);
     const Tp = { x: c.V.x + c.up.x * tl, y: c.V.y + c.up.y * tl }, Tn = { x: c.V.x + c.un.x * tl, y: c.V.y + c.un.y * tl };
     const bis = unit({ x: c.up.x + c.un.x, y: c.up.y + c.un.y }), C = { x: c.V.x + bis.x * h, y: c.V.y + bis.y * h };
-    const ta = tangentArc(C, R, Tp, Tn, { x: -c.up.x, y: -c.up.y }, c.un);
+    const ta = tangentArc(C, R, Tp, Tn, c.up, c.un);   // d — T dan SAQLANADIGAN qismga (oldingi segment: +up)
     return { Tp, Tn, arc: Object.assign({ type: 'arc' }, ta.arc) };
   });
   const count = F.filter(Boolean).length, skipped = cs.filter((c, v) => c && !use[v]).length;
