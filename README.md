@@ -269,6 +269,8 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   yozilgan matn saqlanadi; Ctrl+Z / Ctrl+Y / Ctrl+A / Ctrl+E va Delete satrda ham ishlaydi;
   rejim o'zgarishi `<Orto yoqildi>` ko'rinishida tarixga yoziladi.
   Kalit so'zlar so'rovda **bosiladigan havola** (AutoCAD 2014+); takliflarda yozilgan harflar qalin.
+  Probel — Enter kabi bajaradi, **Shift+Probel** — oddiy bo'shliq (ko'p so'zli qidiruv uchun);
+  F2 faqat chizma faol bo'lganda ishlaydi, oyna ochiqligida harflar satrga yozilmaydi.
   Buyruq boshlanganda (XL → [Gorizontal/Vertikal/…]) yoki bajarilayotganda kalit so'z ustun, buyruq
   tugagach «Buyruq:» holatiga qaytadi — harflar yana buyruqni ishga tushiradi (A — Yoy, H — Shtrix).
 - **Silliqlash (PEDIT, PE)** — siniq chiziqni bosing: uchlari fit nuqta bo'lib silliq
