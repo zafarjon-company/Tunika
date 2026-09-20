@@ -512,6 +512,7 @@ export function mountDetal(root, opts) {
     board: 'acad',         // 'acad' — AutoCAD doskasi (to'q fon, oq chiziqlar), 'theme' — ilova mavzusi ranglari
     // Asbob variantlari (AutoCAD buyruq variantlari — pastdagi ichki buyruqlar qatori)
     cmdUse: {},            // buyruqlar ishlatilish soni — takliflar tartibi uchun (AutoCAD adaptiv)
+    cmdFresh: false,       // buyruq endigina boshlandi (birinchi kiritish kutilmoqda) — kalit so'zlar ustun
     lastPt: null,          // oxirgi qo'yilgan nuqta (AutoCAD LASTPOINT) — «@» shundan
     snapOnce: null,        // bir martalik magnit (END, MID…)
     opt: { circleMode: 'cr', copyMulti: true, moveCopy: false, rotateCopy: false, mirrorErase: false, scaleCopy: false, offsetMulti: false,
@@ -1116,6 +1117,7 @@ export function mountDetal(root, opts) {
       if (t === 'explode') explodeEnts(list); else joinSelected(list);
       return;
     }
+    state.cmdFresh = true;   // buyruq boshlandi: birinchi kiritishgacha kalit so'zlar ustun
     if (PICK_FIRST.includes(t) && !state.sel.size) { state.picking = true; setInfo(toolLabel(t) + ": obyektlarni tanlang (bosing yoki ramka torting), so'ng Enter / Probel / o'ng tugma"); }
     else setInfo(toolHint(t));
     if (t === 'arc') arcAutoStart();
@@ -1131,7 +1133,7 @@ export function mountDetal(root, opts) {
   }
   function cancelCurrent() {
     if (state.draft || state.box || state.picking) logLine('*Bekor qilindi*');
-    state.snapOnce = null;
+    state.snapOnce = null; state.cmdFresh = false;
     if (state.draft && state.draft.tool === 'pline') { finishPline(false); return; }
     if (state.draft && state.draft.tool === 'spline') { finishSpline(null); return; }
     if (state.draft && state.draft.tool === 'text') { textCommit(false); return; }
@@ -1941,7 +1943,7 @@ export function mountDetal(root, opts) {
       num('Balandlik', o.textH / U(), (v) => { o.textH = Math.max(0.1, v * U()); if (live()) { state.draft.h = o.textH; positionTextEd(); } }, UNIT_LABEL[state.unit]);
       num('Burchak', o.textRot, (v) => { o.textRot = norm360(v); if (live()) state.draft.rot = o.textRot; }, '°');
     }
-    else if (t === 'copy') { btn('Rejim: ' + (o.copyMulti ? "Ko'p" : 'Bitta'), () => { o.copyMulti = !o.copyMulti; }, { on: o.copyMulti }); btn('Massiv\u2026', () => setTool('array')); }
+    else if (t === 'copy') { btn('Rejim: ' + (o.copyMulti ? "Ko'p" : 'Bitta'), () => { o.copyMulti = !o.copyMulti; }, { on: o.copyMulti }); btn('Massiv\u2026', () => setTool('array'), { noKw: true }); }
     else if (t === 'move') tog('Nusxa (asli qoladi)', 'moveCopy');
     else if (t === 'rotate') tog('Nusxa (asli qoladi)', 'rotateCopy');
     else if (t === 'scale') tog('Nusxa (asli qoladi)', 'scaleCopy');
@@ -1950,12 +1952,12 @@ export function mountDetal(root, opts) {
     else if (t === 'fillet') {
       num('Radius', o.filletR / U(), (v) => { o.filletR = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
       tog('Polyline (butun kontur)', 'filletPoly'); tog('Kesish (Trim)', 'filletTrim');
-      btn('Faska\u2026', () => setTool('chamfer'));
+      btn('Faska\u2026', () => setTool('chamfer'), { noKw: true });   // boshqa asbobga o'tish — kalit so'z emas (F — Tutashtirish buyrug'i)
     } else if (t === 'chamfer') {
       num('Masofa 1', o.chamD1 / U(), (v) => { o.chamD1 = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
       num('Masofa 2', o.chamD2 / U(), (v) => { o.chamD2 = Math.max(0, v * U()); }, UNIT_LABEL[state.unit]);
       tog('Polyline (butun kontur)', 'chamPoly'); tog('Kesish (Trim)', 'chamTrim');
-      btn('Tutashtirish\u2026', () => setTool('fillet'));
+      btn('Tutashtirish\u2026', () => setTool('fillet'), { noKw: true });
     } else if (t === 'polygon') {
       num('Tomonlar', o.polyN, (v) => { o.polyN = Math.max(3, Math.min(1024, Math.round(v))); }, '');
       btn('Ichki (aylanaga)', () => { o.polyMode = 'in'; cancelDraft(false); setInfo(toolHint('polygon')); }, { on: o.polyMode === 'in' });
@@ -2042,7 +2044,7 @@ export function mountDetal(root, opts) {
   function optKeys() {
     const out = [];
     (optRowItems || []).forEach((it, i) => {
-      if (!it || it.disabled || (it.kind !== 'btn' && it.kind !== 'num') || !it.label) return;
+      if (!it || it.disabled || it.noKw || (it.kind !== 'btn' && it.kind !== 'num') || !it.label) return;
       out.push({ label: it.label, short: it.short || shortLab(it.label), kw: it.kw || '', alt: it.alt || '', idx: i, kind: it.kind });
     });
     return out;
@@ -2051,7 +2053,7 @@ export function mountDetal(root, opts) {
     const row = q('optRow'); if (!row) return;
     const items = optItems();
     optRowItems = items;
-    const pick = items.map((it, i) => ({ it, i })).filter((x) => x.it.kind === 'btn' || x.it.kind === 'num');
+    const pick = items.map((it, i) => ({ it, i })).filter((x) => (x.it.kind === 'btn' || x.it.kind === 'num') && !x.it.noKw);
     const kws = deriveKeywords(pick.map((x) => shortLab(x.it.label)));
     const taken = new Set(kws.map((k) => k.toLowerCase()));
     pick.forEach((x, n) => {
@@ -3525,6 +3527,7 @@ export function mountDetal(root, opts) {
     state.lastPt = { x: w.x, y: w.y };
     toolClick(sx, sy, w);
     state.snapOnce = null;   // bir martalik magnit ishlatildi
+    state.cmdFresh = false;
     clearAcq();
     refocusBox();
   });
@@ -3614,8 +3617,9 @@ export function mountDetal(root, opts) {
       if (arcMenu.classList.contains('show')) { e.preventDefault(); showArcMenu(false); return; }
       pendingNum = null;
       if (ctxMenu.classList.contains('show')) { e.preventDefault(); hideCtx(); return; }
-      if (state.picking) { e.preventDefault(); state.picking = false; state.sel.clear(); setTool('select'); setInfo('*Bekor qilindi*'); return; }
+      if (state.picking) { e.preventDefault(); state.picking = false; state.sel.clear(); setTool('select'); state.cmdFresh = false; setInfo('*Bekor qilindi*'); return; }
       if (state.measureShow) { state.measureShow = null; render(); }
+      state.cmdFresh = false;
       if (state.draft || state.box) { e.preventDefault(); cancelCurrent(); }
       else if (state.sel.size) { e.preventDefault(); state.sel.clear(); render(); renderTable(); }
       return;
@@ -4004,7 +4008,7 @@ export function mountDetal(root, opts) {
     const s = worldToScreen(p.x, p.y);
     state.cursor = { x: p.x, y: p.y }; state.cursorS = { sx: s.x, sy: s.y }; state.cursorIn = true;
     state.lastPt = { x: p.x, y: p.y };   // AutoCAD LASTPOINT — «@» shu nuqtadan hisoblanadi
-    state.snapOnce = null;
+    state.snapOnce = null; state.cmdFresh = false;
     toolClick(s.x, s.y, state.cursor);
     clearAcq(); render();
     return true;
@@ -4034,7 +4038,10 @@ export function mountDetal(root, opts) {
     // Aniq buyruq (qisqartma yoki to'liq nom) — buyruq BAJARILAYOTGAN bo'lmasa kalit so'zdan ustun:
     // AutoCAD'da «F» fillet tugagach yana FILLET ni ishga tushiradi, buyruq ichida esa [Faska] kaliti bo'ladi
     const exact = cmdAll().find((c) => cmdNorm2(c.nomi) === cmdNorm2(sx) || (c.al || []).some((a) => cmdNorm2(a) === cmdNorm2(sx)));
-    const busy = !!(state.draft || state.box || state.picking || pendingNum);
+    // «Buyruq bajarilmoqda»: boshlangan buyruq (qoralama, quti, tanlash, qiymat kutish) yoki endigina
+    // ishga tushgan asbob (AutoCAD: XLINE → darhol [Gorizontal/Vertikal/\u2026] so'raydi).
+    // Buyruq tugagach (nuqta qo'yilgach yoki Esc) — «Buyruq:» holati: harflar yana buyruqni ishga tushiradi
+    const busy = !!(state.draft || state.box || state.picking || pendingNum || state.cmdFresh);
     // 2) kalit so'z (buyruq ichida — AutoCAD [Radius/Polyline/Kesish])
     const opts = optKeys();
     if (opts.length && (busy || !exact)) {
@@ -4055,8 +4062,9 @@ export function mountDetal(root, opts) {
       }
     }
     if (exact && !busy) { runCmd(exact.id); return; }
-    // 3) dinamik quti ochiq bo'lsa: «50» yoki «50<45» — uzunlik va burchak
-    if (state.box && /^[-+.,0-9<]+$/.test(s)) {
+    // 3) dinamik quti ochiq bo'lsa: «50» yoki «50<45» — uzunlik va burchak.
+    // Vergul — koordinata ajratkichi, shuning uchun «50,50» bu yerga TUSHMAYDI (u nuqta)
+    if (state.box && /^[-+.0-9<]+$/.test(s)) {
       const lt = s.indexOf('<');
       if (lt > 0 && state.box.f2) { in1.value = s.slice(0, lt); in2.value = s.slice(lt + 1); cmdClose(); commitBox(); return; }
       if (lt < 0) { const b = state.box.f1 ? in1 : in2; b.value = s; cmdClose(); commitBox(); return; }
