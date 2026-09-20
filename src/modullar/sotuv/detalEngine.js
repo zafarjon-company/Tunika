@@ -1922,7 +1922,7 @@ export function mountDetal(root, opts) {
       btn("O'q, uch", () => { o.ellMode = 'axis'; cancelDraft(false); setInfo(toolHint('ellipse')); }, { on: o.ellMode === 'axis' });
     } else if (t === 'spline') {
       const on = !!(d && d.tool === 'spline');
-      tog('Yopiq', 'splClosed');
+      btn('Yopish', () => finishSpline(true), { disabled: !(on && d.pts.length >= 3) });   // AutoCAD Close: yopadi va tugatadi
       btn('Tugatish (Enter)', () => finishSpline(null), { primary: true, disabled: !(on && d.pts.length >= 2) });
       btn('Orqaga (Backspace)', () => splineBack(), { disabled: !on });
     } else if (t === 'xline') {
@@ -3927,6 +3927,7 @@ export function mountDetal(root, opts) {
   const cmdInput = q('cmd'), cmdList = q('cmdList');
   let cmdSel = 0;
   const cmdNorm = (s) => String(s || '').toLowerCase().replace(/[‘’ʻʼ`]/g, "'").trim();
+  const cmdNorm2 = (s) => cmdNorm(s).replace(/\s+/g, '');
   function cmdAll() {
     const base = CMDS.slice();
     for (const M of ARC_METHODS) base.push({ id: 'arc:' + M.key, nomi: 'Yoy — ' + M.nomi, al: [] });
@@ -4030,22 +4031,30 @@ export function mountDetal(root, opts) {
     // 1b) shaffof buyruq (AutoCAD: 'ZOOM) — joriy buyruqni bekor qilmaydi
     let sx = s;
     if (sx[0] === "'") sx = sx.slice(1).trim();
-    // 2) kalit so'z (faqat buyruq bajarilayotganda yoki asbob tanlangan bo'lsa)
+    // Aniq buyruq (qisqartma yoki to'liq nom) — buyruq BAJARILAYOTGAN bo'lmasa kalit so'zdan ustun:
+    // AutoCAD'da «F» fillet tugagach yana FILLET ni ishga tushiradi, buyruq ichida esa [Faska] kaliti bo'ladi
+    const exact = cmdAll().find((c) => cmdNorm2(c.nomi) === cmdNorm2(sx) || (c.al || []).some((a) => cmdNorm2(a) === cmdNorm2(sx)));
+    const busy = !!(state.draft || state.box || state.picking || pendingNum);
+    // 2) kalit so'z (buyruq ichida — AutoCAD [Radius/Polyline/Kesish])
     const opts = optKeys();
-    if (opts.length) {
+    if (opts.length && (busy || !exact)) {
       const ki = matchKeyword(sx, opts.map((o) => ({ label: o.short, kw: o.kw, alt: o.alt })));
       if (ki === -2) { setInfo("Noaniq kalit so'z «" + s + "» — to'liqroq yozing", 'err'); return; }
       if (ki >= 0) { cmdClose(); applyOptKeyword(opts[ki]); return; }
     }
-    // 2b) bir martalik magnit (AutoCAD: END, MID, CEN, PER… — faqat keyingi nuqta uchun)
-    if (wantsPoint() || state.draft) {
-      const mi = matchKeyword(sx, SNAP_MODES.map((m) => ({ label: m.nomi, kw: m.key })));
+    // 2b) bir martalik magnit (AutoCAD: END, MID, CEN, PER…) — FAQAT to'liq nom bilan, aks holda
+    // bir harfli buyruqlar (T — Matn, C — Aylana) magnit deb tushunilardi
+    if ((wantsPoint() || state.draft) && !exact) {
+      const sn = cmdNorm2(sx);
+      const mi = SNAP_MODES.findIndex((m) => cmdNorm2(m.key) === sn || cmdNorm2(m.nomi) === sn
+        || (sn === 'endp' && m.key === 'END') || (sn === 'perp' && m.key === 'PER') || (sn === 'near' && m.key === 'NEA'));
       if (mi >= 0) {
         state.snapOnce = SNAP_MODES[mi].key;
         cmdClose(); setInfo('<' + SNAP_MODES[mi].key + ' — ' + SNAP_MODES[mi].nomi + '> magniti: nuqtani bosing');
         render(); return;
       }
     }
+    if (exact && !busy) { runCmd(exact.id); return; }
     // 3) dinamik quti ochiq bo'lsa: «50» yoki «50<45» — uzunlik va burchak
     if (state.box && /^[-+.,0-9<]+$/.test(s)) {
       const lt = s.indexOf('<');
@@ -4066,7 +4075,13 @@ export function mountDetal(root, opts) {
       const p = pointFromDist(from, state.cursor, pr.mm);
       if (p) { cmdClose(); feedPoint(p); return; }
     }
-    // 5) buyruq
+    // 5) buyruq. Buyruq bajarilayotganda taxminiy moslik bilan boshqa buyruqqa sakrab o'tilmaydi (AutoCAD):
+    // faqat aniq buyruq yoki kalit so'z qabul qilinadi, aks holda so'rov qaytariladi
+    if (busy && !exact) {
+      cmdClose();
+      setInfo("Nuqta yoki kalit so'z kerak. Namunalar: 120,80 · @30,20 · @50<45 · 50" + (opts.length ? ' · ' + opts.map((o) => o.kw).join('/') : ''), 'err');
+      return;
+    }
     const list = cmdFilter(cmdAll(), sx, 9, state.cmdUse);
     if (list.length) { runCmd(list[cmdSel] && cmdList.classList.contains('show') ? list[Math.min(cmdSel, list.length - 1)].id : list[0].id); return; }
     cmdClose();
