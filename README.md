@@ -253,6 +253,21 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   qoladi — MIRRTEXT=0; DXF TEXT). **O'lchamlar**: Chiziqli (DLI — kursorga qarab
   gorizontal/vertikal), Parallel (DAL), Burchak (DAN — ikki chiziq, yoy yoki 3 nuqta;
   4 sektordan biri), Radius (DRA), Diametr (DDI).
+- **Buyruq satri (AutoCAD command line)** (`src/lib/cmdLine.js`, `npm run test:cmd`) — chizma ostida:
+  «Buyruq:» so'rovi, 3 qatorli tarix (F2 — butun tarix oynasi, matnni nusxalash mumkin),
+  AutoComplete ro'yxati (nom + qisqartma; Tab/Shift+Tab — takliflar orasida aylanish; tez-tez
+  ishlatilgan buyruq yuqorida), o'ng tugma — **oxirgi buyruqlar** (6 ta) va F2.
+  Kiritish AutoCAD'dagidek: buyruq nomi yoki qisqartmasi (L, C, REC, M, CO, TR, O…);
+  **kalit so'z** — so'rovda `[Radius/Polyline/Kesish]` ko'rinadi, o'zbekcha (R, P, K) yoki
+  AutoCAD inglizchasi (C — Close, U — Undo, T — Trim) yoziladi; raqamli variant `Radius <2 sm>:`
+  so'raydi, bo'sh Enter — standart qiymat; **koordinata**: `120,80` (mutlaq, Y tepaga),
+  `@30,20` (nisbiy), `@50<45` (qutbiy), `50` (to'g'ridan-to'g'ri masofa), `@` — oxirgi nuqta;
+  **arifmetika**: `50*2`, `(30+20)/2`; **bir martalik magnit**: END, MID, CEN, PER… ;
+  bo'sh **Enter yoki Probel** — oxirgi buyruqni takrorlaydi, strelka TEPA — avval yozilganlar,
+  Esc — ro'yxat → matn → buyruq (uch bosqich), `'` — shaffof buyruq (`'Z`).
+  Chizma ustida harf, raqam yoki `@ , < .` bosilsa matn shu satrga tushadi; chizmaga bosilganda
+  yozilgan matn saqlanadi; Ctrl+Z / Ctrl+Y / Ctrl+A / Ctrl+E va Delete satrda ham ishlaydi;
+  rejim o'zgarishi `<Orto yoqildi>` ko'rinishida tarixga yoziladi.
 - **Silliqlash (PEDIT, PE)** — siniq chiziqni bosing: uchlari fit nuqta bo'lib silliq
   splaynga aylanadi; splaynni bosing — qaytadan siniq chiziq (AutoCAD PEDIT Spline /
   Decurve). Ellips/splayndan Offset, Kesish, Uzish bilan hosil bo'lgan bo'laklar ham

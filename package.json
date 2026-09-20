@@ -17,7 +17,8 @@
     "test:modify": "node src/lib/modifyGeom.test.mjs",
     "test:edit": "node src/lib/editGeom.test.mjs",
     "test:curve": "node src/lib/curveGeom.test.mjs",
-    "test:hatch": "node src/lib/hatchGeom.test.mjs"
+    "test:hatch": "node src/lib/hatchGeom.test.mjs",
+    "test:cmd": "node src/lib/cmdLine.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",
