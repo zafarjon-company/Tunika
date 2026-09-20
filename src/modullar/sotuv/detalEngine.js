@@ -601,7 +601,16 @@ export function mountDetal(root, opts) {
     // Bo'sh holat (buyruq kutilmoqda) — AutoCAD «Command:»
     const idle = !state.draft && !state.picking && !state.box && state.tool === 'select';
     if (idle) { el.textContent = 'Buyruq:'; return; }
-    el.textContent = promptWithOptions(curPrompt || 'Buyruq:', optKeys().map((o) => ({ label: o.short, kw: o.kw, alt: o.alt })));
+    const opts = optKeys();
+    if (!opts.length) { el.textContent = curPrompt || 'Buyruq:'; return; }
+    // Kalit so'zlar bosiladigan havola (AutoCAD 2014+): bosilsa o'sha variant tanlanadi
+    const parts = opts.map((o, i) => {
+      const extra = [];
+      if (o.kw && !o.short.toLowerCase().replace(/\s+/g, '').startsWith(o.kw.toLowerCase())) extra.push(o.kw);
+      if (o.alt && o.alt.toLowerCase() !== (o.kw || '').toLowerCase()) extra.push(o.alt);
+      return '<b class="chz-kwl" data-k="' + i + '" title="Bosing yoki buyruq satriga yozing">' + escHtml(o.short) + (extra.length ? ' (' + escHtml(extra.join('/')) + ')' : '') + '</b>';
+    });
+    el.innerHTML = escHtml(curPrompt || 'Buyruq:') + ' yoki [' + parts.join('/') + ']';
   }
   function setInfo(msg, kind) {
     curPrompt = msg || '';
@@ -3957,7 +3966,14 @@ export function mountDetal(root, opts) {
     const list = cmdMatches(cmdInput.value);
     if (!list.length) { cmdList.classList.remove('show'); cmdList.innerHTML = ''; return; }
     cmdSel = Math.max(0, Math.min(cmdSel, list.length - 1));
-    cmdList.innerHTML = list.map((c, i) => '<div class="chz-cmditem' + (i === cmdSel ? ' on' : '') + '" data-cmd="' + c.id + '"><span>' + escHtml(c.nomi) + '</span><b>' + escHtml(c.al.join(', ')) + '</b></div>').join('');
+    // Yozilgan harflar qalin ajratiladi (AutoCAD AutoComplete)
+    const qs = cmdNorm(cmdInput.value);
+    const mark = (txt) => {
+      const i = qs ? cmdNorm(txt).indexOf(qs) : -1;
+      if (i < 0) return escHtml(txt);
+      return escHtml(txt.slice(0, i)) + '<u>' + escHtml(txt.slice(i, i + qs.length)) + '</u>' + escHtml(txt.slice(i + qs.length));
+    };
+    cmdList.innerHTML = list.map((c, i) => '<div class="chz-cmditem' + (i === cmdSel ? ' on' : '') + '" data-cmd="' + c.id + '"><span>' + mark(c.nomi) + '</span><b>' + c.al.map(mark).join(', ') + '</b></div>').join('');
     cmdList.classList.add('show');
   }
   function cmdOpen(ch) { cmdInput.value = ch || ''; cmdSel = 0; inputPos = -1; tabBase = null; cmdInput.focus(); renderCmdList(); }
@@ -4140,6 +4156,10 @@ export function mountDetal(root, opts) {
       if (q('textWin').classList.contains('show')) { toggleTextWin(false); return; }
       pendingNum = null; cmdInput.blur(); cancelCurrent(); setInfo('*Bekor qilindi*');
     }
+  });
+  on(q('info'), 'click', (e) => {   // so'rovdagi kalit so'zni bosish
+    const b = e.target.closest('[data-k]'); if (!b) return;
+    const o = optKeys()[+b.dataset.k]; if (o) applyOptKeyword(o);
   });
   on(q('btnTextWin'), 'click', () => toggleTextWin());
   on(q('twClose'), 'click', () => toggleTextWin(false));

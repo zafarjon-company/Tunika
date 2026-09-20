@@ -1582,3 +1582,10 @@ html.themed .dtl-projinfo button { background: var(--c-surface); border-color: v
 .acad-board .chz-tw-body { color: #c9d4e2; }
 .acad-board .chz-tw-body .ln-cmd { color: #7ee2d0; }
 .acad-board .chz-tw-body .ln-err { color: #ff8a80; }
+
+.chz-kwl { color: #2563eb; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.chz-kwl:hover { color: #1d4ed8; background: rgba(37, 99, 235, .1); border-radius: 3px; }
+.acad-board .chz-kwl { color: #7fb2ff; }
+.acad-board .chz-kwl:hover { color: #a9ccff; background: rgba(91, 155, 255, .18); }
+.chz-cmditem u { text-decoration: none; font-weight: 800; color: #2563eb; }
+.acad-board .chz-cmditem u, html.themed .chz-cmditem u { color: #7fb2ff; }
