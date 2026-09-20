@@ -181,6 +181,8 @@ const PICK_FIRST = ['move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'align
 const ACAD_BOARD = { bg: '#212830', devor: '#ffffff', accent: '#5b9bff', edit: '#e8edf3', text: '#d5dde7', labelBg: 'rgba(33,40,48,.84)', ref: '#6b7686', kazirok: '#cfd8e3', offset: '#ff66e8', accentSoft: '#1b2230', qozon: '#5b9bff', cross: '#ffffff', snap: '#f2c200' };
 const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const CIRCLE_MODES = { cr: 'Markaz, radius', dia: 'Markaz, diametr', '2p': '2 nuqta', '3p': '3 nuqta' };
+// Matn normallashtirish (kichik harf + o'zbek apostroflari) — buyruq va kalit so'z solishtirishlari uchun
+function cmdNormPlain(s) { return String(s == null ? '' : s).toLowerCase().replace(/[‘’ʻʼ`]/g, "'").trim(); }
 // O'lcham turlari (AutoCAD DIMALIGNED / DIMLINEAR / DIMANGULAR / DIMRADIUS / DIMDIAMETER)
 const DIM_KINDS = { lin: 'Chiziqli', al: 'Parallel', ang: 'Burchak', rad: 'Radius', dia: 'Diametr' };
 const TEXT_FONT = 'Arial, Helvetica, sans-serif';
@@ -530,6 +532,7 @@ export function mountDetal(root, opts) {
   const in1 = q('f1'), in2 = q('f2');
   const selBoxEl = q('selBox');
   const textEd = q('textEd');
+  let fromCmd = false;   // hozirgi amal buyruq satridan kelmoqda — dinamik quti fokusni o'g'irlamasin
   let _loops = null;   // yopiq halqalar keshi (Shtrix / Kontur) — har o'zgarishda tozalanadi
   const HP = 'hp' + Math.random().toString(36).slice(2, 7);   // shtrix naqshlari id prefiksi
   // Matn kengligi (mm): brauzer shrifti bo'yicha o'lchanadi (bo'lmasa — taxmin)
@@ -585,7 +588,7 @@ export function mountDetal(root, opts) {
   function renderCmdLog() {
     const h = q('cmdHist');
     if (h) {
-      h.innerHTML = cmdLog.slice(-3).map((m) => '<div class="' + (m.k === 'cmd' ? 'ln-cmd' : m.k === 'err' ? 'ln-err' : '') + '">' + escHtml(m.s) + '</div>').join('');
+      h.innerHTML = cmdLog.slice(-4, -1).map((m) => '<div class="' + (m.k === 'cmd' ? 'ln-cmd' : m.k === 'err' ? 'ln-err' : '') + '">' + escHtml(m.s) + '</div>').join('');
       h.scrollTop = h.scrollHeight;
     }
     const b = q('twBody');
@@ -1030,6 +1033,7 @@ export function mountDetal(root, opts) {
     if (!state.snapSet.dyn) { inputBox.classList.remove('show'); return; }   // DYN o'chiq — faqat sichqoncha bilan (maydonlar tozalangan)
     inputBox.classList.add('show');
     positionBox();
+    if (fromCmd) return;   // buyruq satridan kiritilgan nuqta — fokus o'sha yerda qoladi (AutoCAD)
     const first = cfg.f1 ? in1 : in2;
     first.focus(); first.select();
   }
@@ -1062,7 +1066,7 @@ export function mountDetal(root, opts) {
   function clearBoxFields() { in1.value = ''; in2.value = ''; refocusBox(true); }
   function commitBox() { const b = state.box; if (!b) return; const [v1, v2] = boxVals(); b.onCommit(v1, v2); clearAcq(); }
   function refocusBox(force) {
-    if (!state.box) return;
+    if (!state.box || fromCmd) return;
     const first = state.box.f1 ? in1 : in2;
     if (force || (document.activeElement !== in1 && document.activeElement !== in2)) first.focus();
   }
@@ -1127,6 +1131,7 @@ export function mountDetal(root, opts) {
       return;
     }
     state.cmdFresh = true;   // buyruq boshlandi: birinchi kiritishgacha kalit so'zlar ustun
+    state.snapOnce = null; pendingNum = null;
     if (PICK_FIRST.includes(t) && !state.sel.size) { state.picking = true; setInfo(toolLabel(t) + ": obyektlarni tanlang (bosing yoki ramka torting), so'ng Enter / Probel / o'ng tugma"); }
     else setInfo(toolHint(t));
     if (t === 'arc') arcAutoStart();
@@ -1142,7 +1147,8 @@ export function mountDetal(root, opts) {
   }
   function cancelCurrent() {
     if (state.draft || state.box || state.picking) logLine('*Bekor qilindi*');
-    state.snapOnce = null; state.cmdFresh = false;
+    state.snapOnce = null; state.cmdFresh = false; pendingNum = null;
+    if (state.picking) { state.picking = false; state.sel.clear(); setTool('select'); state.cmdFresh = false; setInfo('*Bekor qilindi*'); return; }
     if (state.draft && state.draft.tool === 'pline') { finishPline(false); return; }
     if (state.draft && state.draft.tool === 'spline') { finishSpline(null); return; }
     if (state.draft && state.draft.tool === 'text') { textCommit(false); return; }
@@ -2035,7 +2041,15 @@ export function mountDetal(root, opts) {
   function syncOptRow() {
     const row = q('optRow'); if (!row) return;
     optItems().forEach((it, i) => {
-      if (it.kind === 'btn') { const b = row.querySelector('button[data-opt="' + i + '"]'); if (b) { b.disabled = !!it.disabled; b.classList.toggle('on', !!it.on); if (b.textContent !== it.label) b.textContent = it.label; } }
+      if (it.kind === 'btn') {
+        const b = row.querySelector('button[data-opt="' + i + '"]');
+        if (b) {
+          b.disabled = !!it.disabled; b.classList.toggle('on', !!it.on);
+          const tx = b.lastChild;   // kalit so'z belgisi (<b class="chz-optkw">) saqlanadi
+          if (tx && tx.nodeType === 3) { if (tx.nodeValue !== it.label) tx.nodeValue = it.label; }
+          else if (b.textContent !== it.label) b.textContent = it.label;
+        }
+      }
       else if (it.kind === 'txt') { const s = row.querySelector('.chz-opttxt'); if (s && s.textContent !== it.text) s.textContent = it.text; }
     });
   }
@@ -2047,6 +2061,9 @@ export function mountDetal(root, opts) {
     gorizontal: 'H', vertikal: 'V', 'nuqta orqali': 'B', yaxlit: 'S', nuqtalar: 'P', obyekt: 'O', yopiq: 'CL',
     'aslini o‘chirish': 'E', 'hammasini tanlash': 'ALL', 'bo‘shatish': 'X', tugatish: 'E', markaz: 'C',
   };
+  // Kalitlar jadvali normallashtirilgan holda (apostrof va bo'shliqlar farqi yo'qoladi)
+  const normKw = (t) => cmdNormPlain(t).replace(/\s+/g, '');
+  const ACAD_ALT_N = Object.fromEntries(Object.entries(ACAD_ALT).map(([k, v]) => [normKw(k), v]));
   // Yoziladigan kalit so'zlar uchun qisqa yorliq: «Polyline (butun kontur): Ha» → «Polyline»
   const shortLab = (s) => String(s == null ? '' : s).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/[:：].*$/, '').replace(/[.…]+$/, '').trim();
   // Joriy asbobning buyruq satridan yoziladigan variantlari (AutoCAD kalit so'zlari)
@@ -2062,12 +2079,13 @@ export function mountDetal(root, opts) {
     const row = q('optRow'); if (!row) return;
     const items = optItems();
     optRowItems = items;
+    if (pendingNum && (!optRowItems[pendingNum.idx] || optRowItems[pendingNum.idx].label !== pendingNum.full)) pendingNum = null;   // asbob/qator almashdi — qiymat kutish bekor
     const pick = items.map((it, i) => ({ it, i })).filter((x) => (x.it.kind === 'btn' || x.it.kind === 'num') && !x.it.noKw);
     const kws = deriveKeywords(pick.map((x) => shortLab(x.it.label)));
     const taken = new Set(kws.map((k) => k.toLowerCase()));
     pick.forEach((x, n) => {
       x.it.short = shortLab(x.it.label); x.it.kw = kws[n];
-      const alt = ACAD_ALT[x.it.short.toLowerCase().replace(/[‘’ʻʼ`]/g, "'")];
+      const alt = ACAD_ALT_N[normKw(x.it.short)];
       x.it.alt = alt && !taken.has(alt.toLowerCase()) ? alt : '';
       if (x.it.alt) taken.add(alt.toLowerCase());
     });
@@ -3617,7 +3635,6 @@ export function mountDetal(root, opts) {
 
   // Klaviatura
   on(window, 'keydown', (e) => {
-    if (e.key === 'F2') { e.preventDefault(); toggleTextWin(); return; }   // AutoCAD: buyruqlar oynasi
     if (statusBar.handleKey(e)) { e.preventDefault(); onSnapChange(e.key); return; }
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
@@ -3639,6 +3656,7 @@ export function mountDetal(root, opts) {
     const outsideControl = !!(ae && ae !== document.body && !root.contains(ae));
     const active = !outsideControl && (state.pointerIn || root.contains(ae) || !!root.closest('.chz-full-wrap'));
     if (!active) return;
+    if (e.key === 'F2') { e.preventDefault(); toggleTextWin(); return; }   // AutoCAD: buyruqlar oynasi (faqat chizma faol bo'lganda)
     if (e.key === 'Tab' && e.shiftKey) return;
     if (e.key === 'Enter' || e.key === 'Tab' || e.key === ' ') {   // AutoCAD: Enter / Probel — buyruqni tugatish; bo'sh joyda → Tanlash, yana → oxirgi asbob
       e.preventDefault(); pressEnter(); return;
@@ -3651,6 +3669,7 @@ export function mountDetal(root, opts) {
     }
     // Harf bosilsa — buyruq qidirish maydoniga tushadi (AutoCAD buyruq satri kabi)
     // Harf, raqam yoki koordinata belgisi bosilsa — buyruq satriga tushadi (AutoCAD buyruq satri kabi)
+    if (q('textWin').classList.contains('show')) return;   // buyruqlar oynasi ochiq — ko'rinmas satrga yozilmasin
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && /[a-zA-Z0-9'@<,.\-]/.test(e.key)) { e.preventDefault(); cmdOpen(e.key); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel.size && !state.draft) { e.preventDefault(); eraseSelected(); return; }
     const k = e.key.toLowerCase();
@@ -3939,29 +3958,15 @@ export function mountDetal(root, opts) {
      bosilsa o'zi ochiladi. */
   const cmdInput = q('cmd'), cmdList = q('cmdList');
   let cmdSel = 0;
-  const cmdNorm = (s) => String(s || '').toLowerCase().replace(/[‘’ʻʼ`]/g, "'").trim();
+  const cmdNorm = (s) => cmdNormPlain(s);
   const cmdNorm2 = (s) => cmdNorm(s).replace(/\s+/g, '');
   function cmdAll() {
     const base = CMDS.slice();
     for (const M of ARC_METHODS) base.push({ id: 'arc:' + M.key, nomi: 'Yoy — ' + M.nomi, al: [] });
     return base;
   }
-  function cmdMatchesNew(qs) { return cmdFilter(cmdAll(), qs, 9, state.cmdUse); }
-  function cmdMatches(qs) {
-    const s = cmdNorm(qs); if (!s) return [];
-    const toks = s.split(/\s+/).filter(Boolean);   // bir nechta so'z — hammasi nom yoki qisqartmada uchrasin («yoy 3», «boshi markaz»)
-    const score = (c) => {
-      const nm = cmdNorm(c.nomi), als = c.al.map(cmdNorm), hay = nm + ' ' + als.join(' ');
-      if (als.includes(s)) return 0;
-      if (als.some((a) => a.startsWith(s))) return 1;
-      if (nm.startsWith(s)) return 2;
-      if (nm.includes(s)) return 3;
-      if (als.some((a) => a.includes(s))) return 4;
-      if (toks.length > 1 && toks.every((t) => hay.includes(t))) return 5;
-      return -1;
-    };
-    return cmdMatchesNew(qs);
-  }
+  // Takliflar: nom / qisqartma bo'yicha (src/lib/cmdLine.js), ko'p ishlatilgani yuqorida
+  function cmdMatches(qs) { return cmdNorm(qs) ? cmdFilter(cmdAll(), qs, 9, state.cmdUse) : []; }
   function renderCmdList() {
     const list = cmdMatches(cmdInput.value);
     if (!list.length) { cmdList.classList.remove('show'); cmdList.innerHTML = ''; return; }
@@ -4015,7 +4020,7 @@ export function mountDetal(root, opts) {
   function applyOptKeyword(o) {
     const it = optRowItems[o.idx]; if (!it) return;
     if (it.kind === 'btn') { if (it.act) it.act(); renderOptRow(); saveLS(); render(); return; }
-    pendingNum = { idx: o.idx, label: o.short, unit: it.unit || '' };
+    pendingNum = { idx: o.idx, label: o.short, full: it.label, unit: it.unit || '' };
     setInfo(o.short + ' <' + fmtNum(it.val, 2) + (it.unit ? ' ' + it.unit : '') + '>:');   // AutoCAD: standart qiymat burchakli qavsda
   }
   // Kiritilgan nuqtani bosish kabi uzatish
@@ -4025,8 +4030,10 @@ export function mountDetal(root, opts) {
     state.cursor = { x: p.x, y: p.y }; state.cursorS = { sx: s.x, sy: s.y }; state.cursorIn = true;
     state.lastPt = { x: p.x, y: p.y };   // AutoCAD LASTPOINT — «@» shu nuqtadan hisoblanadi
     state.snapOnce = null; state.cmdFresh = false;
-    toolClick(s.x, s.y, state.cursor);
+    fromCmd = true;
+    try { toolClick(s.x, s.y, state.cursor); } finally { fromCmd = false; }
     clearAcq(); render();
+    cmdInput.focus();   // keyingi koordinatani ham yozish mumkin bo'lsin
     return true;
   }
   function cmdSubmit(raw) {
@@ -4034,7 +4041,7 @@ export function mountDetal(root, opts) {
     if (s) logLine(s, 'cmd');   // AutoCAD: yozilgani tarixda aks etadi
     if (pendingNum) {   // raqamli variant qiymati (bo'sh Enter — standart qiymat qoladi, AutoCAD <…>)
       const it = optRowItems[pendingNum.idx], v = s ? (evalExpr(s) != null ? evalExpr(s) : cmdNum(s)) : null;
-      const nm = pendingNum.label; pendingNum = null;
+      const nm = pendingNum.label; pendingNum = null; cmdClose();
       if (!s) { setInfo(nm + ' = ' + fmtNum(it ? it.val : 0, 2) + (it && it.unit ? ' ' + it.unit : '') + ' (o‘zgarmadi). ' + toolHint(state.tool)); return; }
       if (v == null || !it || !it.set) { setInfo(nm + ': son kiritilmadi. ' + toolHint(state.tool), 'err'); return; }
       it.set(v); it.val = v; saveLS(); renderOptRow(); render();
@@ -4060,7 +4067,9 @@ export function mountDetal(root, opts) {
     const busy = !!(state.draft || state.box || state.picking || pendingNum || state.cmdFresh);
     // 2) kalit so'z (buyruq ichida — AutoCAD [Radius/Polyline/Kesish])
     const opts = optKeys();
-    if (opts.length && (busy || !exact)) {
+    // Raqam / koordinata / «@» bilan boshlanadigan kiritish hech qachon kalit so'z emas (AutoCAD)
+    const numLike = /^[-+.,0-9@]/.test(sx);
+    if (opts.length && !numLike && (busy || !exact)) {
       const ki = matchKeyword(sx, opts.map((o) => ({ label: o.short, kw: o.kw, alt: o.alt })));
       if (ki === -2) { setInfo("Noaniq kalit so'z «" + s + "» — to'liqroq yozing", 'err'); return; }
       if (ki >= 0) { cmdClose(); applyOptKeyword(opts[ki]); return; }
@@ -4086,22 +4095,26 @@ export function mountDetal(root, opts) {
       if (lt < 0) { const b = state.box.f1 ? in1 : in2; b.value = s; cmdClose(); commitBox(); return; }
     }
     // 4) koordinata / masofa («@» — tayanch nuqta bo'lmasa oxirgi qo'yilgan nuqtadan, AutoCAD LASTPOINT)
-    const from = anchorPoint() || state.lastPt || null;
+    const anch = anchorPoint();
+    const from = anch || state.lastPt || null;   // «@» uchun oxirgi nuqta ham yaraydi (AutoCAD LASTPOINT)
     const ex = evalExpr(sx);   // arifmetik ifoda: «50*2» → 100
     const pr = parseInput(ex != null ? String(ex) : sx, { unit: U(), from });
     if (pr.kind === 'point' && (wantsPoint() || state.draft)) { cmdClose(); feedPoint(pr); return; }
+    // To'g'ridan-to'g'ri masofa — FAQAT joriy buyruqning tayanch nuqtasidan (eski nuqtadan emas)
     if (pr.kind === 'dist' && wantsPoint()) {
-      const p = pointFromDist(from, state.cursor, pr.mm);
-      if (!p) { setInfo("Masofa uchun avval nuqta belgilang, so'ng kursorni yo'naltiring", 'err'); return; }
+      const p = pointFromDist(anch, state.cursor, pr.mm);
+      if (!p) { setInfo("Masofa uchun avval shu buyruqda nuqta belgilang, so'ng kursorni yo'naltiring", 'err'); return; }
       cmdClose(); feedPoint(p); return;
     }
-    if (pr.kind === 'number' && wantsPoint() && from) {
-      const p = pointFromDist(from, state.cursor, pr.mm);
+    if (pr.kind === 'number' && wantsPoint() && anch) {
+      const p = pointFromDist(anch, state.cursor, pr.mm);
       if (p) { cmdClose(); feedPoint(p); return; }
     }
     // 5) buyruq. Buyruq bajarilayotganda taxminiy moslik bilan boshqa buyruqqa sakrab o'tilmaydi (AutoCAD):
     // faqat aniq buyruq yoki kalit so'z qabul qilinadi, aks holda so'rov qaytariladi
-    if (busy && !exact) {
+    const listNow = cmdFilter(cmdAll(), sx, 9, state.cmdUse);
+    const fromList = cmdList.classList.contains('show') && listNow.length;   // ro'yxatdan ko'rib tanlandi
+    if (busy && !exact && !fromList) {
       cmdClose();
       setInfo("Nuqta yoki kalit so'z kerak. Namunalar: 120,80 · @30,20 · @50<45 · 50" + (opts.length ? ' · ' + opts.map((o) => o.kw).join('/') : ''), 'err');
       return;
@@ -4112,23 +4125,26 @@ export function mountDetal(root, opts) {
     setInfo("«" + s + "» — bunday buyruq yo'q" + (pr.kind === 'invalid' ? ' (' + pr.reason + ')' : ''), 'err');
   }
   let tabBase = null, tabIdx = -1;
-  on(cmdInput, 'input', () => { cmdSel = 0; tabBase = null; tabIdx = -1; renderCmdList(); });
+  on(cmdInput, 'input', () => { cmdSel = 0; tabBase = null; tabIdx = -1; inputPos = -1; renderCmdList(); });
   on(cmdInput, 'focus', renderCmdList);
   on(cmdInput, 'keydown', (e) => {
     const list = cmdMatches(cmdInput.value);
     const listOpen = cmdList.classList.contains('show') && list.length > 0;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      if (listOpen && cmdInput.value.trim()) { cmdSel = e.key === 'ArrowDown' ? Math.min(cmdSel + 1, list.length - 1) : Math.max(cmdSel - 1, 0); renderCmdList(); return; }
+      // Tarix rejimi boshlangan bo'lsa (inputPos >= 0) strelkalar tarix bo'ylab yuraveradi
+      if (inputPos < 0 && listOpen && cmdInput.value.trim()) { cmdSel = e.key === 'ArrowDown' ? Math.min(cmdSel + 1, list.length - 1) : Math.max(cmdSel - 1, 0); renderCmdList(); return; }
       if (!inputHist.length) return;   // avval yozilganlarni chaqirish (AutoCAD)
       if (inputPos < 0) inputPos = inputHist.length;
       inputPos = e.key === 'ArrowUp' ? Math.max(0, inputPos - 1) : Math.min(inputHist.length, inputPos + 1);
       cmdInput.value = inputPos >= inputHist.length ? '' : inputHist[inputPos];
-      cmdSel = 0; renderCmdList();
+      cmdSel = 0; cmdList.classList.remove('show');
       return;
     }
     // AutoCAD: Probel ham Enter kabi bajaradi (bo'sh bo'lsa — oxirgi buyruqni takrorlaydi)
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); const v = cmdInput.value; cmdInput.value = ''; cmdSubmit(v); return; }
+    if (e.key === 'F2') { e.preventDefault(); e.stopPropagation(); toggleTextWin(); return; }
+    // Probel — Enter kabi bajaradi (AutoCAD); Shift+Probel — oddiy bo'shliq (ko'p so'zli qidiruv uchun)
+    if (e.key === 'Enter' || (e.key === ' ' && !e.shiftKey)) { e.preventDefault(); e.stopPropagation(); const v = cmdInput.value; cmdInput.value = ''; cmdSubmit(v); return; }
     const K = e.key.toLowerCase();   // chizma qisqartmalari buyruq satri fokusda bo'lganda ham ishlaydi
     if ((e.ctrlKey || e.metaKey) && !cmdInput.value && ['z', 'y', 'a', 'e'].includes(K)) {
       e.preventDefault(); e.stopPropagation();

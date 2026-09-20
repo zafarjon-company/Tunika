@@ -46,7 +46,7 @@ function pointRes(x, y) {
   return { kind: 'point', x: rnd9(x), y: rnd9(y) };
 }
 // Mobil klaviatura va nusxa-ko'chirishdan keladigan belgilar: uzilmas probel, unicode minus, to'liq kenglikdagi belgilar
-function normSym(s) {
+export function normSym(s) {
   return String(s == null ? '' : s)
     .replace(/[    ]/g, ' ')
     .replace(/[−‒–—]/g, '-')
@@ -97,13 +97,14 @@ export function pointFromDist(from, cursor, mm) {
 /* ---------------- ARIFMETIK IFODA (AutoCAD 'CAL o'rnida: «50*2», «(30+20)/2») ----------------
    Faqat sonlar va + − * / ( ) — xavfsiz (eval ishlatilmaydi). Ifoda bo'lmasa null. */
 export function evalExpr(s) {
-  const t = String(s == null ? '' : s).replace(/\s+/g, '');
+  const t = normSym(s).replace(/\s+/g, '');
   if (!t || !/^[-+*/().\d]+$/.test(t) || !/[+*/]|\d-/.test(t)) return null;   // amal belgisi bo'lmasa — oddiy son
   const toks = t.match(/\d+(?:\.\d+)?|[-+*/()]/g);
   if (!toks || toks.join('') !== t) return null;
-  const out = [], ops = [], pr = { '+': 1, '-': 1, '*': 2, '/': 2 };
+  const out = [], ops = [], pr = { '+': 1, '-': 1, '*': 2, '/': 2, 'u-': 3 };
   let prev = null;
-  for (const tk of toks) {
+  for (const raw of toks) {
+    let tk = raw;
     if (/^\d/.test(tk)) { out.push(Number(tk)); prev = 'n'; continue; }
     if (tk === '(') { ops.push(tk); prev = '('; continue; }
     if (tk === ')') {
@@ -111,14 +112,19 @@ export function evalExpr(s) {
       if (!ops.length) return null;
       ops.pop(); prev = 'n'; continue;
     }
-    if ((tk === '-' || tk === '+') && (prev === null || prev === '(' || prev === 'o')) { out.push(0); }   // unar minus
-    while (ops.length && ops[ops.length - 1] !== '(' && pr[ops[ops.length - 1]] >= pr[tk]) out.push(ops.pop());
+    // Unar ishora (satr boshida, qavsdan yoki boshqa amaldan keyin): «-5+10», «3*-2»
+    if ((tk === '-' || tk === '+') && (prev === null || prev === '(' || prev === 'o')) {
+      if (tk === '+') { prev = 'o'; continue; }
+      tk = 'u-';
+    }
+    while (ops.length && ops[ops.length - 1] !== '(' && (pr[ops[ops.length - 1]] > pr[tk] || (pr[ops[ops.length - 1]] === pr[tk] && tk !== 'u-'))) out.push(ops.pop());
     ops.push(tk); prev = 'o';
   }
   while (ops.length) { const o = ops.pop(); if (o === '(') return null; out.push(o); }
   const st = [];
   for (const o of out) {
     if (typeof o === 'number') { st.push(o); continue; }
+    if (o === 'u-') { const a = st.pop(); if (a == null) return null; st.push(-a); continue; }
     const b = st.pop(), a = st.pop();
     if (a == null || b == null) return null;
     st.push(o === '+' ? a + b : o === '-' ? a - b : o === '*' ? a * b : b === 0 ? NaN : a / b);
@@ -143,7 +149,9 @@ export function deriveKeywords(labels) {
     for (let n = 2; n <= Math.min(3, w0.length); n++) cands.push(w0.slice(0, n));
     for (let i = 1; i < w0.length; i++) cands.push(w0[i]);
     for (let i = 1; i <= 9; i++) cands.push(w0[0] + i);
-    const kw = cands.find((c) => c && !used.has(c)) || String(out.length + 1);
+    // Kalit HARF bilan aralash bo'lsin: sof raqamli kalit («2 nuqta» → «2») sonli kiritish bilan
+    // chalkashadi (AutoCAD ham raqamni kalit so'z deb olmaydi) — «2 nuqta» → 2N
+    const kw = cands.find((c) => c && /[a-z]/.test(c) && !used.has(c)) || String(out.length + 1);
     used.add(kw);
     out.push(kw.toUpperCase());
   }
@@ -159,6 +167,7 @@ export function matchKeyword(input, options) {
   const kws = options.map((o) => cmdNorm(o.kw || ''));
   const pre = options.map((o, j) => ({ ks: keysOf(o), j })).filter((x) => x.ks.some((k) => k.startsWith(s)));
   if (pre.length === 1) return pre[0].j;
+  if (pre.length > 1) return -2;   // kalit prefiksi noaniq — yorliq bosqichiga o'tilmaydi
   const labs = options.map((o) => cmdNorm(o.label || '').replace(/\s+/g, ''));
   const lp = labs.map((k, j) => ({ k, j })).filter((x) => x.k && x.k.startsWith(s));
   if (lp.length === 1) return lp[0].j;

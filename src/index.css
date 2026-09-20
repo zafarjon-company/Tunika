@@ -1442,6 +1442,7 @@ html.themed .chz-arcsep { background: var(--c-line); }
   .chz-cmdprompt { flex: 1 0 100%; white-space: normal; }
   .dtl .chz-cmdline .chz-cmd { flex: 1 1 auto; max-width: none; }
   /* takliflar ro'yxati tor ekranda maydon kengligida, chapdan chiqib ketmaydi */
+  .chz-cmdline .chz-cmdwrap { flex: 1 1 auto; }
   .chz-cmdline .chz-cmdlist { left: 0; right: auto; min-width: 0; width: 100%; }
 }
 .chz-cmdline .chz-cmdlist { top: auto; bottom: calc(100% + 4px); right: 0; }
@@ -1570,10 +1571,15 @@ html.themed .dtl-projinfo button { background: var(--c-surface); border-color: v
 .chz-cmdf2 { flex: none; padding: 2px 7px; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #475569; font-size: 10.5px; font-weight: 800; cursor: pointer; }
 .chz-cmdf2:hover { background: #f1f5f9; }
 .acad-board .chz-cmdf2 { background: #161b22; color: #cfd8e3; border-color: #3a4452; }
-.chz-optkw { display: inline-block; min-width: 13px; margin-right: 5px; padding: 0 3px; border-radius: 3px; background: rgba(100, 116, 139, .16); color: #475569; font-size: 9.5px; font-weight: 800; vertical-align: 1px; }
+html.themed .chz-cmdf2 { background: var(--c-surface); color: var(--c-t2); border-color: var(--c-line); }
+html.themed .chz-textwin { background: var(--c-surface); }
+html.themed .chz-tw-head { color: var(--c-t1); border-bottom-color: var(--c-line); }
+html.themed .chz-tw-head button { background: var(--c-surface); color: var(--c-t2); border-color: var(--c-line); }
+html.themed .chz-tw-body { color: var(--c-t2); }
+.chz-optkw { display: inline-block; min-width: 13px; margin-right: 5px; padding: 0 3px; border-radius: 3px; background: rgba(51, 65, 85, .16); color: #1e293b; font-size: 9.5px; font-weight: 800; vertical-align: 1px; }
 .chz-opt.on .chz-optkw, .chz-opt.primary .chz-optkw { background: rgba(255, 255, 255, .28); color: inherit; }
-.acad-board .chz-optkw { background: rgba(91, 155, 255, .22); color: #b9d3ff; }
-.chz-textwin { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 9; display: none; flex-direction: column; background: rgba(248, 250, 252, .97); }
+html.themed .chz-optkw { background: color-mix(in srgb, var(--c-t3) 24%, transparent); color: var(--c-t1); }
+.chz-textwin { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 12; user-select: text; -webkit-user-select: text; display: none; flex-direction: column; background: rgba(248, 250, 252, .97); }
 .chz-textwin.show { display: flex; }
 .acad-board .chz-textwin { background: rgba(22, 27, 34, .97); }
 .chz-tw-head { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12px; color: #334155; }
@@ -1582,7 +1588,7 @@ html.themed .dtl-projinfo button { background: var(--c-surface); border-color: v
 .chz-tw-head button { border: 1px solid #cbd5e1; background: #fff; border-radius: 5px; width: 24px; height: 24px; cursor: pointer; color: #475569; }
 .acad-board .chz-tw-head { color: #d5dde7; border-bottom-color: #333c48; }
 .acad-board .chz-tw-head button { background: #161b22; color: #cfd8e3; border-color: #3a4452; }
-.chz-tw-body { flex: 1; overflow: auto; padding: 8px 10px; font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 11.5px; line-height: 1.5; color: #334155; white-space: pre-wrap; }
+.chz-tw-body { flex: 1; overflow: auto; user-select: text; -webkit-user-select: text; padding: 8px 10px; font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 11.5px; line-height: 1.5; color: #334155; white-space: pre-wrap; }
 .chz-tw-body .ln-cmd { color: #0f766e; font-weight: 700; }
 .chz-tw-body .ln-err { color: #dc2626; }
 .acad-board .chz-tw-body { color: #c9d4e2; }

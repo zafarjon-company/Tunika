@@ -4,7 +4,7 @@
 //  Konvensiya: world mm, x o'ngga, y PASTGA; kiritishda Y TEPAGA (AutoCAD).
 // ============================================================
 import assert from 'node:assert/strict';
-import { num1, parseInput, pointFromDist, deriveKeywords, matchKeyword, promptWithOptions, cmdScore, cmdFilter, cmdNorm, evalExpr } from './cmdLine.js';
+import { num1, parseInput, pointFromDist, deriveKeywords, matchKeyword, promptWithOptions, cmdScore, cmdFilter, cmdNorm, evalExpr, normSym } from './cmdLine.js';
 
 let jami = 0, xato = 0;
 function test(nom, fn) {
@@ -88,8 +88,11 @@ test('pointFromDist: kursor yo\'nalishida; noto\'g\'ri kirishda null', () => {
 console.log('\n— Kalit so\'zlar —');
 test('deriveKeywords: birinchi harf; to\'qnashsa ikkinchi so\'z harfi, keyin 2-3 harf', () => {
   assert.deepEqual(deriveKeywords(['Radius', 'Polyline (butun kontur)', 'Kesish (Trim)', 'Faska']), ['R', 'P', 'K', 'F']);
-  assert.deepEqual(deriveKeywords(['Markaz, radius', 'Markaz, diametr', '2 nuqta', '3 nuqta']), ['M', 'MD', '2', '3']);
+  assert.deepEqual(deriveKeywords(['Markaz, radius', 'Markaz, diametr', '2 nuqta', '3 nuqta']), ['M', 'MD', '2N', '3N']);
   assert.deepEqual(deriveKeywords(['Delta', 'Foiz', 'Umumiy']), ['D', 'F', 'U']);
+});
+test('deriveKeywords: sof raqamli kalit bo\'lmaydi — «2» radius qiymati bilan chalkashmasin', () => {
+  for (const k of deriveKeywords(['2 nuqta', '3 nuqta', '10 marta', 'Radius'])) assert.ok(/[A-Z]/.test(k), 'kalit: ' + k);
 });
 test('deriveKeywords: hamma kalit takrorlanmas (tasodifiy yorliqlarda ham)', () => {
   const labs = ['Aylana', 'Aylana 2', 'Aylana 3', 'Aylana 4', 'Aylana 5'];
@@ -108,6 +111,10 @@ test('matchKeyword: aniq kalit, noaniq (-2), mos emas (-1), yorliq boshlanishi',
   const amb = [{ label: 'Markaz, radius', kw: 'M' }, { label: 'Markaz, diametr', kw: 'MD' }];
   assert.equal(matchKeyword('m', amb), 0);       // aniq kalit — noaniqlik emas
   assert.equal(matchKeyword('markaz', amb), -2); // ikkala yorliq ham shunday boshlanadi
+  const amb2 = [{ label: 'Masofa 1', kw: 'M' }, { label: 'Masofa 2', kw: 'M2' }];
+  assert.equal(matchKeyword('m', amb2), 0);      // aniq kalit
+  const amb3 = [{ label: 'Birinchi', kw: 'BI' }, { label: 'Boshqa', kw: 'BO' }];
+  assert.equal(matchKeyword('b', amb3), -2);     // kalit prefiksi noaniq — yorliqqa o'tilmaydi
 });
 test('matchKeyword: AutoCAD inglizcha kaliti (alt) ham qabul qilinadi', () => {
   const o = [{ label: 'Yopish', kw: 'Y', alt: 'C' }, { label: 'Orqaga', kw: 'O', alt: 'U' }, { label: 'Yoy', kw: 'YO', alt: 'A' }];
@@ -132,6 +139,9 @@ console.log('\n— Arifmetik ifoda —');
 test('evalExpr: «50*2», «(30+20)/2», «100-15» — hisoblanadi; oddiy son yoki matn — null', () => {
   near(evalExpr('50*2'), 100); near(evalExpr('(30+20)/2'), 25); near(evalExpr('100-15'), 85);
   near(evalExpr('2*3+4'), 10); near(evalExpr('2+3*4'), 14); near(evalExpr('-5+10'), 5);
+  near(evalExpr('3*-2'), -6); near(evalExpr('10--5'), 15); near(evalExpr('2*(-3+5)'), 4); near(evalExpr('-2*-3'), 6);
+  near(evalExpr('100 - 15'), 85);   // uzilmas probel
+  near(evalExpr('50−10'), 40);           // unicode minus
   assert.equal(evalExpr('50'), null);      // amal yo'q — oddiy son
   assert.equal(evalExpr('10,20'), null);   // koordinata
   assert.equal(evalExpr('abc'), null);
@@ -167,6 +177,12 @@ test('cmdFilter: «c» → Aylana birinchi; «tr» → Kesish; bo\'sh so\'rov �
   assert.equal(r2[0].id, 'circle');   // aniq qisqartma «c» — baribir birinchi
   const r3 = cmdFilter([CM[2], CM[3]], 'c', 9, { chamfer: 5 });
   assert.equal(r3[0].id, 'chamfer');
+});
+test('normSym: unicode minus, uzilmas probel, to\'liq kenglikdagi belgilar oddiysiga aylanadi', () => {
+  assert.equal(normSym('50−10'), '50-10');
+  assert.equal(normSym('10 , 20'), '10 , 20');
+  assert.equal(normSym('＠10，20'), '@10,20');
+  assert.equal(normSym('50＜45'), '50<45');
 });
 test('cmdNorm: katta-kichik harf va o\'zbek apostroflari bir xil', () => {
   assert.equal(cmdNorm('Ko‘chirish'), cmdNorm("ko'chirish"));
