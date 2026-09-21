@@ -253,6 +253,21 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   qoladi — MIRRTEXT=0; DXF TEXT). **O'lchamlar**: Chiziqli (DLI — kursorga qarab
   gorizontal/vertikal), Parallel (DAL), Burchak (DAN — ikki chiziq, yoy yoki 3 nuqta;
   4 sektordan biri), Radius (DRA), Diametr (DDI).
+- **Qatlamlar (AutoCAD Layer)** (`src/lib/cadLayer.js`, `npm run test:layer`) — lentada **Qatlam**
+  (joriy qatlam ro'yxati + «Qatlamlar» oynasi + «Joriy qilish») va **Xususiyatlar** (rang ·
+  chiziq turi · qalinlik — «Qatlam bo'yicha» yoki alohida) guruhlari. Har element `lay` maydoniga ega;
+  qatlamsiz eski chizmalar ochilganda avtomatik **DETAL** qatlamiga o'tadi (DXF nomi o'zgarmaydi).
+  Qatlamlar oynasi (LA): joriy belgisi, nomi (o'zgartirsa elementlar ham ko'chadi), **lampochka**
+  (ko'rinishi), **qor** (muzlatish — magnit ham ishlamaydi), **qulf** (ko'rinadi, tanlanmaydi — xira
+  chiziladi), **printer** (DXF/rasmga chiqishi), rang (ACI 1–254 o'zbekcha nomlar bilan), chiziq turi
+  (Uzluksiz, Yashirin punktir, O'q chizig'i, Shtrix-nuqta, Fantom, ISO…), qalinlik (0.00–2.11 mm),
+  elementlar soni, o'chirish. **LTSCALE** — punktir masshtabi, **Qalinlik** tugmasi (LWDISPLAY) —
+  qalinlikni ekranda ko'rsatish. Buyruqlar: `LA`, `LAYMCUR`, `LAYCUR`, `LAYOFF`/`LAYON`,
+  `LAYFRZ`/`LAYTHW`, `LAYLCK`/`LAYULK`, `LAYISO`/`LAYUNISO`, `MA` (xususiyat nusxasi), `PR`
+  (Xususiyatlar, Ctrl+1), `LTS`, `LWD`. Kesish/Ofset/Portlatish natijasi asl qatlamda qoladi.
+  DXF eksportda **LTYPE** va **LAYER** jadvallari yoziladi (rang, chiziq turi, qalinlik), ko'rinmas va
+  «chop etilmaydi» qatlamlar chiqmaydi. Yon paneldagi **Xususiyatlar** (Ctrl+1) — tanlanganning
+  qatlami/rangi/chiziq turi/qalinligi (o'zgartiriladi) va o'lchovlari (radius, uzunlik, yuza, burchak).
 - **Buyruq satri (AutoCAD command line)** (`src/lib/cmdLine.js`, `npm run test:cmd`) — chizma ostida:
   «Buyruq:» so'rovi, 3 qatorli tarix (F2 — butun tarix oynasi, matnni nusxalash mumkin),
   AutoComplete ro'yxati (nom + qisqartma; Tab/Shift+Tab — takliflar orasida aylanish; tez-tez

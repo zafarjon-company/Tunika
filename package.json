@@ -18,6 +18,7 @@
     "test:edit": "node src/lib/editGeom.test.mjs",
     "test:curve": "node src/lib/curveGeom.test.mjs",
     "test:hatch": "node src/lib/hatchGeom.test.mjs",
+    "test:layer": "node src/lib/cadLayer.test.mjs",
     "test:cmd": "node src/lib/cmdLine.test.mjs"
   },
   "dependencies": {

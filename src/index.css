@@ -1601,3 +1601,101 @@ html.themed .chz-optkw { background: color-mix(in srgb, var(--c-t3) 24%, transpa
 .acad-board .chz-kwl:hover { color: #a9ccff; background: rgba(91, 155, 255, .18); }
 .chz-cmditem u { text-decoration: none; font-weight: 800; color: #2563eb; }
 .acad-board .chz-cmditem u, html.themed .chz-cmditem u { color: #7fb2ff; }
+
+/* ---------- QATLAMLAR (AutoCAD Layer) ---------- */
+/* Lentadagi ro'yxatlar: joriy qatlam, rang, chiziq turi, qalinlik */
+.chz-laysel {
+  max-width: 172px; min-width: 96px; padding: 2px 3px; font-size: 11px; font-weight: 600;
+  background: #fff; color: #334155; border: 1px solid #cbd5e1; border-radius: 5px; cursor: pointer;
+}
+.chz-laysel:hover { border-color: var(--chz-accent); }
+html.themed .chz-laysel { background: var(--c-bg); color: var(--c-t2); border-color: var(--c-line); }
+
+/* Rang namunasi (kvadratcha) */
+.chz-sw { display: inline-block; width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; border: 1px solid rgba(100, 116, 139, .6); border-radius: 2px; }
+
+/* Modal oyna (qatlamlar boshqaruvchisi) — chizma maydoni ichida */
+.chz-dlg { position: absolute; inset: 0; z-index: 46; display: none; align-items: center; justify-content: center; padding: 14px; background: rgba(15, 23, 42, .38); }
+.chz-dlg.show { display: flex; }
+.chz-dlg-card { display: flex; flex-direction: column; width: min(880px, 100%); max-height: 100%; overflow: hidden; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 18px 48px rgba(15, 23, 42, .3); }
+.chz-dlg-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #0f172a; }
+.chz-dlg-head span { flex: 1; font-size: 11px; color: #94a3b8; }
+.chz-dlg-head button { width: 26px; height: 26px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; }
+.chz-dlg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px dashed #e2e8f0; }
+.chz-dlg-tools input[type="text"] { padding: 4px 7px; font-size: 11.5px; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #334155; min-width: 150px; }
+.chz-dlg-tools .dtl-btn { flex: 0 0 auto; }
+.chz-dlg-tools .sep { width: 1px; height: 20px; background: #e2e8f0; }
+.chz-dlg-lbl { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: #475569; }
+.chz-dlg-lbl input[type="text"] { width: 62px; min-width: 0; }
+.chz-dlg-body { flex: 1; overflow: auto; padding: 4px 8px 8px; }
+.chz-dlg-foot { padding: 6px 12px 8px; font-size: 10.5px; line-height: 1.5; color: #64748b; border-top: 1px solid #e2e8f0; }
+
+.chz-laytab { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.chz-laytab th { position: sticky; top: 0; z-index: 1; padding: 5px 4px; background: #f8fafc; color: #64748b; font-size: 10.5px; font-weight: 700; text-align: left; white-space: nowrap; border-bottom: 1px solid #e2e8f0; }
+.chz-laytab td { padding: 3px 4px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; white-space: nowrap; }
+.chz-laytab tr.cur { background: color-mix(in srgb, var(--chz-accent) 9%, transparent); }
+.chz-laytab tr:hover td { background: color-mix(in srgb, var(--chz-accent) 6%, transparent); }
+.lay-cur, .lay-tg, .lay-del { border: 0; background: transparent; cursor: pointer; font-size: 13px; line-height: 1; padding: 3px 4px; border-radius: 5px; color: #334155; }
+.lay-cur { color: var(--chz-accent); font-weight: 800; }
+.lay-tg.off { opacity: .42; filter: grayscale(1); }
+.lay-tg:hover, .lay-cur:hover, .lay-del:hover:not(:disabled) { background: rgba(100, 116, 139, .14); }
+.lay-del { color: #dc2626; }
+.lay-del:disabled { opacity: .28; cursor: default; }
+.lay-nom { width: 148px; padding: 3px 5px; font-size: 11.5px; font-weight: 600; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #0f172a; }
+.lay-nom:hover:not([readonly]) { border-color: #cbd5e1; }
+.lay-nom:focus { border-color: var(--chz-accent); background: #fff; outline: none; }
+.lay-nom[readonly] { color: #64748b; cursor: default; }
+.lay-sel { max-width: 132px; padding: 2px 3px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #334155; cursor: pointer; }
+.lay-cnt { color: #94a3b8; text-align: right; }
+
+/* To'q mavzu / AutoCAD doskasi */
+html.themed .chz-dlg-card { background: var(--c-surface); border-color: var(--c-line); }
+html.themed .chz-dlg-head { color: var(--c-t1); border-bottom-color: var(--c-line); }
+html.themed .chz-dlg-head button, html.themed .chz-dlg-tools input[type="text"], html.themed .lay-sel { background: var(--c-bg); color: var(--c-t2); border-color: var(--c-line); }
+html.themed .chz-dlg-tools { border-bottom-color: var(--c-line); }
+html.themed .chz-dlg-foot { color: var(--c-t3, #94a3b8); border-top-color: var(--c-line); }
+html.themed .chz-laytab th { background: var(--c-surface2, var(--c-bg)); color: var(--c-t2); border-bottom-color: var(--c-line); }
+html.themed .chz-laytab td { border-bottom-color: var(--c-line); }
+html.themed .lay-nom { color: var(--c-t1); }
+html.themed .lay-nom:focus { background: var(--c-bg); }
+html.themed .lay-cur, html.themed .lay-tg { color: var(--c-t2); }
+.acad-board .chz-dlg { background: rgba(10, 14, 20, .55); }
+.acad-board .chz-dlg-card { background: #161b22; border-color: #3a4452; box-shadow: 0 18px 48px rgba(0, 0, 0, .6); }
+.acad-board .chz-dlg-head { color: #e6edf5; border-bottom-color: #333c48; }
+.acad-board .chz-dlg-head span { color: #7d8ba0; }
+.acad-board .chz-dlg-head button, .acad-board .chz-dlg-tools input[type="text"], .acad-board .lay-sel { background: #212830; color: #cfd8e3; border-color: #3a4452; }
+.acad-board .chz-dlg-tools { border-bottom-color: #333c48; }
+.acad-board .chz-dlg-tools .sep { background: #3a4452; }
+.acad-board .chz-dlg-lbl { color: #c2cdda; }
+.acad-board .chz-dlg-foot { color: #8b98ab; border-top-color: #333c48; }
+.acad-board .chz-laytab th { background: #1c232c; color: #9aa7b8; border-bottom-color: #333c48; }
+.acad-board .chz-laytab td { border-bottom-color: #262e38; }
+.acad-board .lay-nom { color: #e6edf5; }
+.acad-board .lay-nom:hover:not([readonly]) { border-color: #3a4452; }
+.acad-board .lay-nom:focus { background: #212830; }
+.acad-board .lay-cur, .acad-board .lay-tg { color: #cfd8e3; }
+.acad-board .lay-cnt { color: #7d8ba0; }
+.acad-board .chz-laytab tr:hover td { background: rgba(91, 155, 255, .1); }
+
+/* Yon paneldagi «Xususiyatlar» (Ctrl+1) */
+.dtl-props { margin-top: 6px; }
+.dtl-propempty { padding: 8px; font-size: 11px; line-height: 1.5; color: #94a3b8; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 6px; }
+.dtl-prow { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; font-size: 11.5px; }
+.dtl-prow > span { flex: 0 0 88px; color: #64748b; }
+.dtl-prow > b { flex: 1; color: #0f172a; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dtl-prow select { flex: 1; min-width: 0; padding: 2px 3px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #334155; cursor: pointer; }
+html.themed .dtl-propempty { background: var(--c-bg); border-color: var(--c-line); }
+html.themed .dtl-prow { border-bottom-color: var(--c-line); }
+html.themed .dtl-prow > b { color: var(--c-t1); }
+html.themed .dtl-prow select { background: var(--c-bg); color: var(--c-t2); border-color: var(--c-line); }
+
+@media (max-width: 560px) {
+  .chz-laysel { max-width: 132px; }
+  .chz-dlg { padding: 6px; }
+  .chz-dlg-card { width: 100%; }
+  .chz-laytab { font-size: 11px; }
+  .lay-nom { width: 104px; }
+  .lay-sel { max-width: 92px; }
+  .chz-dlg-body { padding: 2px 4px 6px; }
+  .dtl-prow > span { flex-basis: 74px; }
+}
