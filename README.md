@@ -268,6 +268,19 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   DXF eksportda **LTYPE** va **LAYER** jadvallari yoziladi (rang, chiziq turi, qalinlik), ko'rinmas va
   «chop etilmaydi» qatlamlar chiqmaydi. Yon paneldagi **Xususiyatlar** (Ctrl+1) — tanlanganning
   qatlami/rangi/chiziq turi/qalinligi (o'zgartiriladi) va o'lchovlari (radius, uzunlik, yuza, burchak).
+- **Bloklar (AutoCAD BLOCK / INSERT)** (`src/lib/blockGeom.js`, `npm run test:block`) — lentada **Blok**
+  guruhi. **Blok yasash (B)**: obyektlarni tanlang → Enter → buyruq satri **nom** so'raydi (ichida
+  bo'shliq bo'lishi mumkin: `DERAZA 600`) → **tayanch nuqta**ni bosing; tanlanganlar o'rniga blok
+  nusxasi qo'yiladi (AutoCAD «Convert to block»). **Qo'yish (I)**: kursorda blok sharpasi ko'rinadi,
+  pastdagi qatorda **Blok ▾ · Masshtab · Burchak · Portlatib qo'yish**. Blok nusxasi `{type:'ins',
+  bn, x, y, sc, rot, mir}` — bitta element: ko'chadi, buriladi, masshtablanadi, aks ettiriladi
+  (aks — `mir`, masshtab musbat qoladi), massivga kiradi; **ta'rif hech qachon o'zgarmaydi**
+  (`mapEntCopy` faqat nusxa qaytaradi). Ichidagi «0» qatlamidagi elementlar nusxa qatlamiga tushadi,
+  boshqalari o'z qatlamida qoladi. **Portlatish (X)** blokni elementlariga yoyadi; Kesish, Offset,
+  Tutashtirish, Uzish, Bo'lish kabi asboblar blok nusxasiga **aniq xabar** beradi (jim turmaydi).
+  Yon panelda **Bloklar** ro'yxati (element soni, nusxalar soni; bosib qo'yasiz, ✕ bilan ta'rifni
+  o'chirasiz — nusxasi bor blok o'chmaydi). **PU (PURGE)** — ishlatilmagan qatlam va bloklarni
+  tozalaydi (Orqaga bilan qaytariladi). DXF eksportda blok nusxasi elementlariga yoyib yoziladi.
 - **Buyruq satri (AutoCAD command line)** (`src/lib/cmdLine.js`, `npm run test:cmd`) — chizma ostida:
   «Buyruq:» so'rovi, 3 qatorli tarix (F2 — butun tarix oynasi, matnni nusxalash mumkin),
   AutoComplete ro'yxati (nom + qisqartma; Tab/Shift+Tab — takliflar orasida aylanish; tez-tez

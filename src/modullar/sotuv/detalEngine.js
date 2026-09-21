@@ -34,6 +34,7 @@ import { closedLoops, findRegion, pointInLoops, regionArea, regionAreaOf } from 
 import { TEXT_CAP } from '../../lib/curveGeom.js';
 import { parseInput, pointFromDist, deriveKeywords, matchKeyword, promptWithOptions, cmdFilter, num1 as cmdNum, evalExpr } from '../../lib/cmdLine.js';
 import { ellipsePts, ellipseFromCenter, ellipseFromAxis, distToAxis, ellipseGrips, ellipseMap, splinePts, textBox, distToTextBox, textMap, linearRot, rotatedDim, rotatedOff, angularDim, lineInt, radialDim } from '../../lib/curveGeom.js';
+import { xform, insMap, explodeIns, makeBlockDef, blockNameError, normBlockName, findBlock, blockUses, usedBlockNames, applyInsLayer } from '../../lib/blockGeom.js';
 import { ACI, ACI_NOM, ACI_LIST, LT, LT_LIST, LW_LIST, LW_BYLAYER, lwLabel, lwPx, normLayerName, layerNameError, makeLayer, defaultLayers, findLayer, sortLayers, canDeleteLayer, aciHex, resolveStyle, usedLayerNames, migrateEnts, sanitizeLayers } from '../../lib/cadLayer.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -135,6 +136,10 @@ const CMDS = [
   { id: 'join', nomi: 'Birlashtirish', al: ['J', 'JOIN'] },
   { id: 'pedit', nomi: 'Silliqlash (siniq chiziq ↔ splayn)', al: ['PE', 'PEDIT', 'SPE', 'SPLINEDIT'] },
   { id: 'erase', nomi: "O'chirish", al: ['E', 'ERASE', 'DEL'] },
+  { id: 'block', nomi: 'Blok yasash (tanlanganlardan)', al: ['B', 'BLOCK', 'BMAKE'] },
+  { id: 'insert', nomi: "Blok qo'yish", al: ['I', 'INSERT', 'DDINSERT'] },
+  { id: '#blocks', nomi: 'Bloklar ro\u2018yxati', al: ['BL', 'BLOCKS'] },
+  { id: '#purge', nomi: 'Tozalash (ishlatilmagan qatlam/blok)', al: ['PU', 'PURGE'] },
   // Qatlamlar (AutoCAD LAYER va LAY* buyruqlari)
   { id: '#layer', nomi: 'Qatlamlar boshqaruvchisi', al: ['LA', 'LAYER', 'DDLMODES'] },
   { id: '#laymcur', nomi: 'Qatlamni joriy qilish (elementni bosib)', al: ['LAYMCUR'] },
@@ -191,12 +196,12 @@ const GRIP_PX = 4;           // grip kvadratining yarim tomoni (px)
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 // DXF $INSUNITS kodi -> 1 birlik necha mm
 const INSUNITS_MM = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
-const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'erase', 'dist', 'area', 'divide', 'measure'];
+const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'erase', 'dist', 'area', 'divide', 'measure', 'block', 'insert'];
 const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'lengthen', 'divide', 'measure', 'hatch', 'boundary'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
-const PICK_FIRST = ['move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'align'];   // tanlovsiz tanlansa — avval obyektlar tanlanadi (AutoCAD verb-noun)
+const PICK_FIRST = ['move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'align', 'block'];   // tanlovsiz tanlansa — avval obyektlar tanlanadi (AutoCAD verb-noun)
 // AutoCAD doskasi ranglari (model maydoni: 33,40,48)
 const ACAD_BOARD = { bg: '#212830', devor: '#ffffff', accent: '#5b9bff', edit: '#e8edf3', text: '#d5dde7', labelBg: 'rgba(33,40,48,.84)', ref: '#6b7686', kazirok: '#cfd8e3', offset: '#ff66e8', accentSoft: '#1b2230', qozon: '#5b9bff', cross: '#ffffff', snap: '#f2c200' };
-const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
+const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area', 'insert'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const CIRCLE_MODES = { cr: 'Markaz, radius', dia: 'Markaz, diametr', '2p': '2 nuqta', '3p': '3 nuqta' };
 // Matn normallashtirish (kichik harf + o'zbek apostroflari) — buyruq va kalit so'z solishtirishlari uchun
 function cmdNormPlain(s) { return String(s == null ? '' : s).toLowerCase().replace(/[‘’ʻʼ`]/g, "'").trim(); }
@@ -326,6 +331,11 @@ function buildTemplate(V) {
       <button type="button" class="tool" data-dtl="btnLayCur" title="Joriy qilish (LAYMCUR) — tanlangan elementning qatlamini joriy qatlam qilish">&#10004; Joriy qilish</button>
     </div><div class="chz-rlbl">Qatlam</div></div>
     <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool etool" data-tool="block" title="Blok yasash (B) — tanlangan obyektlardan nomlangan blok; tayanch nuqtani bosing. Tanlanganlar o'rniga blok nusxasi qo'yiladi">&#9638; Blok yasash</button>
+      <button type="button" class="tool etool" data-tool="insert" title="Blok qo'yish (I) — ro'yxatdagi blokni chizmaga qo'yish: masshtab va burchak pastdagi qatorda">&#8862; Qo'yish</button>
+      <button type="button" class="tool" data-dtl="btnBlocks" title="Bloklar ro'yxati (yon panelda) — bosib qo'yasiz, nomini o'zgartirasiz, o'chirasiz">&#9776; Bloklar</button>
+    </div><div class="chz-rlbl">Blok</div></div>
+    <div class="chz-rgrp"><div class="chz-rbtns">
       <select class="chz-laysel" data-dtl="colSel" title="Rang (AutoCAD CECOLOR) — tanlanganlarga yoki yangi elementlarga. «Qatlam bo'yicha» — rang qatlamdan olinadi"></select>
       <select class="chz-laysel" data-dtl="ltSel" title="Chiziq turi (CELTYPE) — uzluksiz, yashirin punktir, o'q chizig'i…"></select>
       <select class="chz-laysel" data-dtl="lwSel" title="Chiziq qalinligi (CELWEIGHT) — ekranda ko'rinishi uchun «Qalinlik» tugmasini yoqing"></select>
@@ -439,6 +449,12 @@ function buildTemplate(V) {
         </button>
       </div>
       <div class="dtl-lib" data-dtl="libList" style="display:none"></div>
+      <div class="chz-listhead">
+        <button type="button" class="chz-listbtn" data-dtl="tgBlocks" title="Chizmadagi bloklar (BLOCK) — bosib qo'yasiz">
+          <span class="chev">&#9656;</span> Bloklar <span class="dtl-cnt" data-dtl="blkCnt"></span>
+        </button>
+      </div>
+      <div class="dtl-lib" data-dtl="blkList" style="display:none"></div>
       <div data-dtl="projSect"${V.proj ? '' : ' style="display:none"'}>
       <h3 class="dtl-h3">Proyeksiyalar</h3>
       <label class="dtl-closed"><input type="checkbox" data-dtl="projOn" /> 3 ta proyeksiya: old (V) &middot; ustdan (H) &middot; yon (W)</label>
@@ -570,6 +586,7 @@ export function mountDetal(root, opts) {
     ltscale: 1,            // LTSCALE — punktir naqshi masshtabi
     lwShow: false,         // LWDISPLAY — qalinlikni ekranda ko'rsatish
     layPrev: null,         // LAYUNISO / LAYERP uchun oldingi holat
+    blocks: [],            // blok ta'riflari [{nomi, ents, izoh}] — src/lib/blockGeom.js
     layPick: null,         // LAYOFF/LAYFRZ/LAYLCK/LAYMCUR — element bosilishini kutmoqda
     match: null,           // MATCHPROP — { src } namuna element
     // Asbob variantlari (AutoCAD buyruq variantlari — pastdagi ichki buyruqlar qatori)
@@ -577,7 +594,7 @@ export function mountDetal(root, opts) {
     cmdFresh: false,       // buyruq endigina boshlandi (birinchi kiritish kutilmoqda) — kalit so'zlar ustun
     lastPt: null,          // oxirgi qo'yilgan nuqta (AutoCAD LASTPOINT) — «@» shundan
     snapOnce: null,        // bir martalik magnit (END, MID…)
-    opt: { col: null, lt: null, lw: null,   // joriy element xossalari (CECOLOR/CELTYPE/CELWEIGHT); null — «Qatlam bo'yicha»
+    opt: { col: null, lt: null, lw: null, insSc: 1, insRot: 0, insExplode: false,   // joriy element xossalari (CECOLOR/CELTYPE/CELWEIGHT); null — «Qatlam bo'yicha»
       circleMode: 'cr', copyMulti: true, moveCopy: false, rotateCopy: false, mirrorErase: false, scaleCopy: false, offsetMulti: false,
       filletR: 10, filletPoly: false, filletTrim: true, chamD1: 10, chamD2: 10, chamPoly: false, chamTrim: true,
       polyN: 6, polyMode: 'in', donutIn: 10, donutOut: 20, breakMode: '2p', lenMode: 'delta', lenDelta: 10, lenPct: 110, lenTotal: 1000,
@@ -661,7 +678,7 @@ export function mountDetal(root, opts) {
   // So'rov qatori: xabar + joriy asbobning yoziladigan variantlari [Radius/Polyline/Kesish]
   function syncPrompt() {
     const el = q('info'); if (!el) return;
-    if (pendingNum) { el.textContent = curPrompt || 'Buyruq:'; return; }   // qiymat kutilmoqda — variantlar ro'yxati ko'rsatilmaydi
+    if (pendingNum || pendingText) { el.textContent = curPrompt || 'Buyruq:'; return; }   // qiymat/matn kutilmoqda — variantlar ro'yxati ko'rsatilmaydi
     // Bo'sh holat (buyruq kutilmoqda) — AutoCAD «Command:»
     const idle = !state.draft && !state.picking && !state.box && state.tool === 'select';
     if (idle) { el.textContent = 'Buyruq:'; return; }
@@ -689,12 +706,13 @@ export function mountDetal(root, opts) {
   }
 
   /* ---------------- TARIX (undo/redo) ---------------- */
-  function snapshot() { return JSON.stringify({ ents: state.ents, nextId: state.nextId, name: state.name, layers: state.layers, clay: state.clay }); }
+  function snapshot() { return JSON.stringify({ ents: state.ents, nextId: state.nextId, name: state.name, layers: state.layers, clay: state.clay, blocks: state.blocks }); }
   function restore(s) {
     const o = JSON.parse(s);
     state.ents = o.ents || []; state.nextId = o.nextId || 1; state.name = o.name || '';
     if (Array.isArray(o.layers) && o.layers.length) { state.layers = o.layers; layDirty(); }
     if (o.clay && findLayer(state.layers, o.clay)) state.clay = findLayer(state.layers, o.clay).nomi;
+    if (Array.isArray(o.blocks)) { state.blocks = o.blocks; blkDirty(); }
     q('nameInput').value = state.name;
     state.sel.clear();
   }
@@ -754,6 +772,67 @@ export function mountDetal(root, opts) {
     const e = Object.assign({ id: state.nextId++, type }, props);
     if (e.lay == null) applyStyleTo(e, src);
     return e;
+  }
+  /* ---------------- BLOKLAR (AutoCAD BLOCK / INSERT) ---------------- */
+  let _blkVer = 0;                 // blok ta'riflari o'zgarganda kesh eskiradi
+  const _insCache = new Map();     // yoyilgan blok nusxalari keshi
+  function blkDirty() { _blkVer++; _insCache.clear(); }
+  // Blok nusxasini elementlarga yoyish (ta'rifga tegilmaydi). Kalit joylashuvni ham
+  // o'z ichiga oladi — nusxa ko'chsa kesh o'zi eskiradi.
+  function insEnts(e) {
+    if (!e || e.type !== 'ins') return [];
+    const k = e.id + '|' + e.bn + '|' + e.x + ',' + e.y + '|' + (e.sc || 1) + '|' + (e.rot || 0) + '|' + (e.mir ? 1 : 0) + '|' + (e.lay || '') + '|' + _blkVer;
+    let v = _insCache.get(k);
+    if (!v) {
+      v = applyInsLayer(explodeIns(e, state.blocks, textW), e, state.clay);
+      v.forEach((g, i) => { g.iid = i; });
+      if (_insCache.size > 300) _insCache.clear();
+      _insCache.set(k, v);
+    }
+    return v;
+  }
+  function blockOf(e) { return findBlock(state.blocks, e && e.bn); }
+  // localStorage'dan kelgan blok ta'riflarini tozalash
+  function sanitizeBlocks(raw) {
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    for (const b of raw) {
+      if (!b || typeof b !== 'object') continue;
+      const nomi = normBlockName(b.nomi);
+      if (!nomi || blockNameError(nomi, out)) continue;
+      const ents = (Array.isArray(b.ents) ? b.ents : []).filter((e) => e && typeof e.type === 'string').map((e) => { const c = JSON.parse(JSON.stringify(e)); delete c.id; return c; });
+      out.push({ nomi, ents, izoh: String(b.izoh || '').slice(0, 200) });
+    }
+    return out;
+  }
+  // Kutubxonadan / zakasdan kelgan bloklar (borlari tegilmaydi)
+  function mergeBlocks(list) {
+    const add = sanitizeBlocks(list);
+    let n = 0;
+    for (const b of add) if (!findBlock(state.blocks, b.nomi)) { state.blocks.push(b); n++; }
+    if (n) blkDirty();
+    return n;
+  }
+  // Ishlatilmagan qatlam va bloklarni tozalash (AutoCAD PURGE)
+  function purgeUnused() {
+    const usedL = usedLayerNames(state.ents, V.mainLayer).map((x) => String(x).toLowerCase());
+    for (const b of state.blocks) for (const e of b.ents) usedL.push(String(e.lay == null ? V.mainLayer : e.lay).toLowerCase());
+    const usedB = usedBlockNames(state.ents, state.blocks);
+    const keepL = new Set(usedL.concat(['0', String(state.clay).toLowerCase(), 'ofset']));
+    const delL = state.layers.filter((l) => !keepL.has(l.nomi.toLowerCase()));
+    const delB = state.blocks.filter((b) => !usedB.includes(b.nomi.toLowerCase()));
+    if (!delL.length && !delB.length) { setInfo('Tozalanadigan ishlatilmagan qatlam yoki blok yo\u2018q'); return; }
+    pushHistory();
+    state.layers = state.layers.filter((l) => keepL.has(l.nomi.toLowerCase()));
+    state.blocks = state.blocks.filter((b) => usedB.includes(b.nomi.toLowerCase()));
+    blkDirty();
+    layerChanged('Tozalandi: ' + delL.length + ' ta qatlam, ' + delB.length + ' ta blok (Orqaga bilan qaytariladi)');
+  }
+  // Blok nusxasiga ishlamaydigan asboblar uchun aniq xabar (jim e'tiborsizlik o'rniga)
+  function blockGuard(ent, nima) {
+    if (!ent || ent.type !== 'ins') return false;
+    setInfo('Blok nusxasiga «' + nima + '» qo\u2018llanmaydi \u2014 avval Portlatish (X) bilan yoying', 'err');
+    return true;
   }
   // Kutubxonadan / zakasdan chizma ochilganda: yo'q qatlamlar qo'shiladi (borlari tegilmaydi)
   function mergeLayers(list) {
@@ -967,6 +1046,22 @@ export function mountDetal(root, opts) {
       const c = tr.querySelector('select[data-act="color"]'); if (c) c.value = String(l.color);
     });
   }
+  // Yon paneldagi bloklar ro'yxati
+  function renderBlocks() {
+    const el = q('blkList'), cnt = q('blkCnt'); if (!el) return;
+    if (cnt) cnt.textContent = state.blocks.length ? '(' + state.blocks.length + ')' : '';
+    if (el.style.display === 'none') return;
+    if (!state.blocks.length) { el.innerHTML = '<div class="dtl-empty">Hali blok yo\u2018q \u2014 obyektlarni tanlab «Blok yasash» (B) bosing</div>'; return; }
+    const used = usedBlockNames(state.ents, state.blocks);
+    let h = '';
+    for (const b of state.blocks) {
+      const n = used.includes(b.nomi.toLowerCase()) ? state.ents.filter((e) => e.type === 'ins' && String(e.bn).toLowerCase() === b.nomi.toLowerCase()).length : 0;
+      h += '<div class="dtl-libitem" data-blk="' + escHtml(b.nomi) + '">'
+        + '<button type="button" class="dtl-libopen" data-act="ins" title="Chizmaga qo\u2018yish (I)"><b>' + escHtml(b.nomi) + '</b><span>' + b.ents.length + ' ta element' + (n ? ' \u00b7 ' + n + ' nusxa' : '') + '</span></button>'
+        + '<button type="button" class="dtl-libdel" data-act="del" title="Blok ta\u2018rifini o\u2018chirish' + (n ? ' (avval nusxalarini o\u2018chiring)' : '') + '"' + (n ? ' disabled' : '') + '>&#10005;</button></div>';
+    }
+    el.innerHTML = h;
+  }
   // Yon paneldagi «Xususiyatlar» (AutoCAD Properties, Ctrl+1)
   function renderProps() {
     const box = q('propBox'), cnt = q('propCnt'); if (!box) return;
@@ -1024,9 +1119,15 @@ export function mountDetal(root, opts) {
     if (e.type === 'circle') return [{ x: e.cx - e.r, y: e.cy }, { x: e.cx + e.r, y: e.cy }, { x: e.cx, y: e.cy - e.r }, { x: e.cx, y: e.cy + e.r }];
     if (e.type === 'dim') return dimKeyPts(e);
     if (e.type === 'point') return [{ x: e.x, y: e.y }];
+    if (e.type === 'ins') {   // blok nusxasi — ichidagi elementlar uchlari (gabarit, ramka, proyeksiya)
+      const o = [];
+      for (const g of insEnts(e)) { for (const q2 of entVerts(g)) { o.push(q2); if (o.length > 240) return o; } }
+      return o.length ? o : [{ x: e.x, y: e.y }];
+    }
     return [];
   }
   function mapEnt(e, fn, rFactor) {
+    if (e.type === 'ins') { insMap(e, fn); return; }   // blok nusxasi: joy + burchak + masshtab (ta'rif tegilmaydi)
     if (e.type === 'point') { const q2 = fn({ x: e.x, y: e.y }); e.x = q2.x; e.y = q2.y; return; }
     if (e.type === 'text') { Object.assign(e, textMap(e, textW(e), fn)); return; }
     if (isCons(e)) { const u = dirVec(e.ang), a = fn({ x: e.x, y: e.y }), b = fn({ x: e.x + u.dx, y: e.y + u.dy }); e.x = a.x; e.y = a.y; e.ang = vecAng(b.x - a.x, b.y - a.y); return; }
@@ -1078,6 +1179,12 @@ export function mountDetal(root, opts) {
       return { d: best + 2 / state.scale, seg: -1 };
     }
     if (e.type === 'dim') return { d: distToDim(e, { x: wx, y: wy }), seg: -1 };
+    if (e.type === 'ins') {   // blok nusxasi — ichidagi eng yaqin element
+      let best = Infinity;
+      for (const g of insEnts(e)) { const r = distToEnt(g, wx, wy); if (r.d < best) best = r.d; }
+      if (!Number.isFinite(best)) best = Math.hypot(wx - e.x, wy - e.y);
+      return { d: best, seg: -1 };
+    }
     return { d: Infinity, seg: -1 };
   }
   function entAt(sx, sy) {
@@ -1450,6 +1557,8 @@ export function mountDetal(root, opts) {
       ellipse: state.opt.ellMode === 'axis' ? "Ellips (O'q, uch): o'qning 1-uchini bosing" : 'Ellips (Markaz): markazni bosing',
       spline: "Splayn: 1-nuqtani bosing — egri har bir nuqtadan o'tadi; Enter — tugatish" + (state.opt.splClosed ? ' (yopiq)' : ''),
       text: 'Matn (balandlik ' + fmtLen(state.opt.textH) + (state.opt.textRot ? ', burchak ' + fmtAng(state.opt.textRot) : '') + '): joyini bosing',
+      block: state.draft && state.draft.tool === 'block' ? "Blok «" + state.draft.nomi + "»: TAYANCH nuqtani bosing (blok shu nuqtadan qo'yiladi va buriladi)" : "Blok yasash: obyektlarni tanlang, so'ng Enter — nom va tayanch nuqta so'raladi",
+      insert: 'Blok qo\u2018yish (' + (state.opt.insBn || '\u2014') + (state.opt.insSc !== 1 ? ', ' + fmtNum(state.opt.insSc, 2) + '\u00d7' : '') + (state.opt.insRot ? ', ' + fmtAng(state.opt.insRot) : '') + '): joyini bosing',
       move: "Ko'chirish: tayanch nuqtani bosing",
       copy: 'Nusxa: tayanch nuqtani bosing',
       rotate: 'Burish: tayanch nuqtani bosing',
@@ -1481,6 +1590,7 @@ export function mountDetal(root, opts) {
   const MODIFY = ['move', 'copy', 'rotate', 'mirror', 'scale'];
   function setTool(t) {
     if (!TOOLS.includes(t)) return;
+    pendingText = null;
     cancelDraft(true);
     state.tool = t;
     if (t !== 'select') state.lastTool = t;   // Enter/Tab bilan takrorlash uchun
@@ -1495,6 +1605,7 @@ export function mountDetal(root, opts) {
     state.cmdFresh = true;   // buyruq boshlandi: birinchi kiritishgacha kalit so'zlar ustun
     state.snapOnce = null; pendingNum = null;
     if (PICK_FIRST.includes(t) && !state.sel.size) { state.picking = true; setInfo(toolLabel(t) + ": obyektlarni tanlang (bosing yoki ramka torting), so'ng Enter / Probel / o'ng tugma"); }
+    else if (t === 'block') { syncButtons(); render(); askBlockName(); return; }
     else setInfo(toolHint(t));
     if (t === 'arc') arcAutoStart();
     syncButtons(); render();
@@ -1509,7 +1620,7 @@ export function mountDetal(root, opts) {
   }
   function cancelCurrent() {
     if (state.draft || state.box || state.picking) logLine('*Bekor qilindi*');
-    state.snapOnce = null; state.cmdFresh = false; pendingNum = null;
+    state.snapOnce = null; state.cmdFresh = false; pendingNum = null; pendingText = null;
     if (state.picking) { state.picking = false; state.sel.clear(); setTool('select'); state.cmdFresh = false; setInfo('*Bekor qilindi*'); return; }
     if (state.draft && state.draft.tool === 'pline') { finishPline(false); return; }
     if (state.draft && state.draft.tool === 'spline') { finishSpline(null); return; }
@@ -1943,6 +2054,7 @@ export function mountDetal(root, opts) {
 
   /* ---- Silliqlash (PEDIT Spline / Decurve): siniq chiziq ↔ splayn (uchlari fit nuqtalar) ---- */
   function peditEnt(e) {
+    if (blockGuard(e, 'Silliqlash')) return;
     if (e.type !== 'pline') { setInfo("Silliqlash: siniq chiziq (polyline) yoki splaynni bosing"); return; }
     if (e.ell) { setInfo("Ellips allaqachon silliq — uni Portlatish (X) bilan siniq chiziqqa aylantirish mumkin"); return; }
     if (e.fit) {   // Decurve — splayn → fit nuqtalar bo'yicha siniq chiziq
@@ -2194,6 +2306,7 @@ export function mountDetal(root, opts) {
   function offsetMade(d, step, N) { return d.chain ? offsetChainSeries(d.chain, step, N) : offsetSeries(d.ent, step, N).map((o) => [o]); }
   function offsetClick(sx, sy, w) {
     const d = state.draft;
+    if (!d) { const h0 = entAt(sx, sy); if (h0 && blockGuard(h0.ent, 'Offset')) return; }
     if (!d) {
       const hit = entAt(sx, sy);
       if (!hit || isAnno(hit.ent)) { setInfo('Offset uchun chiziq, yoy yoki aylanani bosing'); return; }
@@ -2321,6 +2434,19 @@ export function mountDetal(root, opts) {
       num('Balandlik', o.textH / U(), (v) => { o.textH = Math.max(0.1, v * U()); if (live()) { state.draft.h = o.textH; positionTextEd(); } }, UNIT_LABEL[state.unit]);
       num('Burchak', o.textRot, (v) => { o.textRot = norm360(v); if (live()) state.draft.rot = o.textRot; }, '°');
     }
+    else if (t === 'insert') {
+      const cur = o.insBn && findBlock(state.blocks, o.insBn) ? findBlock(state.blocks, o.insBn).nomi : (state.blocks.length ? state.blocks[state.blocks.length - 1].nomi : '');
+      if (state.blocks.length > 1) btn('Blok: ' + (cur || '\u2014') + ' \u25BE', () => {
+        const i = state.blocks.findIndex((b) => b.nomi === cur);
+        o.insBn = state.blocks[(i + 1 + state.blocks.length) % state.blocks.length].nomi;
+        setInfo('Blok: ' + o.insBn + ' \u2014 qo\u2018yish joyini bosing');
+      });
+      else if (cur) btn('Blok: ' + cur, () => {}, { disabled: true, noKw: true });
+      num('Masshtab', o.insSc, (v) => { o.insSc = Math.abs(v) > 1e-6 ? Math.abs(v) : 1; }, '\u00d7');
+      num('Burchak', o.insRot, (v) => { o.insRot = norm360(v); }, '\u00b0');
+      tog('Portlatib qo\u2018yish', 'insExplode');
+    }
+    else if (t === 'block') { btn('Tanlash tugadi (Enter)', () => pressEnter(), { primary: true, disabled: !state.picking || !state.sel.size }); }
     else if (t === 'copy') { btn('Rejim: ' + (o.copyMulti ? "Ko'p" : 'Bitta'), () => { o.copyMulti = !o.copyMulti; }, { on: o.copyMulti }); btn('Massiv\u2026', () => setTool('array'), { noKw: true }); }
     else if (t === 'move') tog('Nusxa (asli qoladi)', 'moveCopy');
     else if (t === 'rotate') tog('Nusxa (asli qoladi)', 'rotateCopy');
@@ -2528,6 +2654,7 @@ export function mountDetal(root, opts) {
     return true;
   }
   function filletClick(kind, sx, sy) {
+    { const h0 = entAt(sx, sy); if (h0 && blockGuard(h0.ent, kind === 'fillet' ? 'Tutashtirish' : 'Faska')) return; }
     const hit = entAt(sx, sy), raw = screenToWorld(sx, sy), o = state.opt, d = state.draft;
     const nm = kind === 'fillet' ? 'Tutashtirish' : 'Faska';
     if (!d) {
@@ -2576,9 +2703,18 @@ export function mountDetal(root, opts) {
   }
   function explodeEnts(list) {
     const rm = [], add = [];
-    for (const e of list) { const parts = explodeEnt(e); if (parts && parts.length) { rm.push(e.id); add.push(...withStyle(parts, e)); } }
-    if (!rm.length) { setInfo("Portlatiladigan polyline yo'q (aylana, yoy va bitta segmentli chiziq portlatilmaydi)"); return; }
-    applyOp({ remove: rm, add, patch: [] }, rm.length + ' ta polyline ' + add.length + ' ta chiziqqa ajratildi');
+    let nIns = 0;
+    for (const e of list) {
+      if (e.type === 'ins') {   // blok nusxasi -> ichidagi elementlar (AutoCAD: «0» qatlamidagilar nusxa qatlamiga)
+        const parts = insEnts(e).map((g) => { const c = JSON.parse(JSON.stringify(g)); delete c.id; delete c.iid; return c; });
+        if (parts.length) { rm.push(e.id); add.push(...parts); nIns++; }
+        continue;
+      }
+      const parts = explodeEnt(e);
+      if (parts && parts.length) { rm.push(e.id); add.push(...withStyle(parts, e)); }
+    }
+    if (!rm.length) { setInfo("Portlatiladigan narsa yo'q (aylana, yoy va bitta segmentli chiziq portlatilmaydi)"); return; }
+    applyOp({ remove: rm, add, patch: [] }, nIns ? (nIns + ' ta blok ' + add.length + ' ta elementga yoyildi') : (rm.length + ' ta polyline ' + add.length + ' ta chiziqqa ajratildi'));
   }
   function joinSelected(list) {
     const r = joinEnts(list);
@@ -2692,6 +2828,7 @@ export function mountDetal(root, opts) {
   }
   // Uzish
   function breakClick(sx, sy, w) {
+    { const h0 = entAt(sx, sy); if (h0 && blockGuard(h0.ent, 'Uzish')) return; }
     const d = state.draft, o = state.opt;
     if (!d) {
       const hit = entAt(sx, sy);
@@ -2715,6 +2852,7 @@ export function mountDetal(root, opts) {
     return lengthenEnt(hit.ent, raw, o.lenMode, o.lenMode === 'percent' ? o.lenPct : (o.lenMode === 'total' ? o.lenTotal : o.lenDelta));
   }
   function lengthenClick(sx, sy) {
+    { const h0 = entAt(sx, sy); if (h0 && blockGuard(h0.ent, 'Uzunlik')) return; }
     const hit = entAt(sx, sy); if (!hit) { setInfo(toolHint('lengthen')); return; }
     const r = lengthenCompute(hit, screenToWorld(sx, sy));
     if (r.reason) { setInfo(r.reason); return; }
@@ -2723,6 +2861,7 @@ export function mountDetal(root, opts) {
   // Bo'lish / O'lchab qo'yish
   function divMeasCompute(t, e, raw) { return t === 'divide' ? divideEnt(e, state.opt.divN) : measureEnt(e, state.opt.measLen, raw); }
   function divMeasClick(t, sx, sy) {
+    { const h0 = entAt(sx, sy); if (h0 && blockGuard(h0.ent, t === 'divide' ? "Bo'lish" : "O'lchab qo'yish")) return; }
     const hit = entAt(sx, sy);
     if (!hit || !['pline', 'arc', 'circle'].includes(hit.ent.type)) { setInfo(toolHint(t)); return; }
     const r = divMeasCompute(t, hit.ent, screenToWorld(sx, sy));
@@ -2769,6 +2908,7 @@ export function mountDetal(root, opts) {
     else if (g.type === 'text') paintText(target, g, w2s, view, attrs.stroke || '#888', false, attrs.opacity);
     else if (g.type === 'hatch') target.appendChild(svgEl('path', Object.assign({ d: hatchPath(g, w2s), 'fill-rule': 'evenodd' }, attrs)));
     else if (isCons(g)) { const r = svg.getBoundingClientRect(), [a, b] = consEnds(g, view, r.width, r.height), sa = w2s(a.x, a.y), sb = w2s(b.x, b.y); target.appendChild(svgEl('line', Object.assign({ x1: sa.x, y1: sa.y, x2: sb.x, y2: sb.y }, attrs))); }
+    else if (g.type === 'ins') { for (const x of insEnts(g)) drawEntShape(target, x, w2s, view, attrs); }   // blok nusxasi (hover, jonli ko'rinish, massiv)
   }
   function paintEditPreview(target, w2s, view, PP, d) {
     const cur = state.cursor;
@@ -2835,6 +2975,13 @@ export function mountDetal(root, opts) {
       target.appendChild(svgEl('path', { d: hatchPath({ loops: [r.outer].concat(r.islands).map((l) => l.pts) }, w2s), fill: PP.accent, 'fill-opacity': 0.14, 'fill-rule': 'evenodd', stroke: PP.accent, 'stroke-width': 1.6, 'stroke-dasharray': '6 4', 'pointer-events': 'none' }));
       return;
     }
+    if (t === 'insert') {   // kursorda qo'yiladigan blok sharpasi
+      const bn = state.opt.insBn, def = findBlock(state.blocks, bn);
+      if (!def || !def.ents.length) return;
+      const ghost = { type: 'ins', id: 'gh', bn: def.nomi, x: state.cursor.x, y: state.cursor.y, sc: state.opt.insSc || 1, rot: state.opt.insRot || 0 };
+      for (const g of insEnts(ghost)) drawEntShape(target, g, w2s, view, { stroke: PP.edit, 'stroke-width': 1.6, 'stroke-dasharray': '6 4', fill: 'none', opacity: 0.85, 'pointer-events': 'none' });
+      return;
+    }
     if (t === 'donut') {
       const o = state.opt, c = state.cursor;
       if (o.donutOut > 0) drawEntShape(target, { type: 'circle', cx: c.x, cy: c.y, r: o.donutOut / 2 }, w2s, view, dash);
@@ -2864,6 +3011,7 @@ export function mountDetal(root, opts) {
   /* ---- Kesish / Uzaytirish (AutoCAD tez rejim) — geometriya: src/lib/trimExtend.js ---- */
   function trimExtendClick(t, sx, sy) {
     const hit = entAt(sx, sy);
+    if (hit && blockGuard(hit.ent, t === 'trim' ? 'Kesish' : 'Uzaytirish')) return;
     if (!hit || isAnno(hit.ent)) { setInfo(t === 'trim' ? 'Kesish: chiziq, yoy yoki aylananing olib tashlanadigan qismiga bosing' : 'Uzaytirish: chiziq yoki yoyning uchiga yaqin bosing'); return; }
     const raw = screenToWorld(sx, sy);
     if (t === 'trim') {
@@ -2931,6 +3079,8 @@ export function mountDetal(root, opts) {
       if (state.sel.has(hit.ent.id)) state.sel.delete(hit.ent.id); else state.sel.add(hit.ent.id);
       render(); renderOptRow(); setInfo('Tanlangan: ' + state.sel.size + ' — yana bosing yoki Enter / «Birlashtirish»'); return;
     }
+    if (t === 'block') { if (state.draft && state.draft.tool === 'block') return makeBlock(w); return; }
+    if (t === 'insert') return insertClick(w);
     if (t === 'pline') return plineClick(w);
     if (t === 'rect') return rectClick(w);
     if (t === 'circle') return circleClick(w);
@@ -2945,6 +3095,52 @@ export function mountDetal(root, opts) {
       return;
     }
     if (MODIFY.includes(t)) return modifyClick(t, w);
+  }
+  /* ---- BLOCK (B) va INSERT (I) — src/lib/blockGeom.js ---- */
+  function askBlockName() {
+    if (!state.sel.size) { setInfo('Blok uchun obyektlar tanlanmadi', 'err'); setTool('select'); return; }
+    askText('Blok nomi', '', (nm) => {
+      const err = blockNameError(nm, state.blocks);
+      if (err) { setInfo(err, 'err'); setTool('select'); return; }
+      state.draft = { tool: 'block', nomi: normBlockName(nm) };
+      state.cmdFresh = false;
+      setInfo('«' + normBlockName(nm) + '»: tayanch nuqtani bosing (blok shu nuqtadan qo\u2018yiladi va buriladi)');
+      render();
+    });
+  }
+  function makeBlock(bp) {
+    const d = state.draft; if (!d || d.tool !== 'block') return;
+    const list = selectedEnts().filter((e) => !isCons(e));
+    if (!list.length) { setInfo('Blokka kiradigan obyekt yo\u2018q', 'err'); state.draft = null; setTool('select'); return; }
+    pushHistory();
+    const def = makeBlockDef(d.nomi, list, bp.x, bp.y, textW);
+    state.blocks.push(def); blkDirty();
+    // AutoCAD «Convert to block»: tanlanganlar o'rniga blok nusxasi qo'yiladi
+    const ids = new Set(list.map((e) => e.id));
+    state.ents = state.ents.filter((e) => !ids.has(e.id));
+    const ins = newEnt('ins', { bn: def.nomi, x: bp.x, y: bp.y, sc: 1, rot: 0 });
+    state.ents.push(ins);
+    state.sel.clear(); state.sel.add(ins.id);
+    state.draft = null; state.tool = 'select'; state.cont = null;
+    afterChange(); syncButtons();
+    setInfo('«' + def.nomi + '» bloki yasaldi (' + def.ents.length + ' ta element). Qo\u2018yish uchun: I');
+  }
+  function insertClick(w) {
+    const bn = state.opt.insBn || (state.blocks.length ? state.blocks[state.blocks.length - 1].nomi : '');
+    if (!bn || !findBlock(state.blocks, bn)) { setInfo('Avval blok yasang (B) yoki ro\u2018yxatdan tanlang', 'err'); return; }
+    pushHistory();
+    const e = newEnt('ins', { bn, x: w.x, y: w.y, sc: state.opt.insSc || 1, rot: state.opt.insRot || 0 });
+    state.ents.push(e);
+    if (state.opt.insExplode) { state.sel.clear(); state.sel.add(e.id); afterChange(); explodeEnts([e]); return; }
+    state.sel.clear();
+    afterChange();
+    setInfo('«' + bn + '» qo\u2018yildi \u2014 yana bosing yoki Esc');
+  }
+  function startInsert(bn) {
+    if (!state.blocks.length) { setInfo('Hali blok yo\u2018q \u2014 obyektlarni tanlab B (Blok yasash) bosing', 'err'); return; }
+    if (bn && findBlock(state.blocks, bn)) state.opt.insBn = findBlock(state.blocks, bn).nomi;
+    else if (!state.opt.insBn || !findBlock(state.blocks, state.opt.insBn)) state.opt.insBn = state.blocks[state.blocks.length - 1].nomi;
+    setTool('insert');
   }
   function eraseSelected() {
     if (!state.sel.size) return;
@@ -3004,6 +3200,7 @@ export function mountDetal(root, opts) {
     if (e.type === 'circle') return [{ x: e.cx, y: e.cy, kind: 'c' }, { x: e.cx + e.r, y: e.cy, kind: 'r' }];
     if (e.type === 'arc') { const s = arcStart(e), en = arcEnd(e), m = arcMid(e); return [{ x: s.x, y: s.y, kind: 'as' }, { x: en.x, y: en.y, kind: 'ae' }, { x: m.x, y: m.y, kind: 'am' }, { x: e.cx, y: e.cy, kind: 'ac' }]; }
     if (e.type === 'point') return [{ x: e.x, y: e.y, kind: 'pt' }];
+    if (e.type === 'ins') return [{ x: e.x, y: e.y, kind: 'ip' }];   // blok — qo'yish nuqtasi
     if (e.type === 'dim') {
       const k = dimKind(e);
       if (k === 'lin') { const r = rotatedDim(e); return [{ x: e.x1, y: e.y1, kind: 'p1' }, { x: e.x2, y: e.y2, kind: 'p2' }, { x: (r.a.x + r.b.x) / 2, y: (r.a.y + r.b.y) / 2, kind: 'off' }]; }
@@ -3047,7 +3244,7 @@ export function mountDetal(root, opts) {
     }
     else if (g.kind === 'am') { const a = arcFrom3(arcStart(e), w, arcEnd(e)); if (a) { e.cx = a.cx; e.cy = a.cy; e.r = a.r; e.a0 = a.a0; e.a1 = a.a1; } }   // o'rtasi — bo'rtish
     else if (g.kind === 'ac') { e.cx = w.x; e.cy = w.y; }   // markaz — butun yoy suriladi
-    else if (g.kind === 'pt') { e.x = w.x; e.y = w.y; }
+    else if (g.kind === 'pt' || g.kind === 'ip') { e.x = w.x; e.y = w.y; }
   }
 
   /* ---- Ramka bilan tanlash yordamchilari ---- */
@@ -3059,6 +3256,12 @@ export function mountDetal(root, opts) {
       if (!crossing) return false;
       const R = svg.getBoundingClientRect(), [a, b] = consEnds(ent, state, R.width, R.height), sa = S(a), sb = S(b);
       return pointInRect(sa.x, sa.y, r) || pointInRect(sb.x, sb.y, r) || segIntersectsRect(sa, sb, r);
+    }
+    if (ent.type === 'ins') {   // blok nusxasi — ichidagi elementlar bo'yicha
+      const parts = insEnts(ent);
+      if (!parts.length) { const s0 = S({ x: ent.x, y: ent.y }); return pointInRect(s0.x, s0.y, r); }
+      if (parts.every((g) => boxHit(g, r, false))) return true;
+      return crossing ? parts.some((g) => boxHit(g, r, true)) : false;
     }
     const rings = ent.type === 'hatch'
       ? ent.loops.map((l) => ({ vs: l.map(S), closed: true }))
@@ -3445,6 +3648,20 @@ export function mountDetal(root, opts) {
         target.appendChild(svgEl('line', { x1: sa.x, y1: sa.y, x2: sb.x, y2: sb.y, stroke: sel ? PP.accent : st.color, 'stroke-width': sel ? 2 : (st.width || 1.1), 'stroke-dasharray': sel ? '7 4' : (st.dash || 'none'), opacity: (sel ? 1 : 0.7) * fade, 'pointer-events': 'none' }));
         continue;
       }
+      if (e.type === 'ins') {   // blok nusxasi: ichidagi har element o'z qatlami bo'yicha
+        for (const g of insEnts(e)) {
+          const gst = styleOf(g, PP, view.scale, exportMode, m);
+          if (gst.hidden) continue;
+          if (g.type === 'hatch') { paintHatch(target, Object.assign({}, g, { id: String(e.id) + '_' + g.iid }), w2s, view, PP, sel, exportMode, gst); continue; }
+          if (g.type === 'text') { paintText(target, g, w2s, view, sel ? PP.accent : gst.color, false, fade); continue; }
+          if (g.type === 'dim') { paintDim(target, g, sel, w2s, view, PP, gst, fade); continue; }
+          const ga = { stroke: sel ? PP.accent : gst.color, 'stroke-width': sel ? 2.6 * m : (gst.width || 1.9 * m), fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'pointer-events': 'none' };
+          if (sel) ga['stroke-dasharray'] = '7 4'; else if (gst.dash) ga['stroke-dasharray'] = gst.dash;
+          if (fade !== 1) ga.opacity = fade;
+          drawEntShape(target, g, w2s, view, ga);
+        }
+        continue;
+      }
       if (e.type === 'dim') { paintDim(target, e, sel, w2s, view, PP, st, fade); continue; }
       if (e.type === 'text') {
         if (!exportMode && state.draft && state.draft.tool === 'text' && state.draft.edit === e.id) continue;   // tahrirlanayotgan matn — jonli ko'rinishda
@@ -3581,7 +3798,7 @@ export function mountDetal(root, opts) {
     renderTable(); renderLib(); renderZakas(); syncButtons(); syncProjUI(); syncOffUI();
   }
   function renderTable() {
-    syncLayerUI(); renderProps();   // tanlov o'zgarganda qatlam va xususiyat ro'yxatlari ham yangilanadi
+    syncLayerUI(); renderProps(); renderBlocks();   // tanlov o'zgarganda qatlam, blok va xususiyat ro'yxatlari ham yangilanadi
     const el = q('segTable'), ap = activePline();
     if (!ap || ap.pts.length < 2) { el.innerHTML = '<div class="dtl-empty">Chiziq yo\'q — «Chiziq» asbobi bilan chizing</div>'; return; }
     if (ap.smooth) {   // ellips / splayn — segmentlar jadvali o'rniga umumiy ma'lumot
@@ -3629,7 +3846,7 @@ export function mountDetal(root, opts) {
     if (!state.ents.length) { setInfo("Chizma bo'sh — saqlash uchun avval chizing"); return; }
     if (!name) { name = V.autoName + ' ' + (state.lib.length + 1); q('nameInput').value = name; }
     state.name = name;
-    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), layers: JSON.parse(JSON.stringify(state.layers)), proj: JSON.parse(JSON.stringify(state.proj)), autoOff: state.autoOff, t: Date.now() };
+    const item = { id: Date.now(), name, ents: JSON.parse(JSON.stringify(state.ents)), layers: JSON.parse(JSON.stringify(state.layers)), blocks: JSON.parse(JSON.stringify(state.blocks)), proj: JSON.parse(JSON.stringify(state.proj)), autoOff: state.autoOff, t: Date.now() };
     const idx = state.lib.findIndex((x) => String(x.name).toLowerCase() === name.toLowerCase());
     if (idx >= 0) { item.id = state.lib[idx].id; state.lib[idx] = item; } else state.lib.unshift(item);
     saveLib(); renderLib(); saveLS();
@@ -3640,7 +3857,7 @@ export function mountDetal(root, opts) {
     cancelDraft(false); pushHistory();
     state.ents = JSON.parse(JSON.stringify(it.ents || []));
     state.nextId = Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1;
-    mergeLayers(it.layers); migrateEnts(state.ents, V.mainLayer);   // chizma o'z qatlamlarini olib keladi
+    mergeLayers(it.layers); mergeBlocks(it.blocks); migrateEnts(state.ents, V.mainLayer);   // chizma o'z qatlam va bloklarini olib keladi
     state.name = it.name; q('nameInput').value = it.name;
     if (it.proj && V.proj) state.proj = sanitizeProj(it.proj);
     if (V.autoOffset && it.autoOff != null) state.autoOff = sanitizeAutoOff(it.autoOff);
@@ -3692,6 +3909,7 @@ export function mountDetal(root, opts) {
     const L = (x1, y1, x2, y2) => { out += '0\nLINE\n8\n' + lay + '\n' + extra + '10\n' + num(x1) + '\n20\n' + num(-y1) + '\n30\n0\n11\n' + num(x2) + '\n21\n' + num(-y2) + '\n31\n0\n'; };
     const emit = (ents, fixedLay) => {
       for (const e of ents) {
+        if (e.type === 'ins') { emit(insEnts(e), fixedLay); continue; }   // blok nusxasi — elementlariga yoyib yoziladi
         lay = fixedLay || (e.lay == null ? V.mainLayer : e.lay);
         extra = fixedLay ? '' : ex(e);
         if (e.type === 'pline') { for (const s of plineSegs(e)) if (dist(s.a, s.b) > 1e-6) L(s.a.x, s.a.y, s.b.x, s.b.y); }
@@ -3705,7 +3923,8 @@ export function mountDetal(root, opts) {
     emit(ents);
     emit(state.autoEnts || [], 'OFSET');   // avtomatik ichki ofset — alohida qatlam
     // Faqat ishlatilgan qatlamlar (+ OFSET bo'lsa) yoziladi
-    const usedN = new Set(ents.map((e) => layOf(e).nomi));
+    const usedN = new Set();
+    for (const e of ents) { if (e.type === 'ins') { for (const g of insEnts(e)) usedN.add(layOf(g).nomi); } else usedN.add(layOf(e).nomi); }
     if ((state.autoEnts || []).length) usedN.add('OFSET');
     const layers = state.layers.filter((l) => usedN.has(l.nomi));
     if (!layers.length) layers.push(makeLayer(V.mainLayer, { color: 7 }));
@@ -3792,7 +4011,7 @@ export function mountDetal(root, opts) {
         showLen: state.showLen, showAng: state.showAng,
         scale: state.scale, panX: state.panX, panY: state.panY, name: state.name,
         proj: state.proj, autoOff: state.autoOff, arcMethod: state.arcMethod, opt: state.opt, board: state.board, cmdUse: state.cmdUse,
-        layers: state.layers, clay: state.clay, ltscale: state.ltscale, lwShow: state.lwShow,
+        layers: state.layers, clay: state.clay, ltscale: state.ltscale, lwShow: state.lwShow, blocks: state.blocks,
       }));
     } catch (e) { setInfo('Brauzer xotirasi to\u2018ldi \u2014 chizma saqlanmadi (eski detallarni kutubxonadan o\u2018chiring)', 'err'); }
     zakasSave();
@@ -3805,12 +4024,14 @@ export function mountDetal(root, opts) {
       const o = JSON.parse(raw); if (!o || !Array.isArray(o.ents)) return false;
       state.ents = o.ents.filter((e) => e && (e.type === 'pline' ? Array.isArray(e.pts) : (e.type === 'arc' ? [e.cx, e.cy, e.r, e.a0, e.a1].every(Number.isFinite) && e.r > 0 : true)));
       state.nextId = o.nextId || (Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1);
+      state.blocks = sanitizeBlocks(o.blocks);
       try { state.layers = sanitizeLayers(o.layers, V.mainLayer); } catch (e2) { state.layers = defaultLayers(V.mainLayer); }
       layDirty();
       state.clay = (findLayer(state.layers, o.clay) || findLayer(state.layers, V.mainLayer) || state.layers[0]).nomi;
       if (Number.isFinite(o.ltscale) && o.ltscale > 0) state.ltscale = Math.min(1000, o.ltscale);
       state.lwShow = !!o.lwShow;
       migrateEnts(state.ents, V.mainLayer);   // eski chizma (qatlamsiz) — asosiy qatlamga
+      state.ents = state.ents.filter((e) => e.type !== 'ins' || (findBlock(state.blocks, e.bn) && Number.isFinite(e.x) && Number.isFinite(e.y)));   // ta'rifi yo'q blok nusxasi tashlanadi
       if (UNITS[o.unit]) state.unit = o.unit;
       state.angMode = o.angMode === 'rel' ? 'rel' : 'abs';
       if (TOOLS.includes(o.tool)) state.tool = o.tool;
@@ -4061,6 +4282,7 @@ export function mountDetal(root, opts) {
     if (hit.ent.type === 'text') { state.sel.clear(); textStart(null, hit.ent); return; }
     if (hit.ent.type === 'pline' && hit.ent.ell) { state.sel.clear(); state.sel.add(hit.ent.id); openEllipseEdit(hit.ent); return; }
     if (hit.ent.type === 'pline' && hit.ent.smooth) { state.sel.clear(); state.sel.add(hit.ent.id); render(); setInfo("Silliq egri: shaklini griplar bilan o'zgartiring"); return; }
+    if (hit.ent.type === 'ins') { setInfo('Blok «' + hit.ent.bn + '» \u2014 o\u2018zgartirish uchun Portlatish (X) qiling yoki griplar bilan suring'); return; }
     if (hit.ent.type === 'pline') openSegEdit(hit.ent, hit.seg);
     else if (hit.ent.type === 'circle') { state.sel.clear(); state.sel.add(hit.ent.id); openCircleEdit(hit.ent); }
     else if (hit.ent.type === 'arc') { state.sel.clear(); state.sel.add(hit.ent.id); openArcEdit(hit.ent); }
@@ -4076,7 +4298,7 @@ export function mountDetal(root, opts) {
       if (arcMenu.classList.contains('show')) { e.preventDefault(); showArcMenu(false); return; }
       if (q('layDlg').classList.contains('show')) { e.preventDefault(); openLayerDlg(false); return; }
       if (state.layPick || state.match) { e.preventDefault(); state.layPick = null; state.match = null; setInfo('*Bekor qilindi*'); return; }
-      pendingNum = null;
+      pendingNum = null; pendingText = null;
       if (ctxMenu.classList.contains('show')) { e.preventDefault(); hideCtx(); return; }
       if (state.picking) { e.preventDefault(); state.picking = false; state.sel.clear(); setTool('select'); state.cmdFresh = false; setInfo('*Bekor qilindi*'); return; }
       if (state.measureShow) { state.measureShow = null; render(); }
@@ -4118,7 +4340,9 @@ export function mountDetal(root, opts) {
   function pressEnter() {
     if (state.picking) {   // obyekt tanlash tugadi → buyruq davom etadi
       if (!state.sel.size) { setInfo('Hech narsa tanlanmadi — obyektni bosing yoki ramka torting (Esc — bekor)'); return; }
-      state.picking = false; setInfo(toolHint(state.tool)); syncButtons(); render(); return;
+      state.picking = false;
+      if (state.tool === 'block') { syncButtons(); render(); askBlockName(); return; }
+      setInfo(toolHint(state.tool)); syncButtons(); render(); return;
     }
     if (state.draft && state.draft.tool === 'pline') { finishPline(false); return; }
     if (state.tool === 'array' && state.sel.size && (state.opt.arr.kind === 'rect' || (state.draft && state.draft.center))) { applyArray(); return; }
@@ -4212,6 +4436,25 @@ export function mountDetal(root, opts) {
   on(q('lwShowIn'), 'change', (e) => { state.lwShow = !!e.target.checked; syncLayerUI(); render(); saveLS(); });
   on(q('tgLw'), 'click', () => { state.lwShow = !state.lwShow; const c = q('lwShowIn'); if (c) c.checked = state.lwShow; syncLayerUI(); render(); saveLS(); setInfo(state.lwShow ? '<Qalinlik yoqildi>' : '<Qalinlik o‘chirildi>'); });
   on(q('btnMatch'), 'click', () => startMatchProp());
+  on(q('btnBlocks'), 'click', () => { const b = q('blkList'); if (b.style.display === 'none') q('tgBlocks').click(); else renderBlocks(); });
+  on(q('tgBlocks'), 'click', () => {
+    const box = q('blkList'), btn = q('tgBlocks');
+    const show = box.style.display === 'none';
+    box.style.display = show ? '' : 'none';
+    btn.classList.toggle('open', show);
+    if (show) renderBlocks();
+  });
+  on(q('blkList'), 'click', (e) => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const it = b.closest('[data-blk]'); if (!it) return;
+    const nomi = it.getAttribute('data-blk');
+    if (b.getAttribute('data-act') === 'ins') { startInsert(nomi); return; }
+    const def = findBlock(state.blocks, nomi); if (!def) return;
+    pushHistory();
+    state.blocks = state.blocks.filter((x) => x.nomi !== def.nomi);
+    blkDirty(); renderBlocks(); afterChange();
+    setInfo('«' + def.nomi + '» bloki o\u2018chirildi');
+  });
   // Qatlamlar jadvali — bosish (tugmalar) va ro'yxatlar
   on(q('layBody'), 'click', (e) => {
     const b = e.target.closest('button[data-act]'); if (!b) return;
@@ -4357,7 +4600,7 @@ export function mountDetal(root, opts) {
     const it = state.zakas.items[state.zakas.active]; if (!it) return;
     state.ents = JSON.parse(JSON.stringify(it.ents || [])).filter((e) => e && e.type);
     state.nextId = Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1;
-    mergeLayers(it.layers); migrateEnts(state.ents, V.mainLayer);
+    mergeLayers(it.layers); mergeBlocks(it.blocks); migrateEnts(state.ents, V.mainLayer);
     state.name = it.name || ''; q('nameInput').value = state.name;
     state.autoOff = it.autoOff == null ? AUTO_OFF_DEF : sanitizeAutoOff(it.autoOff);
     state.sel.clear(); state.hist.length = 0; state.redo.length = 0; state.cont = null;
@@ -4365,7 +4608,7 @@ export function mountDetal(root, opts) {
   // Ishchi holatdan faol gulga (saqlashdan / almashishdan oldin)
   function zakasSyncActive() {
     const it = state.zakas.items[state.zakas.active]; if (!it) return;
-    it.name = state.name; it.ents = JSON.parse(JSON.stringify(state.ents)); it.layers = JSON.parse(JSON.stringify(state.layers)); it.autoOff = state.autoOff; it.t = Date.now();
+    it.name = state.name; it.ents = JSON.parse(JSON.stringify(state.ents)); it.layers = JSON.parse(JSON.stringify(state.layers)); it.blocks = JSON.parse(JSON.stringify(state.blocks)); it.autoOff = state.autoOff; it.t = Date.now();
   }
   function zakasSave() {
     if (!V.zakas || !state.zakas.items.length) return;
@@ -4509,6 +4752,8 @@ export function mountDetal(root, opts) {
     const c = cmdById(id);
     if (c) { logLine('Buyruq: ' + cmdLabel(id), 'cmd'); pushRecent(id); state.cmdUse[id] = (state.cmdUse[id] || 0) + 1; saveLS(); }
     if (id.charAt(0) === '#') state.cmdFresh = false;   // asbob emas — keyingi harf yana buyruq bo'lsin
+    if (id === '#blocks') { const b = q('blkList'); if (b.style.display === 'none') q('tgBlocks').click(); else renderBlocks(); return; }
+    if (id === '#purge') return purgeUnused();
     if (id === '#layer') return openLayerDlg(true);
     if (id === '#laymcur') return state.sel.size ? setClay(layOf(selectedEnts()[0]).nomi) : startLayPick('cur');
     if (id === '#laycur') { if (!state.sel.size) { setInfo('Avval elementlarni tanlang', 'err'); return; } return moveSelToLayer(state.clay); }
@@ -4531,6 +4776,7 @@ export function mountDetal(root, opts) {
     if (id === '#start0') return start0();
     if (id.startsWith('arc:')) { const k = id.slice(4); if (ARC_BY_KEY[k]) { state.arcMethod = k; renderArcMenu(); saveLS(); } setTool('arc'); return; }
     if (id.startsWith('dim:')) { const k = id.slice(4); if (DIM_KINDS[k]) state.opt.dimKind = k; setTool('dim'); syncButtons(); return; }
+    if (id === 'insert') return startInsert(null);
     if (TOOLS.includes(id)) setTool(id);
   }
   /* ---- Buyruq satriga yozilganini bajarish (AutoCAD mantiqi) ----
@@ -4539,6 +4785,16 @@ export function mountDetal(root, opts) {
   const inputHist = [];   // yozilganlar tarixi (strelka TEPA)
   let inputPos = -1;
   let pendingNum = null;  // {idx, label, unit} — kalit so'z bilan tanlangan raqamli variant qiymat kutmoqda
+  let pendingText = null; // {label, def, onText} — buyruq satri MATN kutmoqda (blok nomi, guruh nomi…)
+  // Buyruq satrida matn so'rash (AutoCAD: «Blok nomi:»)
+  function askText(label, def, onText) {
+    pendingText = { label, def: def || '', onText };
+    cmdClose();
+    curPrompt = label + (def ? ' <' + def + '>' : '') + ':';
+    setInfo(curPrompt);
+    cmdInput.focus();
+  }
+  function clearPendingText() { if (pendingText) { pendingText = null; syncPrompt(); } }
   function wantsPoint() {
     if (state.picking) return false;
     if (state.draft) return true;
@@ -4566,6 +4822,13 @@ export function mountDetal(root, opts) {
   function cmdSubmit(raw) {
     const s = String(raw == null ? '' : raw).trim();
     if (s) logLine(s, 'cmd');   // AutoCAD: yozilgani tarixda aks etadi
+    if (pendingText) {   // matn kutilmoqda (blok nomi…) — XOM matn olinadi, ichki probel saqlanadi
+      const pt = pendingText; pendingText = null; cmdClose();
+      const nm = String(raw == null ? '' : raw).trim() || pt.def;
+      if (!nm) { setInfo('Nom yozilmadi \u2014 bekor qilindi', 'err'); state.cmdFresh = false; setTool('select'); return; }
+      pt.onText(nm);
+      return;
+    }
     if (pendingNum) {   // raqamli variant qiymati (bo'sh Enter — standart qiymat qoladi, AutoCAD <…>)
       const it = optRowItems[pendingNum.idx], v = s ? (evalExpr(s) != null ? evalExpr(s) : cmdNum(s)) : null;
       const nm = pendingNum.label; pendingNum = null; cmdClose();
@@ -4671,7 +4934,7 @@ export function mountDetal(root, opts) {
     // AutoCAD: Probel ham Enter kabi bajaradi (bo'sh bo'lsa — oxirgi buyruqni takrorlaydi)
     if (e.key === 'F2') { e.preventDefault(); e.stopPropagation(); toggleTextWin(); return; }
     // Probel — Enter kabi bajaradi (AutoCAD); Shift+Probel — oddiy bo'shliq (ko'p so'zli qidiruv uchun)
-    if (e.key === 'Enter' || (e.key === ' ' && !e.shiftKey)) { e.preventDefault(); e.stopPropagation(); const v = cmdInput.value; cmdInput.value = ''; cmdSubmit(v); return; }
+    if (e.key === 'Enter' || (e.key === ' ' && !e.shiftKey && !pendingText)) { e.preventDefault(); e.stopPropagation(); const v = cmdInput.value; cmdInput.value = ''; cmdSubmit(v); return; }
     const K = e.key.toLowerCase();   // chizma qisqartmalari buyruq satri fokusda bo'lganda ham ishlaydi
     if ((e.ctrlKey || e.metaKey) && !cmdInput.value && ['z', 'y', 'a', 'e'].includes(K)) {
       e.preventDefault(); e.stopPropagation();
@@ -4694,6 +4957,7 @@ export function mountDetal(root, opts) {
     if (e.key === 'Escape') {
       e.preventDefault(); e.stopPropagation();
       if (cmdList.classList.contains('show') && cmdInput.value) { cmdList.classList.remove('show'); return; }   // 1) ro'yxat yopiladi
+      if (pendingText) { pendingText = null; cmdClose(); state.draft = null; setTool('select'); setInfo('*Bekor qilindi*'); return; }
       if (pendingNum) { pendingNum = null; cmdClose(); setInfo(toolHint(state.tool)); return; }
       if (cmdInput.value) { cmdClose(); cmdInput.focus(); return; }   // 2) matn tozalanadi
       if (q('textWin').classList.contains('show')) { toggleTextWin(false); return; }
