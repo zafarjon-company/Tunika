@@ -393,6 +393,10 @@ function buildTemplate(V) {
     <button type="button" class="tool import" data-dtl="btnImport" title="AutoCAD DXF faylni import qilish (maydonga sudrab tashlasa ham bo'ladi)">&#128193; Import DXF</button>
     <input type="file" accept=".dxf,.DXF" data-dtl="fileInput" style="display:none" />
     <button type="button" class="tool" data-dtl="btnDxf" title="Chizmani DXF (mm) qilib yuklab olish — lazer / AutoCAD uchun">&#11015; DXF</button>
+    <select class="rowUnit" data-dtl="dxfVer" title="DXF formati: 2000 — yoylar ARC, konturlar LWPOLYLINE bo'lib saqlanadi (Bodor / CypCut uchun asosiy variant, kamroq segment — silliq kesim); R12 — eng sodda, boshqa sex yoki eski dasturga yuborilganda">
+      <option value="2000">DXF 2000 (yoylar saqlanadi)</option>
+      <option value="r12">DXF R12 (eski dastur)</option>
+    </select>
     <button type="button" class="tool" data-dtl="btnPng" title="Chizmani rasm (PNG) qilib yuklab olish — Telegram / chop etish uchun">&#11015; Rasm</button>
     <button type="button" class="tool tg" data-dtl="tgBoard" title="AutoCAD doskasi: to'q kulrang fon, oq chiziqlar, ko'k tanlov (o'chirilsa — ilova mavzusi ranglari)">AutoCAD doska</button>
     <span class="sep"></span>
@@ -627,7 +631,7 @@ export function mountDetal(root, opts) {
     cmdFresh: false,       // buyruq endigina boshlandi (birinchi kiritish kutilmoqda) — kalit so'zlar ustun
     lastPt: null,          // oxirgi qo'yilgan nuqta (AutoCAD LASTPOINT) — «@» shundan
     snapOnce: null,        // bir martalik magnit (END, MID…)
-    opt: { col: null, lt: null, lw: null, insSc: 1, insRot: 0, insExplode: false,   // joriy element xossalari (CECOLOR/CELTYPE/CELWEIGHT); null — «Qatlam bo'yicha»
+    opt: { col: null, lt: null, lw: null, insSc: 1, insRot: 0, insExplode: false, dxfVer: '2000',   // joriy element xossalari (CECOLOR/CELTYPE/CELWEIGHT); null — «Qatlam bo'yicha»
       circleMode: 'cr', copyMulti: true, moveCopy: false, rotateCopy: false, mirrorErase: false, scaleCopy: false, offsetMulti: false,
       filletR: 10, filletPoly: false, filletTrim: true, chamD1: 10, chamD2: 10, chamPoly: false, chamTrim: true,
       polyN: 6, polyMode: 'in', donutIn: 10, donutOut: 20, breakMode: '2p', lenMode: 'delta', lenDelta: 10, lenPct: 110, lenTotal: 1000,
@@ -4077,48 +4081,68 @@ export function mountDetal(root, opts) {
 
   /* ---------------- EKSPORT: DXF / PNG ---------------- */
   // DXF: chiziq turlari jadvali (LTYPE) — nomlangan punktirlar boshqa dasturda ham ko'rinsin
-  function dxfLtypeTable(names) {
+  // ---- DXF eksport: AC1015 (DXF 2000) yoki R12 ----
+  // Lazer (Bodor / CypCut) uchun asosiy variant — DXF 2000: siniq chiziq LWPOLYLINE
+  // bo'lib bitta element bo'lib qoladi, yoylar ARC bo'lib saqlanadi (kamroq segment,
+  // silliq kesim). R12 — boshqa sexga yoki eski dasturga yuborilganda.
+  let _dxfH = 0x100;
+  function dxfH() { return (++_dxfH).toString(16).toUpperCase(); }
+  function dxfLtypeTable(names, v2000) {
     const num = (v) => (Math.round(v * 1000) / 1000).toString();
     const list = ['CONTINUOUS'].concat(names.filter((n) => n !== 'CONTINUOUS'));
-    let t = '0\nTABLE\n2\nLTYPE\n70\n' + list.length + '\n';
+    let t = '0\nTABLE\n2\nLTYPE\n' + (v2000 ? '5\n' + dxfH() + '\n100\nAcDbSymbolTable\n' : '') + '70\n' + list.length + '\n';
     for (const n of list) {
       const d = LT[n] || LT.CONTINUOUS;
       const pat = d.pat || [];
       const els = [];
       for (let i = 0; i < pat.length; i++) els.push(i % 2 ? -pat[i] : pat[i]);
       const total = els.reduce((a, b) => a + Math.abs(b), 0);
-      t += '0\nLTYPE\n2\n' + n + '\n70\n0\n3\n' + (d.nomi || n) + '\n72\n65\n73\n' + els.length + '\n40\n' + num(total) + '\n';
-      for (const v of els) t += '49\n' + num(v) + '\n';
+      t += '0\nLTYPE\n' + (v2000 ? '5\n' + dxfH() + '\n100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n' : '')
+        + '2\n' + n + '\n70\n0\n3\n' + (d.nomi || n) + '\n72\n65\n73\n' + els.length + '\n40\n' + num(total) + '\n';
+      for (const v of els) t += '49\n' + num(v) + '\n' + (v2000 ? '74\n0\n' : '');
     }
     return t + '0\nENDTAB\n';
   }
   // DXF: qatlamlar jadvali (LAYER) — nom, rang (ACI), chiziq turi, qalinlik
-  function dxfLayerTable(layers) {
-    let t = '0\nTABLE\n2\nLAYER\n70\n' + layers.length + '\n';
+  function dxfLayerTable(layers, v2000) {
+    let t = '0\nTABLE\n2\nLAYER\n' + (v2000 ? '5\n' + dxfH() + '\n100\nAcDbSymbolTable\n' : '') + '70\n' + layers.length + '\n';
     for (const l of layers) {
       const flags = (l.frozen ? 1 : 0) + (l.locked ? 4 : 0);
       const col = l.on ? Math.abs(l.color || 7) : -Math.abs(l.color || 7);   // manfiy — qatlam o'chiq
-      t += '0\nLAYER\n2\n' + l.nomi + '\n70\n' + flags + '\n62\n' + col + '\n6\n' + (l.lt || 'CONTINUOUS') + '\n';
+      t += '0\nLAYER\n' + (v2000 ? '5\n' + dxfH() + '\n100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord\n' : '')
+        + '2\n' + l.nomi + '\n70\n' + flags + '\n62\n' + col + '\n6\n' + (l.lt || 'CONTINUOUS') + '\n';
       if (Number.isFinite(l.lw) && l.lw >= 0) t += '370\n' + Math.round(l.lw) + '\n';
     }
     return t + '0\nENDTAB\n';
   }
-  function buildDxf() {
+  function buildDxf(ver) {
+    const v2000 = ver !== 'r12';
+    _dxfH = 0x100;
     const num = (v) => (Math.round(v * 1000) / 1000).toString();
     let out = '', lay = V.mainLayer, extra = '';
     // Element ustidagi xossalar (qatlamdan farqli rang / chiziq turi / qalinlik)
     const ex = (e) => (Number.isFinite(e.col) ? '62\n' + e.col + '\n' : '') + (e.lt && LT[e.lt] ? '6\n' + e.lt + '\n' : '') + (Number.isFinite(e.lw) && e.lw >= 0 ? '370\n' + Math.round(e.lw) + '\n' : '');
-    const L = (x1, y1, x2, y2) => { out += '0\nLINE\n8\n' + lay + '\n' + extra + '10\n' + num(x1) + '\n20\n' + num(-y1) + '\n30\n0\n11\n' + num(x2) + '\n21\n' + num(-y2) + '\n31\n0\n'; };
+    // Element sarlavhasi: tur, tutqich (2000), qatlam, xossalar, quyi sinf belgisi
+    const head = (t, sub) => '0\n' + t + '\n' + (v2000 ? '5\n' + dxfH() + '\n100\nAcDbEntity\n' : '') + '8\n' + lay + '\n' + extra + (v2000 && sub ? '100\n' + sub + '\n' : '');
+    const L = (x1, y1, x2, y2) => { out += head('LINE', 'AcDbLine') + '10\n' + num(x1) + '\n20\n' + num(-y1) + '\n30\n0\n11\n' + num(x2) + '\n21\n' + num(-y2) + '\n31\n0\n'; };
+    // Siniq chiziq: 2000 da bitta LWPOLYLINE, R12 da alohida LINE lar
+    const PL = (e) => {
+      const pts = e.pts || [];
+      if (pts.length < 2) return;
+      if (!v2000) { for (const s of plineSegs(e)) if (dist(s.a, s.b) > 1e-6) L(s.a.x, s.a.y, s.b.x, s.b.y); return; }
+      out += head('LWPOLYLINE', 'AcDbPolyline') + '90\n' + pts.length + '\n70\n' + (e.closed && pts.length > 2 ? 1 : 0) + '\n43\n0\n';
+      for (const p of pts) out += '10\n' + num(p.x) + '\n20\n' + num(-p.y) + '\n';
+    };
     const emit = (ents, fixedLay) => {
       for (const e of ents) {
         if (e.type === 'ins') { emit(insEnts(e), fixedLay); continue; }   // blok nusxasi — elementlariga yoyib yoziladi
         lay = fixedLay || (e.lay == null ? V.mainLayer : e.lay);
         extra = fixedLay ? '' : ex(e);
-        if (e.type === 'pline') { for (const s of plineSegs(e)) if (dist(s.a, s.b) > 1e-6) L(s.a.x, s.a.y, s.b.x, s.b.y); }
-        else if (e.type === 'circle') out += '0\nCIRCLE\n8\n' + lay + '\n' + extra + '10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n';
-        else if (e.type === 'point') out += '0\nPOINT\n8\n' + lay + '\n' + extra + '10\n' + num(e.x) + '\n20\n' + num(-e.y) + '\n30\n0\n';
-        else if (e.type === 'text') out += '0\nTEXT\n8\n' + lay + '\n' + extra + '10\n' + num(e.x) + '\n20\n' + num(-e.y) + '\n30\n0\n40\n' + num(e.h) + '\n1\n' + String(e.text).replace(/[\r\n]+/g, ' ') + '\n50\n' + num(e.rot || 0) + '\n';
-        else if (e.type === 'arc') out += '0\nARC\n8\n' + lay + '\n' + extra + '10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n50\n' + num(e.a0) + '\n51\n' + num(e.a1) + '\n';
+        if (e.type === 'pline') PL(e);
+        else if (e.type === 'circle') out += head('CIRCLE', 'AcDbCircle') + '10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n';
+        else if (e.type === 'point') out += head('POINT', 'AcDbPoint') + '10\n' + num(e.x) + '\n20\n' + num(-e.y) + '\n30\n0\n';
+        else if (e.type === 'text') out += head('TEXT', 'AcDbText') + '10\n' + num(e.x) + '\n20\n' + num(-e.y) + '\n30\n0\n40\n' + num(e.h) + '\n1\n' + String(e.text).replace(/[\r\n]+/g, ' ') + '\n50\n' + num(e.rot || 0) + '\n';
+        else if (e.type === 'arc') out += head('ARC', 'AcDbCircle') + '10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n' + (v2000 ? '100\nAcDbArc\n' : '') + '50\n' + num(e.a0) + '\n51\n' + num(e.a1) + '\n';
       }
     };
     const ents = plotEnts();   // o'chiq / muzlatilgan / «chop etilmaydi» qatlamlar chiqmaydi
@@ -4131,14 +4155,17 @@ export function mountDetal(root, opts) {
     const layers = state.layers.filter((l) => usedN.has(l.nomi));
     if (!layers.length) layers.push(makeLayer(V.mainLayer, { color: 7 }));
     const lts = Array.from(new Set(layers.map((l) => l.lt).concat(ents.map((e) => e.lt).filter((x) => x && LT[x]))));
-    const tables = '0\nSECTION\n2\nTABLES\n' + dxfLtypeTable(lts) + dxfLayerTable(layers) + '0\nENDSEC\n';
-    return '0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n9\n$LTSCALE\n40\n' + num(state.ltscale) + '\n0\nENDSEC\n'
-      + tables + '0\nSECTION\n2\nENTITIES\n' + out + '0\nENDSEC\n0\nEOF\n';
+    const tables = '0\nSECTION\n2\nTABLES\n' + dxfLtypeTable(lts, v2000) + dxfLayerTable(layers, v2000) + '0\nENDSEC\n';
+    const header = '0\nSECTION\n2\nHEADER\n' + (v2000 ? '9\n$ACADVER\n1\nAC1015\n' : '')
+      + '9\n$INSUNITS\n70\n4\n9\n$LTSCALE\n40\n' + num(state.ltscale) + '\n'
+      + (v2000 ? '9\n$HANDSEED\n5\nFFFF\n' : '') + '0\nENDSEC\n';
+    return header + tables + '0\nSECTION\n2\nENTITIES\n' + out + '0\nENDSEC\n0\nEOF\n';
   }
   function exportDxf() {
     if (!state.ents.some((e) => e.type !== 'dim')) { setInfo("Chizma bo'sh — eksport qilinmaydi"); return; }
-    downloadDxf(V.filePrefix + safeFileName(state.name || 'chizma') + '.dxf', buildDxf());
-    setInfo('DXF yuklab olindi (mm, Y yuqoriga)');
+    const ver = state.opt.dxfVer === 'r12' ? 'r12' : '2000';
+    downloadDxf(V.filePrefix + safeFileName(state.name || 'chizma') + (ver === 'r12' ? '_r12' : '') + '.dxf', buildDxf(ver));
+    setInfo(ver === 'r12' ? 'DXF R12 yuklab olindi (mm, Y yuqoriga) \u2014 eski dasturlar uchun' : 'DXF 2000 yuklab olindi (mm, Y yuqoriga) \u2014 yoylar va konturlar saqlangan');
   }
   async function exportPng() {
     const b = bounds(true); if (!b) { setInfo("Chizma bo'sh"); return; }
@@ -4256,6 +4283,7 @@ export function mountDetal(root, opts) {
         so.col = Number.isFinite(p.col) ? p.col : null;
         so.lt = (p.lt && LT[p.lt]) ? p.lt : null;
         so.lw = Number.isFinite(p.lw) ? p.lw : null;
+        if (p.dxfVer === 'r12' || p.dxfVer === '2000') so.dxfVer = p.dxfVer;
         if (CIRCLE_MODES[p.circleMode]) so.circleMode = p.circleMode;
         for (const k of ['copyMulti', 'moveCopy', 'rotateCopy', 'mirrorErase', 'scaleCopy', 'offsetMulti', 'filletPoly', 'filletTrim', 'chamPoly', 'chamTrim']) if (typeof p[k] === 'boolean') so[k] = p[k];
         for (const k of ['filletR', 'chamD1', 'chamD2', 'donutIn', 'donutOut', 'lenPct', 'lenTotal', 'measLen']) if (Number.isFinite(p[k]) && p[k] >= 0) so[k] = p[k];
@@ -4295,6 +4323,7 @@ export function mountDetal(root, opts) {
     q('btnRedo').disabled = !state.redo.length;
     q('btnStart0').style.display = (state.draft && state.draft.tool === 'pline') ? 'none' : '';
     q('unitSel').value = state.unit;
+    const dv = q('dxfVer'); if (dv) dv.value = state.opt.dxfVer || '2000';
     q('angMode').value = state.angMode;
     syncPolarSel();
     renderOptRow();
@@ -4769,6 +4798,7 @@ export function mountDetal(root, opts) {
   on(canvasWrap, 'dragleave', () => canvasWrap.classList.remove('chz-dragover'));
   on(canvasWrap, 'drop', (e) => { e.preventDefault(); canvasWrap.classList.remove('chz-dragover'); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; handleFile(f); });
   on(q('btnDxf'), 'click', exportDxf);
+  on(q('dxfVer'), 'change', (e) => { state.opt.dxfVer = e.target.value === 'r12' ? 'r12' : '2000'; saveLS(); setInfo(state.opt.dxfVer === 'r12' ? 'DXF R12 \u2014 eski dasturlar uchun' : 'DXF 2000 \u2014 yoylar va konturlar saqlanadi (lazer uchun)'); });
   on(q('btnPng'), 'click', exportPng);
 
   // Yon panel

@@ -202,7 +202,11 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   to'rtburchak, aylana, o'lcham chizig'i, ko'chirish/nusxa/burish/aks/masshtab/
   offset/o'chirish, griplar, undo/redo. Nomlangan detallar **kutubxonasi**
   (`detal-chizma-lib-v1`, localStorage), joriy chizma `detal-chizma-v1`.
-  **DXF** import (mm/sm/m, $INSUNITS) va eksport (mm, LINE/CIRCLE/ARC), **PNG** rasm.
+  **DXF** import (mm/sm/m, $INSUNITS) va eksport (mm, Y yuqoriga) — asboblar qatoridagi
+  ro'yxatdan format tanlanadi: **DXF 2000** (standart; `$ACADVER=AC1015`, kontur bitta
+  **LWPOLYLINE**, yoylar **ARC** — lazer uchun kamroq segment, silliq kesim; Bodor / CypCut
+  shu variantni oladi) yoki **DXF R12** (eng sodda: LINE + ARC + CIRCLE — boshqa sexga yoki
+  eski dasturga yuborilganda, fayl nomiga `_r12` qo'shiladi). **PNG** rasm.
 - **Gul chizish** — gul / naqsh konturini Detal chizish bilan bir xil asboblar
   bilan chizish (`src/modullar/sotuv/gulEngine.js` → `detalEngine.js`,
   variant `'gul'`, `VARIANTS` jadvali). Farqi — yon panelda **«Ofset (ichkariga)»**
