@@ -34,6 +34,7 @@ import { closedLoops, findRegion, pointInLoops, regionArea, regionAreaOf } from 
 import { TEXT_CAP } from '../../lib/curveGeom.js';
 import { parseInput, pointFromDist, deriveKeywords, matchKeyword, promptWithOptions, cmdFilter, num1 as cmdNum, evalExpr } from '../../lib/cmdLine.js';
 import { ellipsePts, ellipseFromCenter, ellipseFromAxis, distToAxis, ellipseGrips, ellipseMap, splinePts, textBox, distToTextBox, textMap, linearRot, rotatedDim, rotatedOff, angularDim, lineInt, radialDim } from '../../lib/curveGeom.js';
+import { overkill, OVERKILL_TOL } from '../../lib/overkillGeom.js';
 import { xform, insMap, explodeIns, makeBlockDef, blockNameError, normBlockName, findBlock, blockUses, usedBlockNames, applyInsLayer } from '../../lib/blockGeom.js';
 import { ACI, ACI_NOM, ACI_LIST, LT, LT_LIST, LW_LIST, LW_BYLAYER, lwLabel, lwPx, normLayerName, layerNameError, makeLayer, defaultLayers, findLayer, sortLayers, canDeleteLayer, aciHex, resolveStyle, usedLayerNames, migrateEnts, sanitizeLayers } from '../../lib/cadLayer.js';
 
@@ -139,6 +140,12 @@ const CMDS = [
   { id: 'block', nomi: 'Blok yasash (tanlanganlardan)', al: ['B', 'BLOCK', 'BMAKE'] },
   { id: 'insert', nomi: "Blok qo'yish", al: ['I', 'INSERT', 'DDINSERT'] },
   { id: '#blocks', nomi: 'Bloklar ro\u2018yxati', al: ['BL', 'BLOCKS'] },
+  { id: '#group', nomi: 'Guruh yasash', al: ['G', 'GROUP'] },
+  { id: '#ungroup', nomi: 'Guruhni tarqatish', al: ['UNG', 'UNGROUP'] },
+  { id: '#grptog', nomi: 'Guruh tanlash: yoqish / o\u2018chirish', al: ['PICKSTYLE'] },
+  { id: '#selsim', nomi: 'O\u2018xshashini tanlash', al: ['SE', 'SELECTSIMILAR'] },
+  { id: '#qselect', nomi: 'Tez tanlash (xossa bo\u2018yicha)', al: ['QSE', 'QSELECT'] },
+  { id: '#overkill', nomi: 'Dublikatlarni o\u2018chirish', al: ['OV', 'OVERKILL'] },
   { id: '#purge', nomi: 'Tozalash (ishlatilmagan qatlam/blok)', al: ['PU', 'PURGE'] },
   // Qatlamlar (AutoCAD LAYER va LAY* buyruqlari)
   { id: '#layer', nomi: 'Qatlamlar boshqaruvchisi', al: ['LA', 'LAYER', 'DDLMODES'] },
@@ -275,6 +282,11 @@ function buildTemplate(V) {
   <div class="chz-toolbar chz-ribbon">
     <div class="chz-rgrp"><div class="chz-rbtns">
       <button type="button" class="tool etool" data-tool="select" title="Tanlash — bosing (har bosish qo'shiladi, Shift+bosish — olib tashlash, bo'sh joy/Esc — bo'shatish) yoki ramka torting; uchlarini (grip) sudrab o'zgartiring; chiziqqa 2 marta bosing — uzunlik/burchak tahriri">&#10530; Tanlash</button>
+      <button type="button" class="tool" data-cmd="#qselect" title="Tez tanlash (QSE) — tur, qatlam va rang bo'yicha bir yo'la tanlash">&#9906; Tez tanlash</button>
+      <button type="button" class="tool" data-cmd="#selsim" title="O'xshashini tanlash (SE) — tanlangan bilan bir xil tur va qatlamdagilar">&#8781; O'xshashini</button>
+      <button type="button" class="tool" data-cmd="#group" title="Guruh yasash (G) — tanlanganlar bitta bo'lib tanlanadi (Ctrl+Shift+A — guruh tanlashni o'chirish)">&#9783; Guruh</button>
+      <button type="button" class="tool" data-cmd="#ungroup" title="Guruhni tarqatish (UNG)">&#9784; Tarqatish</button>
+      <button type="button" class="tool" data-cmd="#overkill" title="Dublikatlarni o'chirish (OV / OVERKILL) — ustma-ust tushgan bir xil chiziqlar; tanlov bo'lsa faqat uning ichida">&#9868; Dublikat</button>
     </div><div class="chz-rlbl">Tanlash</div></div>
     <div class="chz-rgrp"><div class="chz-rbtns">
       <button type="button" class="tool etool" data-tool="pline" title="Chiziq (L) — boshlang'ich nuqtani bosing, so'ng uzunlik (sm) va burchak (°) yozib Enter bosing. Esc — tugatish, C — konturni yopish">&#9998; Chiziq</button>
@@ -421,6 +433,22 @@ function buildTemplate(V) {
           </div>
           <div class="chz-dlg-body" data-dtl="layBody"></div>
           <div class="chz-dlg-foot">Yashil belgi &mdash; joriy qatlam (yangi elementlar shunga tushadi). <b>Lampochka</b> &mdash; ko'rinishi; <b>qor</b> &mdash; muzlatish (magnit ham ishlamaydi); <b>qulf</b> &mdash; ko'rinadi, lekin tanlanmaydi; <b>printer</b> &mdash; DXF/rasmga chiqishi.</div>
+        </div>
+      </div>
+      <div class="chz-dlg" data-dtl="qsDlg">
+        <div class="chz-dlg-card qs">
+          <div class="chz-dlg-head"><b>Tez tanlash</b><span>AutoCAD QSELECT</span><button type="button" data-dtl="qsClose" title="Yopish (Esc)">&#10005;</button></div>
+          <div class="chz-dlg-tools">
+            <label class="chz-dlg-lbl">Tur <select data-dtl="qsType"></select></label>
+            <label class="chz-dlg-lbl">Qatlam <select data-dtl="qsLay"></select></label>
+            <label class="chz-dlg-lbl">Rang <select data-dtl="qsCol"></select></label>
+          </div>
+          <div class="chz-dlg-foot" data-dtl="qsInfo"></div>
+          <div class="chz-dlg-tools">
+            <button type="button" class="dtl-btn on" data-dtl="qsPick" title="Shu shartga mos obyektlarni tanlash (eski tanlov bekor bo'ladi)">Tanlash</button>
+            <button type="button" class="dtl-btn" data-dtl="qsAdd" title="Mavjud tanlovga qo'shish">Tanlovga qo'shish</button>
+            <button type="button" class="dtl-btn" data-dtl="qsCancel">Bekor</button>
+          </div>
         </div>
       </div>
       <div class="chz-ctxmenu" data-dtl="ctxMenu"></div>
@@ -587,6 +615,11 @@ export function mountDetal(root, opts) {
     lwShow: false,         // LWDISPLAY — qalinlikni ekranda ko'rsatish
     layPrev: null,         // LAYUNISO / LAYERP uchun oldingi holat
     blocks: [],            // blok ta'riflari [{nomi, ents, izoh}] — src/lib/blockGeom.js
+    groups: [],            // guruhlar [{nomi, ids:[]}] — AutoCAD GROUP
+    grpOn: true,           // guruh butun tanlanadimi (AutoCAD PICKSTYLE / Ctrl+Shift+A)
+    selPrev: [],           // oldingi tanlov (AutoCAD «P» — Previous)
+    pickMode: null,        // 'W' | 'C' — keyingi ramka majburan oyna / kesib o'tish
+    pickRemove: false,     // «R» — bosilganlar tanlovdan olib tashlanadi
     layPick: null,         // LAYOFF/LAYFRZ/LAYLCK/LAYMCUR — element bosilishini kutmoqda
     match: null,           // MATCHPROP — { src } namuna element
     // Asbob variantlari (AutoCAD buyruq variantlari — pastdagi ichki buyruqlar qatori)
@@ -706,13 +739,15 @@ export function mountDetal(root, opts) {
   }
 
   /* ---------------- TARIX (undo/redo) ---------------- */
-  function snapshot() { return JSON.stringify({ ents: state.ents, nextId: state.nextId, name: state.name, layers: state.layers, clay: state.clay, blocks: state.blocks }); }
+  function snapshot() { return JSON.stringify({ ents: state.ents, nextId: state.nextId, name: state.name, layers: state.layers, clay: state.clay, blocks: state.blocks, groups: state.groups }); }
   function restore(s) {
     const o = JSON.parse(s);
     state.ents = o.ents || []; state.nextId = o.nextId || 1; state.name = o.name || '';
     if (Array.isArray(o.layers) && o.layers.length) { state.layers = o.layers; layDirty(); }
     if (o.clay && findLayer(state.layers, o.clay)) state.clay = findLayer(state.layers, o.clay).nomi;
     if (Array.isArray(o.blocks)) { state.blocks = o.blocks; blkDirty(); }
+    state.groups = Array.isArray(o.groups) ? o.groups : [];
+    grpDirty();
     q('nameInput').value = state.name;
     state.sel.clear();
   }
@@ -943,6 +978,131 @@ export function mountDetal(root, opts) {
     layerChanged('«' + l.nomi + '» qatlami: ' + (mode === 'off' ? 'o‘chirildi' : mode === 'frz' ? 'muzlatildi' : mode === 'lck' ? 'qulflandi' : 'qulfi ochildi'));
   }
 
+  /* ---------------- GURUHLAR (AutoCAD GROUP) ---------------- */
+  let _grpIdx = null;   // element id -> guruh
+  function grpIdx() {
+    if (!_grpIdx) { _grpIdx = new Map(); for (const g of state.groups) for (const id of g.ids) _grpIdx.set(id, g); }
+    return _grpIdx;
+  }
+  function grpDirty() { _grpIdx = null; }
+  function grpOf(id) { return grpIdx().get(id) || null; }
+  // Bosilgan element guruhda bo'lsa — butun guruh tanlanadi (AutoCAD PICKSTYLE)
+  function expandSel(id) {
+    if (!state.grpOn) return [id];
+    const g = grpOf(id);
+    if (!g) return [id];
+    const out = g.ids.filter((x) => { const e = getEnt(x); return e && entPickable(e); });
+    return out.length ? out : [id];
+  }
+  function autoGroupName() {
+    for (let i = 1; i < 9999; i++) { const n = 'GURUH' + i; if (!state.groups.some((g) => g.nomi.toLowerCase() === n.toLowerCase())) return n; }
+    return 'GURUH';
+  }
+  function makeGroup() {
+    if (!state.sel.size) { setInfo('Avval guruhga kiradigan obyektlarni tanlang', 'err'); return; }
+    const ids = [...state.sel];
+    askText('Guruh nomi', autoGroupName(), (nm) => {
+      const nomi = normBlockName(nm) || autoGroupName();
+      if (state.groups.some((g) => g.nomi.toLowerCase() === nomi.toLowerCase())) { setInfo('Bunday nomli guruh bor', 'err'); return; }
+      pushHistory();
+      state.groups.push({ nomi, ids });
+      grpDirty(); afterChange();
+      setInfo('«' + nomi + '» guruhi yasaldi (' + ids.length + ' ta obyekt) \u2014 bittasini bossangiz hammasi tanlanadi');
+    });
+  }
+  function ungroupSel() {
+    if (!state.sel.size) { setInfo('Avval guruhdagi obyektni tanlang', 'err'); return; }
+    const gs = new Set();
+    for (const id of state.sel) { const g = grpOf(id); if (g) gs.add(g); }
+    if (!gs.size) { setInfo('Tanlangan obyektlar guruhda emas', 'err'); return; }
+    pushHistory();
+    state.groups = state.groups.filter((g) => !gs.has(g));
+    grpDirty(); afterChange();
+    setInfo(gs.size + ' ta guruh tarqatildi');
+  }
+  // O'chirilgan elementlar guruhdan chiqariladi; bo'sh guruh olib tashlanadi
+  function cleanGroups() {
+    if (!state.groups.length) return;
+    const n0 = state.groups.length;
+    for (const g of state.groups) g.ids = g.ids.filter((id) => !!getEnt(id));
+    state.groups = state.groups.filter((g) => g.ids.length > 1);
+    if (n0 !== state.groups.length) grpDirty(); else grpDirty();
+  }
+  /* ---- Ko'pburchak (WP/CP) va chiziq (F — Fence) bilan tanlash ---- */
+  function pointInPoly(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[i], b = poly[j];
+      if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / ((b.y - a.y) || 1e-12) + a.x) inside = !inside;
+    }
+    return inside;
+  }
+  // Element ekrandagi nuqtalari (boxHit dagi bilan bir xil qoida)
+  function entScreenRings(ent) {
+    const S = (pt) => worldToScreen(pt.x, pt.y);
+    if (isCons(ent)) { const R = svg.getBoundingClientRect(), [a, b] = consEnds(ent, state, R.width, R.height); return [{ vs: [S(a), S(b)], closed: false }]; }
+    if (ent.type === 'hatch') return ent.loops.map((l) => ({ vs: l.map(S), closed: true }));
+    if (ent.type === 'ins') { const o = []; for (const g of insEnts(ent)) for (const r of entScreenRings(g)) o.push(r); return o.length ? o : [{ vs: [S({ x: ent.x, y: ent.y })], closed: false }]; }
+    return [{ vs: (ent.type === 'arc' ? arcSamples(ent, 24) : entVerts(ent)).map(S), closed: ent.type === 'pline' && ent.closed }];
+  }
+  // mode: 'WP' — to'liq ichida; 'CP' — ichida yoki kesib o'tgan; 'F' — chiziq kesib o'tgan
+  function polyHit(ent, poly, mode) {
+    const rings = entScreenRings(ent);
+    if (!rings.length) return false;
+    const allIn = rings.every((g) => g.vs.length && g.vs.every((v) => pointInPoly(v.x, v.y, poly)));
+    if (mode === 'WP') return allIn;
+    if (mode === 'CP' && allIn) return true;
+    const edges = [];
+    const n = poly.length;
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n; if (mode === 'F' && j === 0) break; edges.push([poly[i], poly[j]]); }
+    for (const g of rings) {
+      if (mode === 'CP' && g.vs.some((v) => pointInPoly(v.x, v.y, poly))) return true;
+      const m = g.vs.length;
+      for (let i = 0; i + 1 < m; i++) for (const ed of edges) if (segSeg(g.vs[i], g.vs[i + 1], ed[0], ed[1])) return true;
+      if (g.closed && m > 2) for (const ed of edges) if (segSeg(g.vs[m - 1], g.vs[0], ed[0], ed[1])) return true;
+    }
+    return false;
+  }
+  function startSelPoly(mode) {
+    state.draft = { tool: 'selpoly', mode, pts: [] };
+    const nom = mode === 'F' ? 'Chiziq (Fence)' : mode === 'WP' ? "Ko'pburchak — to'liq ichidagilar" : "Ko'pburchak — kesib o'tganlar ham";
+    setInfo(nom + ': nuqtalarni bosing, Enter \u2014 tanlash, Esc \u2014 bekor');
+    render();
+  }
+  function finishSelPoly() {
+    const d = state.draft;
+    if (!d || d.tool !== 'selpoly') return;
+    const poly = d.pts.map((pt) => worldToScreen(pt.x, pt.y));
+    state.draft = null;
+    if (poly.length < 2) { setInfo('Kam nuqta \u2014 bekor qilindi'); render(); return; }
+    const ids = [];
+    for (const e of state.ents) if (entPickable(e) && polyHit(e, poly, d.mode)) for (const id of expandSel(e.id)) ids.push(id);
+    for (const id of ids) { if (state.pickRemove) state.sel.delete(id); else state.sel.add(id); }
+    state.pickRemove = false;
+    render(); renderTable(); renderOptRow();
+    setInfo((state.pickRemove ? '' : '') + ids.length + ' ta obyekt ' + (state.picking ? 'tanlandi \u2014 yana tanlang yoki Enter' : 'tanlandi'));
+  }
+
+  /* ---- Tanlash yordamchilari (AutoCAD SELECT) ---- */
+  function selectIds(ids, add) {
+    if (!add) { state.selPrev = [...state.sel]; state.sel.clear(); }
+    for (const id of ids) state.sel.add(id);
+    render(); renderTable(); renderOptRow();
+  }
+  function selectSimilar() {
+    if (!state.sel.size) { setInfo("Avval namuna obyektni tanlang \u2014 shunga o'xshashlari tanlanadi", 'err'); return; }
+    const keys = new Set(selectedEnts().map((e) => e.type + '|' + layOf(e).nomi));
+    const ids = pickEnts().filter((e) => keys.has(e.type + '|' + layOf(e).nomi)).map((e) => e.id);
+    selectIds(ids, false);
+    setInfo(ids.length + " ta o'xshash obyekt tanlandi (tur + qatlam bo'yicha)");
+  }
+  function runOverkill() {
+    const list = state.sel.size ? selectedEnts() : pickEnts();
+    const r = overkill(list, { tol: OVERKILL_TOL });
+    if (!r.remove.length) { setInfo('Ustma-ust tushgan dublikat topilmadi' + (state.sel.size ? ' (tanlanganlar ichida)' : '')); return; }
+    applyOp({ remove: r.remove, add: [], patch: [] }, r.remove.length + ' ta dublikat element o\u2018chirildi (ustma-ust chiziqlar)');
+  }
+
   /* ---- Xususiyat nusxasi (MATCHPROP / MA) ---- */
   function startMatchProp() {
     if (!state.ents.length) { setInfo('Chizma bo‘sh', 'err'); return; }
@@ -1004,6 +1164,38 @@ export function mountDetal(root, opts) {
     if (lt) { lt.innerHTML = ltOptions(tv === undefined ? null : tv, true); if (tv == null && selEnts.length) lt.value = ''; }
     if (lw) { lw.innerHTML = lwOptions(wv === undefined ? null : wv, true); if (wv == null && selEnts.length) lw.value = ''; }
     const t = q('tgLw'); if (t) t.classList.toggle('off', !state.lwShow);
+  }
+  /* ---- Tez tanlash (AutoCAD QSELECT) ---- */
+  const QS_TN = { pline: 'Siniq chiziq', circle: 'Aylana', arc: 'Yoy', point: 'Nuqta', text: 'Matn', dim: "O'lcham", hatch: 'Shtrix', xline: 'Yordamchi chiziq', ray: 'Nur', ins: 'Blok nusxasi' };
+  function openQsDlg(on) {
+    const d = q('qsDlg'); if (!d) return;
+    const show = on == null ? !d.classList.contains('show') : !!on;
+    d.classList.toggle('show', show);
+    if (!show) return;
+    const types = Array.from(new Set(state.ents.map((e) => e.type)));
+    q('qsType').innerHTML = '<option value="">Hammasi</option>' + types.map((t) => '<option value="' + t + '">' + escHtml(QS_TN[t] || t) + '</option>').join('');
+    const lays = Array.from(new Set(state.ents.map((e) => layOf(e).nomi)));
+    q('qsLay').innerHTML = '<option value="">Hammasi</option>' + lays.map((l) => '<option value="' + escHtml(l) + '">' + escHtml(l) + '</option>').join('');
+    q('qsCol').innerHTML = '<option value="">Hammasi</option><option value="bylayer">Qatlam bo\u2018yicha</option>' + ACI_LIST.map((a) => '<option value="' + a + '">' + a + ' \u2014 ' + escHtml(ACI_NOM[a] || '') + '</option>').join('');
+    qsCount();
+  }
+  function qsMatch() {
+    const t = q('qsType').value, l = q('qsLay').value, c = q('qsCol').value;
+    return pickEnts().filter((e) => {
+      if (t && e.type !== t) return false;
+      if (l && layOf(e).nomi !== l) return false;
+      if (c === 'bylayer') { if (Number.isFinite(e.col)) return false; }
+      else if (c && String(Number.isFinite(e.col) ? e.col : layOf(e).color) !== c) return false;
+      return true;
+    });
+  }
+  function qsCount() { const n = qsMatch().length; const el = q('qsInfo'); if (el) el.textContent = 'Shartga mos: ' + n + ' ta obyekt' + (n ? '' : " \u2014 shartni yumshating"); }
+  function qsApply(add) {
+    const ids = [];
+    for (const e of qsMatch()) for (const id of expandSel(e.id)) ids.push(id);
+    selectIds(ids, add);
+    openQsDlg(false);
+    setInfo(state.sel.size + ' ta obyekt tanlandi (tez tanlash)');
   }
   function openLayerDlg(on) {
     const d = q('layDlg'); if (!d) return;
@@ -2650,6 +2842,7 @@ export function mountDetal(root, opts) {
     for (const p of op.patch) { const e = getEnt(p.id); if (e) { if (p.patch.pts) { delete e.ell; delete e.fit; } Object.assign(e, p.patch); } }   // tugunlari o'zgargan ellips/splayn — oddiy silliq egri
     for (const a of op.add) state.ents.push(newEnt(a.type, a, src0));
     state.sel.clear(); state.cont = null;
+    cleanGroups();
     afterChange(); if (msg) setInfo(msg);
     return true;
   }
@@ -3147,6 +3340,7 @@ export function mountDetal(root, opts) {
     pushHistory();
     state.ents = state.ents.filter((e) => !state.sel.has(e.id));
     state.sel.clear();
+    cleanGroups();   // o'chirilgan elementlar guruhdan chiqadi, bo'sh guruh olib tashlanadi
     afterChange();
   }
 
@@ -3703,7 +3897,15 @@ export function mountDetal(root, opts) {
     if (exportMode) return;
     if (state.proj.on && state.proj.links) paintProjLinks(target, w2s, W, H, PP);
     // 3) chizilayotgan (jonli)
-    if (state.draft) paintDraft(target, w2s, view, PP);
+    if (state.draft && state.draft.tool === 'selpoly') {
+      const d = state.draft, pts = d.pts.concat(state.cursorS ? [state.cursor] : []);
+      if (pts.length > 1) {
+        const col = d.mode === 'WP' ? '#3c8cff' : '#3cbf5c';
+        const ss = pts.map((pt) => w2s(pt.x, pt.y));
+        target.appendChild(svgEl(d.mode === 'F' ? 'polyline' : 'polygon', { points: ss.map((v) => v.x + ',' + v.y).join(' '), fill: d.mode === 'F' ? 'none' : col, 'fill-opacity': 0.14, stroke: col, 'stroke-width': 1.4, 'stroke-dasharray': d.mode === 'WP' ? 'none' : '6 4', 'pointer-events': 'none' }));
+      }
+    }
+    else if (state.draft) paintDraft(target, w2s, view, PP);
     else if (state.tool === 'trim' || state.tool === 'extend') paintTrimExtendPreview(target, w2s, view, PP);
     else paintHoverPreview(target, w2s, view, PP);
     if (state.measureShow) paintMeasureShow(target, w2s, view, PP);
@@ -4011,7 +4213,7 @@ export function mountDetal(root, opts) {
         showLen: state.showLen, showAng: state.showAng,
         scale: state.scale, panX: state.panX, panY: state.panY, name: state.name,
         proj: state.proj, autoOff: state.autoOff, arcMethod: state.arcMethod, opt: state.opt, board: state.board, cmdUse: state.cmdUse,
-        layers: state.layers, clay: state.clay, ltscale: state.ltscale, lwShow: state.lwShow, blocks: state.blocks,
+        layers: state.layers, clay: state.clay, ltscale: state.ltscale, lwShow: state.lwShow, blocks: state.blocks, groups: state.groups, grpOn: state.grpOn,
       }));
     } catch (e) { setInfo('Brauzer xotirasi to\u2018ldi \u2014 chizma saqlanmadi (eski detallarni kutubxonadan o\u2018chiring)', 'err'); }
     zakasSave();
@@ -4025,6 +4227,9 @@ export function mountDetal(root, opts) {
       state.ents = o.ents.filter((e) => e && (e.type === 'pline' ? Array.isArray(e.pts) : (e.type === 'arc' ? [e.cx, e.cy, e.r, e.a0, e.a1].every(Number.isFinite) && e.r > 0 : true)));
       state.nextId = o.nextId || (Math.max(0, ...state.ents.map((e) => e.id || 0)) + 1);
       state.blocks = sanitizeBlocks(o.blocks);
+      state.groups = (Array.isArray(o.groups) ? o.groups : []).filter((g) => g && typeof g.nomi === 'string' && Array.isArray(g.ids) && g.ids.length > 1).map((g) => ({ nomi: String(g.nomi).slice(0, 64), ids: g.ids.filter((x) => Number.isFinite(x)) }));
+      state.grpOn = o.grpOn !== false;
+      grpDirty();
       try { state.layers = sanitizeLayers(o.layers, V.mainLayer); } catch (e2) { state.layers = defaultLayers(V.mainLayer); }
       layDirty();
       state.clay = (findLayer(state.layers, o.clay) || findLayer(state.layers, V.mainLayer) || state.layers[0]).nomi;
@@ -4172,7 +4377,7 @@ export function mountDetal(root, opts) {
   let panning = false, panStart = null, boxSel = null, rclick = null, lastMid = 0;
   on(canvasWrap, 'contextmenu', (e) => e.preventDefault());
   on(canvasWrap, 'mousedown', (e) => {
-    if (inputBox.contains(e.target) || q('cmdLine').contains(e.target) || ctxMenu.contains(e.target) || q('layDlg').contains(e.target) || e.target === textEd) return;
+    if (inputBox.contains(e.target) || q('cmdLine').contains(e.target) || ctxMenu.contains(e.target) || q('layDlg').contains(e.target) || q('qsDlg').contains(e.target) || e.target === textEd) return;
     commitOptInputs();   // variantlar qatoridagi yozilgan son (blur bo'lmagan) qo'llansin
     hideCtx();
     if (e.button === 0 && state.draft && state.draft.tool === 'text' && state.tool !== 'text') textCommit(false);   // matn tahriri — chizmaga bosilsa saqlanadi
@@ -4190,10 +4395,16 @@ export function mountDetal(root, opts) {
     if (e.button !== 0) return;
     e.preventDefault();   // fokus kiritish qutisidan ketmasin
     const { sx, sy } = evScreen(e);
+    if (state.draft && state.draft.tool === 'selpoly') {   // WP / CP / F nuqtalari
+      const w2 = resolveCursor(sx, sy, null);
+      state.draft.pts.push({ x: w2.x, y: w2.y });
+      state.cursor = w2; state.cursorS = { sx, sy };
+      render(); return;
+    }
     if (state.tool === 'select' || state.picking) {
       const g = state.tool === 'select' ? gripAt(sx, sy) : null;
       if (g) { state.grip = g; state.snapHit = null; return; }
-      boxSel = { sx, sy, moved: false, additive: e.shiftKey, candidate: entAt(sx, sy) };
+      boxSel = { sx, sy, moved: false, additive: e.shiftKey || !!state.pickRemove, candidate: entAt(sx, sy) };
       return;
     }
     const w = resolveCursor(sx, sy, anchorPoint());
@@ -4228,7 +4439,7 @@ export function mountDetal(root, opts) {
       if (Math.abs(sx - boxSel.sx) > 3 || Math.abs(sy - boxSel.sy) > 3) boxSel.moved = true;
       if (boxSel.moved) {
         const x1 = Math.min(boxSel.sx, sx), y1 = Math.min(boxSel.sy, sy);
-        const crossing = sx < boxSel.sx;
+        const crossing = state.pickMode ? state.pickMode === 'C' : sx < boxSel.sx;
         selBoxEl.style.display = 'block';
         selBoxEl.style.left = x1 + 'px'; selBoxEl.style.top = y1 + 'px';
         selBoxEl.style.width = Math.abs(sx - boxSel.sx) + 'px'; selBoxEl.style.height = Math.abs(sy - boxSel.sy) + 'px';
@@ -4259,16 +4470,17 @@ export function mountDetal(root, opts) {
       }
       // AutoCAD (PICKADD): har bosish tanlovga QO'SHILADI; Shift+bosish — olib tashlaydi; bo'sh joyga bosish — bo'shatadi (Esc kabi)
       if (bs.candidate) {
-        const id = bs.candidate.ent.id;
-        if (bs.additive) state.sel.delete(id); else state.sel.add(id);   // Shift — faqat olib tashlash (AutoCAD)
-      } else if (!bs.additive) state.sel.clear();
+        const ids = expandSel(bs.candidate.ent.id);   // guruh — butun tanlanadi (Ctrl+Shift+A bilan o'chiriladi)
+        for (const id of ids) { if (bs.additive) state.sel.delete(id); else state.sel.add(id); }
+      } else if (!bs.additive) { state.selPrev = [...state.sel]; state.sel.clear(); }
     } else {
       const r = { x1: Math.min(bs.sx, sx), y1: Math.min(bs.sy, sy), x2: Math.max(bs.sx, sx), y2: Math.max(bs.sy, sy) };
-      const crossing = sx < bs.sx;
+      const crossing = state.pickMode ? state.pickMode === 'C' : sx < bs.sx;
+      state.pickMode = null;
       // Ramka ham tanlovga qo'shadi (AutoCAD); Shift+ramka — olib tashlaydi
       for (const ent of state.ents) {
         if (!entPickable(ent)) continue;   // o'chiq / muzlatilgan / qulflangan qatlam ramkaga tushmaydi
-        if (boxHit(ent, r, crossing)) { if (bs.additive) state.sel.delete(ent.id); else state.sel.add(ent.id); }
+        if (boxHit(ent, r, crossing)) for (const id of expandSel(ent.id)) { if (bs.additive) state.sel.delete(id); else state.sel.add(id); }
       }
     }
     if (state.picking) setInfo(toolLabel(state.tool) + ': tanlandi ' + state.sel.size + " — yana tanlang yoki Enter / Probel / o'ng tugma");
@@ -4296,8 +4508,10 @@ export function mountDetal(root, opts) {
     if (e.key === 'Escape') {
       if (q('textWin').classList.contains('show')) { e.preventDefault(); toggleTextWin(false); return; }
       if (arcMenu.classList.contains('show')) { e.preventDefault(); showArcMenu(false); return; }
+      if (q('qsDlg').classList.contains('show')) { e.preventDefault(); openQsDlg(false); return; }
       if (q('layDlg').classList.contains('show')) { e.preventDefault(); openLayerDlg(false); return; }
       if (state.layPick || state.match) { e.preventDefault(); state.layPick = null; state.match = null; setInfo('*Bekor qilindi*'); return; }
+      if (state.draft && state.draft.tool === 'selpoly') { e.preventDefault(); state.draft = null; state.pickMode = null; state.pickRemove = false; render(); setInfo('*Bekor qilindi*'); return; }
       pendingNum = null; pendingText = null;
       if (ctxMenu.classList.contains('show')) { e.preventDefault(); hideCtx(); return; }
       if (state.picking) { e.preventDefault(); state.picking = false; state.sel.clear(); setTool('select'); state.cmdFresh = false; setInfo('*Bekor qilindi*'); return; }
@@ -4334,10 +4548,12 @@ export function mountDetal(root, opts) {
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'e') { e.preventDefault(); centerView(); }
     else if ((e.ctrlKey || e.metaKey) && e.key === '1') { e.preventDefault(); q('tgProps').click(); }   // AutoCAD: Ctrl+1 — Xususiyatlar
+    else if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === 'a') { e.preventDefault(); runCmd('#grptog'); }
     else if ((e.ctrlKey || e.metaKey) && k === 'a') { e.preventDefault(); for (const x of pickEnts()) state.sel.add(x.id); render(); renderTable(); renderOptRow(); setInfo(state.sel.size + ' ta obyekt tanlandi'); }
   });
 
   function pressEnter() {
+    if (state.draft && state.draft.tool === 'selpoly') { finishSelPoly(); return; }
     if (state.picking) {   // obyekt tanlash tugadi → buyruq davom etadi
       if (!state.sel.size) { setInfo('Hech narsa tanlanmadi — obyektni bosing yoki ramka torting (Esc — bekor)'); return; }
       state.picking = false;
@@ -4420,6 +4636,12 @@ export function mountDetal(root, opts) {
   propSel('ltSel', 'lt', (v) => v);
   propSel('lwSel', 'lw', (v) => Number(v));
   on(q('btnLayMgr'), 'click', () => openLayerDlg(true));
+  on(q('qsClose'), 'click', () => openQsDlg(false));
+  on(q('qsCancel'), 'click', () => openQsDlg(false));
+  on(q('qsDlg'), 'mousedown', (e) => { if (e.target === q('qsDlg')) openQsDlg(false); });
+  on(q('qsPick'), 'click', () => qsApply(false));
+  on(q('qsAdd'), 'click', () => qsApply(true));
+  for (const n of ['qsType', 'qsLay', 'qsCol']) on(q(n), 'change', qsCount);
   on(q('btnLayCur'), 'click', () => { if (state.sel.size) setClay(layOf(selectedEnts()[0]).nomi); else startLayPick('cur'); });
   on(q('layClose'), 'click', () => openLayerDlg(false));
   on(q('layDlg'), 'mousedown', (e) => { if (e.target === q('layDlg')) openLayerDlg(false); });   // tashqariga bosish — yopish
@@ -4498,6 +4720,7 @@ export function mountDetal(root, opts) {
 
   // Asboblar paneli
   root.querySelectorAll('.etool').forEach((b) => on(b, 'click', () => { if (b.dataset.dimk) state.opt.dimKind = b.dataset.dimk; setTool(b.getAttribute('data-tool')); }));
+  root.querySelectorAll('[data-cmd]').forEach((b2) => on(b2, 'click', () => runCmd(b2.getAttribute('data-cmd'))));
   // Matn muharriri: Enter — saqlash (+ keyingi qator), Esc — tugatish / bekor; chizma klaviaturasiga o'tmaydi
   on(textEd, 'keydown', (e) => {
     e.stopPropagation();
@@ -4754,6 +4977,12 @@ export function mountDetal(root, opts) {
     if (id.charAt(0) === '#') state.cmdFresh = false;   // asbob emas — keyingi harf yana buyruq bo'lsin
     if (id === '#blocks') { const b = q('blkList'); if (b.style.display === 'none') q('tgBlocks').click(); else renderBlocks(); return; }
     if (id === '#purge') return purgeUnused();
+    if (id === '#group') return makeGroup();
+    if (id === '#ungroup') return ungroupSel();
+    if (id === '#grptog') { state.grpOn = !state.grpOn; saveLS(); setInfo(state.grpOn ? '<Guruh tanlash yoqildi>' : '<Guruh tanlash o\u2018chirildi \u2014 endi bitta element tanlanadi>'); return; }
+    if (id === '#selsim') return selectSimilar();
+    if (id === '#qselect') return openQsDlg(true);
+    if (id === '#overkill') return runOverkill();
     if (id === '#layer') return openLayerDlg(true);
     if (id === '#laymcur') return state.sel.size ? setClay(layOf(selectedEnts()[0]).nomi) : startLayPick('cur');
     if (id === '#laycur') { if (!state.sel.size) { setInfo('Avval elementlarni tanlang', 'err'); return; } return moveSelToLayer(state.clay); }
@@ -4855,6 +5084,22 @@ export function mountDetal(root, opts) {
     // ishga tushgan asbob (AutoCAD: XLINE → darhol [Gorizontal/Vertikal/\u2026] so'raydi).
     // Buyruq tugagach (nuqta qo'yilgach yoki Esc) — «Buyruq:» holati: harflar yana buyruqni ishga tushiradi
     const busy = !!(state.draft || state.box || state.picking || pendingNum || state.cmdFresh);
+    // 1c) Tanlash filtrlari (AutoCAD «Select objects:» — ALL, P, L, W, C, F, WP, CP, R, A).
+    // Kalit so'z blokidan OLDIN turadi: tanlash paytida C/L/A harflari Aylana/Chiziq/Yoy emas.
+    if (state.picking) {
+      const f = cmdNorm2(sx).replace(/\s+/g, '').toUpperCase();
+      const FILT = ['ALL', 'HAMMASI', 'P', 'O', 'L', 'OX', 'W', 'C', 'F', 'WP', 'CP', 'R', 'A'];
+      if (FILT.includes(f)) {
+        cmdClose();
+        if (f === 'ALL' || f === 'HAMMASI') { for (const e of pickEnts()) for (const id of expandSel(e.id)) state.sel.add(id); render(); renderTable(); renderOptRow(); setInfo(state.sel.size + " ta obyekt tanlandi \u2014 Enter bilan davom eting"); return; }
+        if (f === 'P' || f === 'O') { const prev = state.selPrev.filter((id) => { const e = getEnt(id); return e && entPickable(e); }); for (const id of prev) state.sel.add(id); render(); renderTable(); renderOptRow(); setInfo('Oldingi tanlov qaytarildi: ' + prev.length + ' ta'); return; }
+        if (f === 'L' || f === 'OX') { const ls = pickEnts(); if (!ls.length) { setInfo('Chizma bo\u2018sh', 'err'); return; } const e = ls[ls.length - 1]; for (const id of expandSel(e.id)) state.sel.add(id); render(); renderTable(); renderOptRow(); setInfo("Oxirgi element tanlandi \u2014 yana tanlang yoki Enter"); return; }
+        if (f === 'W' || f === 'C') { state.pickMode = f; setInfo(f === 'W' ? "Oyna (W): ramka torting \u2014 faqat TO'LIQ ichidagilar" : "Kesib o'tish (C): ramka torting \u2014 tekkanlari ham"); return; }
+        if (f === 'F' || f === 'WP' || f === 'CP') { startSelPoly(f); return; }
+        if (f === 'R') { state.pickRemove = true; setInfo("Olib tashlash (R): bosilganlar tanlovdan chiqadi \u2014 qaytarish uchun A"); return; }
+        if (f === 'A') { state.pickRemove = false; setInfo("Qo'shish (A): bosilganlar tanlovga qo'shiladi"); return; }
+      }
+    }
     // 2) kalit so'z (buyruq ichida — AutoCAD [Radius/Polyline/Kesish])
     const opts = optKeys();
     // Raqam / koordinata / «@» bilan boshlanadigan kiritish hech qachon kalit so'z emas (AutoCAD)

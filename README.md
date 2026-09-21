@@ -268,6 +268,17 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   DXF eksportda **LTYPE** va **LAYER** jadvallari yoziladi (rang, chiziq turi, qalinlik), ko'rinmas va
   «chop etilmaydi» qatlamlar chiqmaydi. Yon paneldagi **Xususiyatlar** (Ctrl+1) — tanlanganning
   qatlami/rangi/chiziq turi/qalinligi (o'zgartiriladi) va o'lchovlari (radius, uzunlik, yuza, burchak).
+- **Tanlash: guruh, filtr, tez tanlash** (`src/lib/overkillGeom.js`, `npm run test:overkill`) — lentadagi
+  **Tanlash** guruhida: **Guruh (G)** — tanlanganlar bitta bo'lib tanlanadi (nom so'raladi, standarti
+  `GURUH1`), **Tarqatish (UNG)**, **Ctrl+Shift+A** — guruh tanlashni vaqtincha o'chirish (PICKSTYLE);
+  **O'xshashini (SE)** — bir xil tur + qatlamdagilar; **Tez tanlash (QSE / QSELECT)** — tur · qatlam ·
+  rang bo'yicha, nechta mos kelishi darhol ko'rinadi; **Dublikat (OV / OVERKILL)** — ustma-ust tushgan
+  bir xil chiziqlarni o'chiradi (0.05 mm; teskari yo'nalish va yopiq konturning boshqa tugundan
+  boshlangan nusxasi ham topiladi; tanlov bo'lsa faqat uning ichida). Buyruq «obyektlarni tanlang»
+  deb turganda satrga AutoCAD filtrlari yoziladi: **ALL** (hammasi), **P** (oldingi tanlov),
+  **L** (oxirgi), **W** / **C** (ramka majburan oyna yoki kesib o'tish), **F** (chiziq bilan kesish),
+  **WP** / **CP** (ko'pburchak: to'liq ichidagilar / tekkanlari ham), **R** / **A** (olib tashlash /
+  qo'shish rejimi) — shu paytda C, L, A harflari buyruq emas, filtr bo'ladi.
 - **Bloklar (AutoCAD BLOCK / INSERT)** (`src/lib/blockGeom.js`, `npm run test:block`) — lentada **Blok**
   guruhi. **Blok yasash (B)**: obyektlarni tanlang → Enter → buyruq satri **nom** so'raydi (ichida
   bo'shliq bo'lishi mumkin: `DERAZA 600`) → **tayanch nuqta**ni bosing; tanlanganlar o'rniga blok

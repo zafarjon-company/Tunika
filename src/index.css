@@ -1699,3 +1699,9 @@ html.themed .dtl-prow select { background: var(--c-bg); color: var(--c-t2); bord
   .chz-dlg-body { padding: 2px 4px 6px; }
   .dtl-prow > span { flex-basis: 74px; }
 }
+
+/* Tez tanlash (QSELECT) va guruh belgisi */
+.chz-dlg-card.qs { width: min(560px, 100%); }
+.chz-dlg-card.qs .chz-dlg-lbl select { max-width: 150px; padding: 3px 4px; font-size: 11.5px; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #334155; }
+html.themed .chz-dlg-card.qs .chz-dlg-lbl select { background: var(--c-bg); color: var(--c-t2); border-color: var(--c-line); }
+.acad-board .chz-dlg-card.qs .chz-dlg-lbl select { background: #212830; color: #cfd8e3; border-color: #3a4452; }
