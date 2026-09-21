@@ -33,7 +33,7 @@ import { arcSweep, arcLen, arcStart, arcEnd, arcMid, arcPt, angInArc, arcBounds,
 import { closedLoops, findRegion, pointInLoops, regionArea, regionAreaOf } from '../../lib/hatchGeom.js';
 import { TEXT_CAP } from '../../lib/curveGeom.js';
 import { parseInput, pointFromDist, deriveKeywords, matchKeyword, promptWithOptions, cmdFilter, num1 as cmdNum, evalExpr } from '../../lib/cmdLine.js';
-import { ellipsePts, ellipseFromCenter, ellipseFromAxis, distToAxis, ellipseGrips, ellipseMap, splinePts, textBox, distToTextBox, textMap, linearRot, rotatedDim, rotatedOff, angularDim, lineInt, radialDim } from '../../lib/curveGeom.js';
+import { ellipsePts, ellipseFromCenter, ellipseFromAxis, distToAxis, ellipseGrips, ellipseMap, splinePts, textBox, distToTextBox, textMap, linearRot, rotatedDim, rotatedOff, angularDim, lineInt, radialDim, expandTextCodes, leaderPts, leaderVerts, distToLeader } from '../../lib/curveGeom.js';
 import { overkill, OVERKILL_TOL } from '../../lib/overkillGeom.js';
 import { xform, insMap, explodeIns, makeBlockDef, blockNameError, normBlockName, findBlock, blockUses, usedBlockNames, applyInsLayer } from '../../lib/blockGeom.js';
 import { ACI, ACI_NOM, ACI_LIST, LT, LT_LIST, LW_LIST, LW_BYLAYER, lwLabel, lwPx, normLayerName, layerNameError, makeLayer, defaultLayers, findLayer, sortLayers, canDeleteLayer, aciHex, resolveStyle, usedLayerNames, migrateEnts, sanitizeLayers } from '../../lib/cadLayer.js';
@@ -104,6 +104,7 @@ const CMDS = [
   { id: 'ellipse', nomi: 'Ellips', al: ['EL', 'ELLIPSE'] },
   { id: 'spline', nomi: 'Splayn (silliq egri)', al: ['SPL', 'SPLINE'] },
   { id: 'text', nomi: 'Matn (yozuv)', al: ['T', 'DT', 'TEXT', 'MT', 'MTEXT'] },
+  { id: 'mleader', nomi: "Ko'rsatkich (strelkali izoh)", al: ['MLD', 'MLEADER', 'LE', 'QLEADER', 'LEADER'] },
   { id: 'xline', nomi: 'Yordamchi chiziq (cheksiz)', al: ['XL', 'XLINE'] },
   { id: 'ray', nomi: 'Nur (bir tomonga cheksiz)', al: ['RAY'] },
   { id: 'hatch', nomi: "Shtrix (sohani bo'yash)", al: ['H', 'BH', 'HATCH'] },
@@ -165,7 +166,13 @@ const CMDS = [
   { id: '#lwdisplay', nomi: "Chiziq qalinligi ko'rinishi", al: ['LWD', 'LWDISPLAY'] },
   { id: '#undo', nomi: 'Orqaga', al: ['U', 'UNDO'] },
   { id: '#redo', nomi: 'Oldinga', al: ['REDO'] },
-  { id: '#fit', nomi: 'Markazga (zoom)', al: ['Z', 'ZOOM'] },
+  { id: '#fit', nomi: 'Markazga \u2014 butun chizma (zoom)', al: ['Z', 'ZOOM', 'ZE'] },
+  { id: '#zoomw', nomi: 'Zoom: oyna (ramka torting)', al: ['ZW'] },
+  { id: '#zoomo', nomi: 'Zoom: tanlangan obyekt', al: ['ZO'] },
+  { id: '#zoomp', nomi: 'Zoom: oldingi ko\u2018rinish', al: ['ZP'] },
+  { id: '#zoom1', nomi: 'Zoom 1:1 (1 sm = 4 px)', al: ['Z1'] },
+  { id: '#view', nomi: 'Ko\u2018rinishni saqlash (nomlangan)', al: ['V', 'VIEW'] },
+  { id: '#views', nomi: 'Saqlangan ko\u2018rinishlar ro\u2018yxati', al: ['VW'] },
   { id: '#clear', nomi: 'Tozalash', al: ['CLEAR'] },
   { id: '#start0', nomi: '0,0 dan boshlash', al: ['0'] },
 ];
@@ -203,12 +210,12 @@ const GRIP_PX = 4;           // grip kvadratining yarim tomoni (px)
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 // DXF $INSUNITS kodi -> 1 birlik necha mm
 const INSUNITS_MM = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
-const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'erase', 'dist', 'area', 'divide', 'measure', 'block', 'insert'];
+const TOOLS = ['select', 'pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'move', 'copy', 'rotate', 'mirror', 'scale', 'stretch', 'align', 'array', 'offset', 'trim', 'extend', 'break', 'lengthen', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'erase', 'dist', 'area', 'divide', 'measure', 'block', 'insert', 'mleader'];
 const PICK_TOOLS = ['select', 'erase', 'trim', 'extend', 'fillet', 'chamfer', 'explode', 'join', 'pedit', 'lengthen', 'divide', 'measure', 'hatch', 'boundary'];   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const PICK_FIRST = ['move', 'copy', 'rotate', 'mirror', 'scale', 'array', 'align', 'block'];   // tanlovsiz tanlansa — avval obyektlar tanlanadi (AutoCAD verb-noun)
 // AutoCAD doskasi ranglari (model maydoni: 33,40,48)
 const ACAD_BOARD = { bg: '#212830', devor: '#ffffff', accent: '#5b9bff', edit: '#e8edf3', text: '#d5dde7', labelBg: 'rgba(33,40,48,.84)', ref: '#6b7686', kazirok: '#cfd8e3', offset: '#ff66e8', accentSoft: '#1b2230', qozon: '#5b9bff', cross: '#ffffff', snap: '#f2c200' };
-const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area', 'insert'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
+const LIVE_TOOLS = ['pline', 'rect', 'polygon', 'circle', 'arc', 'donut', 'point', 'ellipse', 'spline', 'xline', 'ray', 'hatch', 'boundary', 'text', 'dim', 'offset', 'trim', 'extend', 'array', 'fillet', 'chamfer', 'stretch', 'align', 'break', 'lengthen', 'divide', 'measure', 'dist', 'area', 'insert', 'mleader'];   // kursor harakatida qayta chiziladi   // obyekt tanlanadi — magnit belgisi ko'rsatilmaydi
 const CIRCLE_MODES = { cr: 'Markaz, radius', dia: 'Markaz, diametr', '2p': '2 nuqta', '3p': '3 nuqta' };
 // Matn normallashtirish (kichik harf + o'zbek apostroflari) — buyruq va kalit so'z solishtirishlari uchun
 function cmdNormPlain(s) { return String(s == null ? '' : s).toLowerCase().replace(/[‘’ʻʼ`]/g, "'").trim(); }
@@ -327,6 +334,7 @@ function buildTemplate(V) {
     </div><div class="chz-rlbl">Tahrir</div></div>
     <div class="chz-rgrp"><div class="chz-rbtns">
       <button type="button" class="tool etool" data-tool="text" title="Matn (T) — joyni bosing, yozing; Enter — keyingi qator, bo'sh Enter yoki Esc — tugatish. Balandlik va burchak pastdagi qatorda. Matnga 2 marta bosib tahrirlang"><b class="chz-ticon">A</b> Matn</button>
+      <button type="button" class="tool etool" data-tool="mleader" title="Ko'rsatkich (MLD) — strelkali izoh: nimaga ko'rsatmoqchi bo'lsangiz o'sha nuqtani bosing, so'ng matn joyini, keyin matnni yozing">&#10148; Ko'rsatkich</button>
       <button type="button" class="tool etool" data-tool="xline" title="Yordamchi chiziq (XL) — ikki tomonga cheksiz: nuqta orqali (1-nuqta, so'ng yo'nalish — takrorlanadi), gorizontal, vertikal yoki burchak bo'yicha. Kesish/Uzaytirish chegarasi, magnit (kesishma) — rasmga chiqmaydi">&#10231; Yordamchi</button>
       <button type="button" class="tool etool" data-tool="ray" title="Nur (RAY) — boshlang'ich nuqtadan bir tomonga cheksiz; har bosishda yangi nur (Enter — tugatish)">&#10230; Nur</button>
       <button type="button" class="tool etool" data-tool="hatch" title="Shtrix (H) — yopiq soha ichiga bosing: yaxlit bo'yoq yoki chiziqli naqsh (oraliq va burchak pastdagi qatorda); ichidagi yopiq konturlar — orollar (bo'yalmaydi). Gul yaproqlarini ajratib ko'rsatish uchun">&#9638; Shtrix</button>
@@ -364,6 +372,14 @@ function buildTemplate(V) {
       <button type="button" class="tool" data-dtl="btnClear" title="Butun chizmani tozalash (Orqaga bilan qaytariladi)">&#10005; Tozalash</button>
       <button type="button" class="tool" data-dtl="btnFit" title="Chizma chegarasigacha avtozoom — Ctrl+E (Z)">&#10530; Markazga</button>
     </div><div class="chz-rlbl">Chizma</div></div>
+    <div class="chz-rgrp"><div class="chz-rbtns">
+      <button type="button" class="tool" data-cmd="#zoomw" title="Zoom: oyna (ZW) — ko'rsatiladigan sohaning ikki burchagini bosing">&#9974; Oyna</button>
+      <button type="button" class="tool" data-cmd="#zoomo" title="Zoom: tanlangan obyekt (ZO)">&#9673; Obyekt</button>
+      <button type="button" class="tool" data-cmd="#zoomp" title="Zoom: oldingi ko'rinish (ZP)">&#8630; Oldingi</button>
+      <button type="button" class="tool" data-cmd="#zoom1" title="Zoom 1:1 (Z1) — 1 sm = 4 px">1:1</button>
+      <button type="button" class="tool" data-cmd="#view" title="Ko'rinishni nom bilan saqlash (V) — keyin yon paneldagi ro'yxatdan qaytasiz">&#128190; Ko'rinish</button>
+      <button type="button" class="tool" data-cmd="#views" title="Saqlangan ko'rinishlar ro'yxati (yon panelda)">&#9776; Ro'yxat</button>
+    </div><div class="chz-rlbl">Ko'rinish</div></div>
     <span class="chz-scale" data-dtl="scaleInfo"></span>
   </div>
   <div class="chz-edittoolbar dtl-optbar">
@@ -487,6 +503,12 @@ function buildTemplate(V) {
         </button>
       </div>
       <div class="dtl-lib" data-dtl="blkList" style="display:none"></div>
+      <div class="chz-listhead">
+        <button type="button" class="chz-listbtn" data-dtl="tgViews" title="Nomlangan ko'rinishlar (V / VIEW) — zoom va surish holatini saqlab, bir bosishda qaytasiz">
+          <span class="chev">&#9656;</span> Ko'rinishlar <span class="dtl-cnt" data-dtl="viewCnt"></span>
+        </button>
+      </div>
+      <div class="dtl-lib" data-dtl="viewList" style="display:none"></div>
       <div data-dtl="projSect"${V.proj ? '' : ' style="display:none"'}>
       <h3 class="dtl-h3">Proyeksiyalar</h3>
       <label class="dtl-closed"><input type="checkbox" data-dtl="projOn" /> 3 ta proyeksiya: old (V) &middot; ustdan (H) &middot; yon (W)</label>
@@ -620,6 +642,9 @@ export function mountDetal(root, opts) {
     layPrev: null,         // LAYUNISO / LAYERP uchun oldingi holat
     blocks: [],            // blok ta'riflari [{nomi, ents, izoh}] — src/lib/blockGeom.js
     groups: [],            // guruhlar [{nomi, ids:[]}] — AutoCAD GROUP
+    views: [],             // nomlangan ko'rinishlar [{nomi, panX, panY, scale}] — AutoCAD VIEW
+    viewHist: [],          // oldingi ko'rinishlar (Zoom Previous)
+    dstyle: { prec: 2, gsc: 1 },   // o'lcham uslubi: aniqlik (kasr xonalari) va umumiy o'lchami
     grpOn: true,           // guruh butun tanlanadimi (AutoCAD PICKSTYLE / Ctrl+Shift+A)
     selPrev: [],           // oldingi tanlov (AutoCAD «P» — Previous)
     pickMode: null,        // 'W' | 'C' — keyingi ramka majburan oyna / kesib o'tish
@@ -1294,7 +1319,7 @@ export function mountDetal(root, opts) {
   function getEnt(id) { return state.ents.find((e) => e.id === id); }
   function cloneEnt(e) { const c = JSON.parse(JSON.stringify(e)); c.id = state.nextId++; return c; }
   // Izoh obyektlari (o'lcham, nuqta, matn) — Offset / Kesish / Tutashtirish kabi asboblar ularni olmaydi
-  function isAnno(e) { return e.type === 'dim' || e.type === 'point' || e.type === 'text' || e.type === 'hatch' || isCons(e); }
+  function isAnno(e) { return e.type === 'dim' || e.type === 'point' || e.type === 'text' || e.type === 'hatch' || e.type === 'mleader' || isCons(e); }
   function isCons(e) { return e.type === 'xline' || e.type === 'ray'; }   // yordamchi chiziq / nur — cheksiz
   // Proyeksiya bog'lanish chiziqlari uchun tugunlar: izohlar yo'q, silliq egrida — faqat chekka nuqtalar
   function projVerts(e) {
@@ -1315,6 +1340,7 @@ export function mountDetal(root, opts) {
     if (e.type === 'circle') return [{ x: e.cx - e.r, y: e.cy }, { x: e.cx + e.r, y: e.cy }, { x: e.cx, y: e.cy - e.r }, { x: e.cx, y: e.cy + e.r }];
     if (e.type === 'dim') return dimKeyPts(e);
     if (e.type === 'point') return [{ x: e.x, y: e.y }];
+    if (e.type === 'mleader') return leaderVerts(e, textW(e));
     if (e.type === 'ins') {   // blok nusxasi — ichidagi elementlar uchlari (gabarit, ramka, proyeksiya)
       const o = [];
       for (const g of insEnts(e)) { for (const q2 of entVerts(g)) { o.push(q2); if (o.length > 240) return o; } }
@@ -1324,6 +1350,7 @@ export function mountDetal(root, opts) {
   }
   function mapEnt(e, fn, rFactor) {
     if (e.type === 'ins') { insMap(e, fn); return; }   // blok nusxasi: joy + burchak + masshtab (ta'rif tegilmaydi)
+    if (e.type === 'mleader') { const a = fn({ x: e.x, y: e.y }), b = fn({ x: e.lx, y: e.ly }); e.x = a.x; e.y = a.y; e.lx = b.x; e.ly = b.y; if (rFactor != null) e.h = Math.abs(e.h * rFactor); return; }
     if (e.type === 'point') { const q2 = fn({ x: e.x, y: e.y }); e.x = q2.x; e.y = q2.y; return; }
     if (e.type === 'text') { Object.assign(e, textMap(e, textW(e), fn)); return; }
     if (isCons(e)) { const u = dirVec(e.ang), a = fn({ x: e.x, y: e.y }), b = fn({ x: e.x + u.dx, y: e.y + u.dy }); e.x = a.x; e.y = a.y; e.ang = vecAng(b.x - a.x, b.y - a.y); return; }
@@ -1375,6 +1402,7 @@ export function mountDetal(root, opts) {
       return { d: best + 2 / state.scale, seg: -1 };
     }
     if (e.type === 'dim') return { d: distToDim(e, { x: wx, y: wy }), seg: -1 };
+    if (e.type === 'mleader') return { d: distToLeader(e, textW(e), { x: wx, y: wy }, (pt, a, b) => distToSeg(pt.x, pt.y, a.x, a.y, b.x, b.y)), seg: -1 };
     if (e.type === 'ins') {   // blok nusxasi — ichidagi eng yaqin element
       let best = Infinity;
       for (const g of insEnts(e)) { const r = distToEnt(g, wx, wy); if (r.d < best) best = r.d; }
@@ -1754,6 +1782,7 @@ export function mountDetal(root, opts) {
       spline: "Splayn: 1-nuqtani bosing — egri har bir nuqtadan o'tadi; Enter — tugatish" + (state.opt.splClosed ? ' (yopiq)' : ''),
       text: 'Matn (balandlik ' + fmtLen(state.opt.textH) + (state.opt.textRot ? ', burchak ' + fmtAng(state.opt.textRot) : '') + '): joyini bosing',
       block: state.draft && state.draft.tool === 'block' ? "Blok «" + state.draft.nomi + "»: TAYANCH nuqtani bosing (blok shu nuqtadan qo'yiladi va buriladi)" : "Blok yasash: obyektlarni tanlang, so'ng Enter — nom va tayanch nuqta so'raladi",
+      mleader: state.draft && state.draft.tool === 'mleader' ? "Ko'rsatkich: tirsak (matn) joyini bosing" : "Ko'rsatkich (MLD): strelka uchini bosing (nimaga ko'rsatilsa), so'ng tirsak joyini, keyin matnni yozing",
       insert: 'Blok qo\u2018yish (' + (state.opt.insBn || '\u2014') + (state.opt.insSc !== 1 ? ', ' + fmtNum(state.opt.insSc, 2) + '\u00d7' : '') + (state.opt.insRot ? ', ' + fmtAng(state.opt.insRot) : '') + '): joyini bosing',
       move: "Ko'chirish: tayanch nuqtani bosing",
       copy: 'Nusxa: tayanch nuqtani bosing',
@@ -2109,13 +2138,15 @@ export function mountDetal(root, opts) {
     else { const r = radialDim(e); out.push(r.P, r.L); if (k === 'dia') out.push(r.Q); }
     return out;
   }
+  // O'lcham matni — uslubdagi aniqlik (kasr xonalari) bo'yicha
+  function fmtDimLen(mm) { const d = state.dstyle.prec; return fmtNum(mm / U(), d) + (d === 0 ? '' : '') + ' ' + UNIT_LABEL[state.unit]; }
   function dimValueText(e) {
     const k = dimKind(e);
-    if (k === 'lin') return fmtLen(rotatedDim(e).value);
-    if (k === 'ang') return fmtAng(angularDim(e).sweep);
-    if (k === 'rad') return 'R ' + fmtLen(e.r);
-    if (k === 'dia') return 'Ø ' + fmtLen(2 * e.r);
-    return fmtLen(dist({ x: e.x1, y: e.y1 }, { x: e.x2, y: e.y2 }));
+    if (k === 'lin') return fmtDimLen(rotatedDim(e).value);
+    if (k === 'ang') return fmtNum(angularDim(e).sweep, Math.max(1, state.dstyle.prec)) + '\u00b0';
+    if (k === 'rad') return 'R ' + fmtDimLen(e.r);
+    if (k === 'dia') return '\u00d8 ' + fmtDimLen(2 * e.r);
+    return fmtDimLen(dist({ x: e.x1, y: e.y1 }, { x: e.x2, y: e.y2 }));
   }
   function distToDim(e, w) {
     const k = dimKind(e), sg = (a, b) => distToSeg(w.x, w.y, a.x, a.y, b.x, b.y);
@@ -2383,8 +2414,9 @@ export function mountDetal(root, opts) {
   }
   // Joriy qatorni saqlash; next — keyingi qatorga o'tish (AutoCAD DTEXT)
   function textCommit(next) {
+    // AutoCAD maxsus belgilari: %%c -> \u00d8, %%d -> \u00b0, %%p -> \u00b1, \\U+XXXX
     const d = state.draft; if (!d || d.tool !== 'text') return;
-    const s = textEd.value.replace(/\s+$/, '');
+    const s = expandTextCodes(textEd.value.replace(/\s+$/, ''));
     if (d.edit != null) {
       const e = getEnt(d.edit);
       state.draft = null; closeTextEd();
@@ -2414,6 +2446,38 @@ export function mountDetal(root, opts) {
     t.textContent = e.text;
     target.appendChild(t);
     if (sel) target.appendChild(svgEl('polygon', { points: ptsAttr(textBox(e, textW(e)), w2s), fill: 'none', stroke: col, 'stroke-width': 1, 'stroke-dasharray': '4 3', 'pointer-events': 'none' }));
+  }
+
+  /* ---- Ko'rsatkich (AutoCAD MLEADER) — strelka + tirsak + matn ---- */
+  function paintLeader(target, e, w2s, view, col, sel, opacity) {
+    const g = leaderPts(e, textW(e));
+    const S = (pt) => w2s(pt.x, pt.y);
+    const tip = S(g.tip), land = S(g.land), end = S(g.end);
+    const grp = svgEl('g', { 'pointer-events': 'none' });
+    if (opacity != null && opacity !== 1) grp.setAttribute('opacity', opacity);
+    const w = 1.6;
+    grp.appendChild(svgEl('polyline', { points: tip.x + ',' + tip.y + ' ' + land.x + ',' + land.y + ' ' + end.x + ',' + end.y, fill: 'none', stroke: col, 'stroke-width': sel ? w + 1 : w, 'stroke-dasharray': sel ? '7 4' : 'none', 'stroke-linejoin': 'round' }));
+    // strelka uchi (tirsakdan uchga qarab)
+    const dx = tip.x - land.x, dy = tip.y - land.y, L = Math.hypot(dx, dy) || 1;
+    const a = 7 * (state.dstyle.gsc || 1), bx = tip.x - (dx / L) * a, by = tip.y - (dy / L) * a, nx = -(dy / L) * a * 0.34, ny = (dx / L) * a * 0.34;
+    grp.appendChild(svgEl('polygon', { points: tip.x + ',' + tip.y + ' ' + (bx + nx) + ',' + (by + ny) + ' ' + (bx - nx) + ',' + (by - ny), fill: col }));
+    target.appendChild(grp);
+    if (e.text) paintText(target, { x: g.tx, y: g.ty, h: e.h, rot: 0, text: e.text }, w2s, view, col, false, opacity);
+  }
+  function mleaderClick(w) {
+    const d = state.draft;
+    if (!d || d.tool !== 'mleader') { state.draft = { tool: 'mleader', tip: { x: w.x, y: w.y } }; setInfo("Ko'rsatkich: tirsak (matn) joyini bosing"); render(); return; }
+    const tip = d.tip;
+    state.draft = null;
+    askText("Ko'rsatkich matni", '', (t) => {
+      pushHistory();
+      const e = newEnt('mleader', { x: tip.x, y: tip.y, lx: w.x, ly: w.y, h: state.opt.textH, text: expandTextCodes(t) });
+      state.ents.push(e);
+      state.sel.clear();
+      afterChange();
+      setInfo("Ko'rsatkich qo\u2018shildi \u2014 yana strelka uchini bosing yoki Esc");
+    });
+    render();
   }
 
   /* ---- Ko'chirish / Nusxa / Burish / Aks / Masshtab (tanlanganlarga) ---- */
@@ -2605,7 +2669,12 @@ export function mountDetal(root, opts) {
     } else if (t === 'circle') {
       for (const k of Object.keys(CIRCLE_MODES)) btn(CIRCLE_MODES[k], () => { o.circleMode = k; cancelDraft(false); setInfo(toolHint('circle')); }, { on: o.circleMode === k });
     } else if (t === 'arc') { btn('Usul: ' + arcDef().nomi + ' \u25BE', () => showArcMenu(true)); }
-    else if (t === 'dim') { for (const k of Object.keys(DIM_KINDS)) btn(DIM_KINDS[k], () => { o.dimKind = k; cancelDraft(false); setInfo(toolHint('dim')); syncButtons(); }, { on: (o.dimKind || 'al') === k }); }
+    else if (t === 'dim') {
+      for (const k of Object.keys(DIM_KINDS)) btn(DIM_KINDS[k], () => { o.dimKind = k; cancelDraft(false); setInfo(toolHint('dim')); syncButtons(); }, { on: (o.dimKind || 'al') === k });
+      num('Aniqlik', state.dstyle.prec, (v) => { state.dstyle.prec = Math.max(0, Math.min(4, Math.round(v))); render(); }, 'xona');
+      num("O'lcham", state.dstyle.gsc, (v) => { state.dstyle.gsc = Math.max(0.3, Math.min(5, v)); render(); }, '\u00d7');
+    }
+    else if (t === 'mleader') { num('Matn balandligi', o.textH / U(), (v) => { o.textH = Math.max(0.1, v * U()); }, UNIT_LABEL[state.unit]); }
     else if (t === 'ellipse') {
       btn('Markaz', () => { o.ellMode = 'center'; cancelDraft(false); setInfo(toolHint('ellipse')); }, { on: o.ellMode !== 'axis' });
       btn("O'q, uch", () => { o.ellMode = 'axis'; cancelDraft(false); setInfo(toolHint('ellipse')); }, { on: o.ellMode === 'axis' });
@@ -3106,6 +3175,7 @@ export function mountDetal(root, opts) {
     else if (g.type === 'hatch') target.appendChild(svgEl('path', Object.assign({ d: hatchPath(g, w2s), 'fill-rule': 'evenodd' }, attrs)));
     else if (isCons(g)) { const r = svg.getBoundingClientRect(), [a, b] = consEnds(g, view, r.width, r.height), sa = w2s(a.x, a.y), sb = w2s(b.x, b.y); target.appendChild(svgEl('line', Object.assign({ x1: sa.x, y1: sa.y, x2: sb.x, y2: sb.y }, attrs))); }
     else if (g.type === 'ins') { for (const x of insEnts(g)) drawEntShape(target, x, w2s, view, attrs); }   // blok nusxasi (hover, jonli ko'rinish, massiv)
+    else if (g.type === 'mleader') paintLeader(target, g, w2s, view, attrs.stroke || '#888', false, attrs.opacity);
   }
   function paintEditPreview(target, w2s, view, PP, d) {
     const cur = state.cursor;
@@ -3170,6 +3240,11 @@ export function mountDetal(root, opts) {
       if (!state.cursorIn) return;
       const r = regionAt(screenToWorld(s.sx, s.sy)); if (!r) return;   // xom nuqta — magnit chegaraga tortmasin
       target.appendChild(svgEl('path', { d: hatchPath({ loops: [r.outer].concat(r.islands).map((l) => l.pts) }, w2s), fill: PP.accent, 'fill-opacity': 0.14, 'fill-rule': 'evenodd', stroke: PP.accent, 'stroke-width': 1.6, 'stroke-dasharray': '6 4', 'pointer-events': 'none' }));
+      return;
+    }
+    if (state.draft && state.draft.tool === 'mleader') {
+      const tip = w2s(state.draft.tip.x, state.draft.tip.y), cur = w2s(state.cursor.x, state.cursor.y);
+      target.appendChild(svgEl('line', { x1: tip.x, y1: tip.y, x2: cur.x, y2: cur.y, stroke: PP.edit, 'stroke-width': 1.6, 'stroke-dasharray': '6 4', 'pointer-events': 'none' }));
       return;
     }
     if (t === 'insert') {   // kursorda qo'yiladigan blok sharpasi
@@ -3278,6 +3353,8 @@ export function mountDetal(root, opts) {
     }
     if (t === 'block') { if (state.draft && state.draft.tool === 'block') return makeBlock(w); return; }
     if (t === 'insert') return insertClick(w);
+    if (t === 'mleader') return mleaderClick(w);
+    if (state.draft && state.draft.tool === 'zoomw') return zoomWinClick(w);
     if (t === 'pline') return plineClick(w);
     if (t === 'rect') return rectClick(w);
     if (t === 'circle') return circleClick(w);
@@ -3399,6 +3476,7 @@ export function mountDetal(root, opts) {
     if (e.type === 'arc') { const s = arcStart(e), en = arcEnd(e), m = arcMid(e); return [{ x: s.x, y: s.y, kind: 'as' }, { x: en.x, y: en.y, kind: 'ae' }, { x: m.x, y: m.y, kind: 'am' }, { x: e.cx, y: e.cy, kind: 'ac' }]; }
     if (e.type === 'point') return [{ x: e.x, y: e.y, kind: 'pt' }];
     if (e.type === 'ins') return [{ x: e.x, y: e.y, kind: 'ip' }];   // blok — qo'yish nuqtasi
+    if (e.type === 'mleader') return [{ x: e.x, y: e.y, kind: 'lt' }, { x: e.lx, y: e.ly, kind: 'll' }];   // strelka uchi va tirsak
     if (e.type === 'dim') {
       const k = dimKind(e);
       if (k === 'lin') { const r = rotatedDim(e); return [{ x: e.x1, y: e.y1, kind: 'p1' }, { x: e.x2, y: e.y2, kind: 'p2' }, { x: (r.a.x + r.b.x) / 2, y: (r.a.y + r.b.y) / 2, kind: 'off' }]; }
@@ -3442,7 +3520,8 @@ export function mountDetal(root, opts) {
     }
     else if (g.kind === 'am') { const a = arcFrom3(arcStart(e), w, arcEnd(e)); if (a) { e.cx = a.cx; e.cy = a.cy; e.r = a.r; e.a0 = a.a0; e.a1 = a.a1; } }   // o'rtasi — bo'rtish
     else if (g.kind === 'ac') { e.cx = w.x; e.cy = w.y; }   // markaz — butun yoy suriladi
-    else if (g.kind === 'pt' || g.kind === 'ip') { e.x = w.x; e.y = w.y; }
+    else if (g.kind === 'pt' || g.kind === 'ip' || g.kind === 'lt') { e.x = w.x; e.y = w.y; }
+    else if (g.kind === 'll') { e.lx = w.x; e.ly = w.y; }
   }
 
   /* ---- Ramka bilan tanlash yordamchilari ---- */
@@ -3581,7 +3660,7 @@ export function mountDetal(root, opts) {
   function paintDim(target, e, sel, w2s, view, PP, st, fade) {
     const k = dimKind(e);
     if (k === 'al') { paintDimAligned(target, e, sel, w2s, view, PP, st, fade); return; }
-    const m = PP.fs || 1, col = sel ? PP.accent : dimCol(st, PP);
+    const m = (PP.fs || 1) * (state.dstyle.gsc || 1), col = sel ? PP.accent : dimCol(st, PP);
     const g = svgEl('g', { 'pointer-events': 'none' });
     if (fade != null && fade !== 1) g.setAttribute('opacity', fade);
     const ln = (a, b, wd, op) => g.appendChild(svgEl('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: col, 'stroke-width': wd * m, opacity: op == null ? 1 : op }));
@@ -3628,7 +3707,7 @@ export function mountDetal(root, opts) {
     const p1 = w2s(e.x1, e.y1), p2 = w2s(e.x2, e.y2);
     let dx = p2.x - p1.x, dy = p2.y - p1.y; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
     const nx = dy, ny = -dx;
-    const m = PP.fs || 1;
+    const m = (PP.fs || 1) * (state.dstyle.gsc || 1);
     const o = e.off * view.scale, sgn = o >= 0 ? 1 : -1, ext = 7 * m * sgn;
     const a = { x: p1.x + nx * o, y: p1.y + ny * o }, b = { x: p2.x + nx * o, y: p2.y + ny * o };
     const col = sel ? PP.accent : dimCol(st, PP);
@@ -3860,6 +3939,7 @@ export function mountDetal(root, opts) {
         }
         continue;
       }
+      if (e.type === 'mleader') { paintLeader(target, e, w2s, view, sel ? PP.accent : dimCol(st, PP), sel, fade); continue; }
       if (e.type === 'dim') { paintDim(target, e, sel, w2s, view, PP, st, fade); continue; }
       if (e.type === 'text') {
         if (!exportMode && state.draft && state.draft.tool === 'text' && state.draft.edit === e.id) continue;   // tahrirlanayotgan matn — jonli ko'rinishda
@@ -3901,6 +3981,10 @@ export function mountDetal(root, opts) {
     if (exportMode) return;
     if (state.proj.on && state.proj.links) paintProjLinks(target, w2s, W, H, PP);
     // 3) chizilayotgan (jonli)
+    if (state.draft && state.draft.tool === 'zoomw' && state.draft.pts.length === 1 && state.cursorS) {
+      const za = w2s(state.draft.pts[0].x, state.draft.pts[0].y), zb = w2s(state.cursor.x, state.cursor.y);
+      target.appendChild(svgEl('rect', { x: Math.min(za.x, zb.x), y: Math.min(za.y, zb.y), width: Math.abs(zb.x - za.x), height: Math.abs(zb.y - za.y), fill: 'none', stroke: PP.edit, 'stroke-width': 1.4, 'stroke-dasharray': '6 4', 'pointer-events': 'none' }));
+    }
     if (state.draft && state.draft.tool === 'selpoly') {
       const d = state.draft, pts = d.pts.concat(state.cursorS ? [state.cursor] : []);
       if (pts.length > 1) {
@@ -4004,7 +4088,7 @@ export function mountDetal(root, opts) {
     renderTable(); renderLib(); renderZakas(); syncButtons(); syncProjUI(); syncOffUI();
   }
   function renderTable() {
-    syncLayerUI(); renderProps(); renderBlocks();   // tanlov o'zgarganda qatlam, blok va xususiyat ro'yxatlari ham yangilanadi
+    syncLayerUI(); renderProps(); renderBlocks(); renderViews();   // tanlov o'zgarganda qatlam, blok, ko'rinish va xususiyat ro'yxatlari yangilanadi
     const el = q('segTable'), ap = activePline();
     if (!ap || ap.pts.length < 2) { el.innerHTML = '<div class="dtl-empty">Chiziq yo\'q — «Chiziq» asbobi bilan chizing</div>'; return; }
     if (ap.smooth) {   // ellips / splayn — segmentlar jadvali o'rniga umumiy ma'lumot
@@ -4142,6 +4226,11 @@ export function mountDetal(root, opts) {
         else if (e.type === 'circle') out += head('CIRCLE', 'AcDbCircle') + '10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n';
         else if (e.type === 'point') out += head('POINT', 'AcDbPoint') + '10\n' + num(e.x) + '\n20\n' + num(-e.y) + '\n30\n0\n';
         else if (e.type === 'text') out += head('TEXT', 'AcDbText') + '10\n' + num(e.x) + '\n20\n' + num(-e.y) + '\n30\n0\n40\n' + num(e.h) + '\n1\n' + String(e.text).replace(/[\r\n]+/g, ' ') + '\n50\n' + num(e.rot || 0) + '\n';
+        else if (e.type === 'mleader') {
+          const g = leaderPts(e, textW(e));
+          L(g.tip.x, g.tip.y, g.land.x, g.land.y); L(g.land.x, g.land.y, g.end.x, g.end.y);
+          if (e.text) out += head('TEXT', 'AcDbText') + '10\n' + num(g.tx) + '\n20\n' + num(-g.ty) + '\n30\n0\n40\n' + num(e.h) + '\n1\n' + String(e.text).replace(/[\r\n]+/g, ' ') + '\n50\n0\n';
+        }
         else if (e.type === 'arc') out += head('ARC', 'AcDbCircle') + '10\n' + num(e.cx) + '\n20\n' + num(-e.cy) + '\n30\n0\n40\n' + num(e.r) + '\n' + (v2000 ? '100\nAcDbArc\n' : '') + '50\n' + num(e.a0) + '\n51\n' + num(e.a1) + '\n';
       }
     };
@@ -4240,7 +4329,7 @@ export function mountDetal(root, opts) {
         showLen: state.showLen, showAng: state.showAng,
         scale: state.scale, panX: state.panX, panY: state.panY, name: state.name,
         proj: state.proj, autoOff: state.autoOff, arcMethod: state.arcMethod, opt: state.opt, board: state.board, cmdUse: state.cmdUse,
-        layers: state.layers, clay: state.clay, ltscale: state.ltscale, lwShow: state.lwShow, blocks: state.blocks, groups: state.groups, grpOn: state.grpOn,
+        layers: state.layers, clay: state.clay, ltscale: state.ltscale, lwShow: state.lwShow, blocks: state.blocks, groups: state.groups, grpOn: state.grpOn, views: state.views, dstyle: state.dstyle,
       }));
     } catch (e) { setInfo('Brauzer xotirasi to\u2018ldi \u2014 chizma saqlanmadi (eski detallarni kutubxonadan o\u2018chiring)', 'err'); }
     zakasSave();
@@ -4257,6 +4346,11 @@ export function mountDetal(root, opts) {
       state.groups = (Array.isArray(o.groups) ? o.groups : []).filter((g) => g && typeof g.nomi === 'string' && Array.isArray(g.ids) && g.ids.length > 1).map((g) => ({ nomi: String(g.nomi).slice(0, 64), ids: g.ids.filter((x) => Number.isFinite(x)) }));
       state.grpOn = o.grpOn !== false;
       grpDirty();
+      state.views = (Array.isArray(o.views) ? o.views : []).filter((v) => v && typeof v.nomi === 'string' && v.scale > 0 && Number.isFinite(v.panX) && Number.isFinite(v.panY)).slice(0, 20);
+      if (o.dstyle && typeof o.dstyle === 'object') {
+        if (Number.isFinite(o.dstyle.prec)) state.dstyle.prec = Math.max(0, Math.min(4, Math.round(o.dstyle.prec)));
+        if (Number.isFinite(o.dstyle.gsc) && o.dstyle.gsc > 0) state.dstyle.gsc = Math.max(0.3, Math.min(5, o.dstyle.gsc));
+      }
       try { state.layers = sanitizeLayers(o.layers, V.mainLayer); } catch (e2) { state.layers = defaultLayers(V.mainLayer); }
       layDirty();
       state.clay = (findLayer(state.layers, o.clay) || findLayer(state.layers, V.mainLayer) || state.layers[0]).nomi;
@@ -4329,6 +4423,79 @@ export function mountDetal(root, opts) {
     renderOptRow();
   }
   function updateScaleInfo() { const el = q('scaleInfo'); if (el) el.textContent = '1 sm = ' + fmtNum(10 * state.scale, 1) + ' px'; }
+  /* ---- Ko'rinish: zoom variantlari va nomlangan ko'rinishlar (AutoCAD ZOOM / VIEW) ---- */
+  function pushView() {
+    state.viewHist.push({ panX: state.panX, panY: state.panY, scale: state.scale });
+    if (state.viewHist.length > 30) state.viewHist.shift();
+  }
+  function applyView(v) {
+    if (!v || !(v.scale > 0)) return;
+    pushView();
+    state.scale = v.scale; state.panX = v.panX; state.panY = v.panY;
+    updateScaleInfo(); render(); saveLS();
+  }
+  function zoomPrev() {
+    if (!state.viewHist.length) { setInfo('Oldingi ko\u2018rinish yo\u2018q', 'err'); return; }
+    const v = state.viewHist.pop();
+    state.scale = v.scale; state.panX = v.panX; state.panY = v.panY;
+    updateScaleInfo(); render(); saveLS(); setInfo('Oldingi ko\u2018rinish');
+  }
+  function zoomToBox(b, pad) {
+    if (!b) { setInfo('Zoom uchun hech narsa yo\u2018q', 'err'); return; }
+    const r = svg.getBoundingClientRect();
+    const w = Math.max(b.maxX - b.minX, 1e-6), h = Math.max(b.maxY - b.minY, 1e-6);
+    const pd = pad == null ? 40 : pad;
+    const sc = Math.max(0.01, Math.min((r.width - 2 * pd) / w, (r.height - 2 * pd) / h));
+    pushView();
+    state.scale = Math.min(sc, 400);
+    state.panX = r.width / 2 - ((b.minX + b.maxX) / 2) * state.scale;
+    state.panY = r.height / 2 - ((b.minY + b.maxY) / 2) * state.scale;
+    updateScaleInfo(); render(); saveLS();
+  }
+  function zoomObject() {
+    if (!state.sel.size) { setInfo('Avval obyektlarni tanlang (Zoom: obyekt)', 'err'); return; }
+    zoomToBox(boundsOf(selectedEnts(), false, false));
+    setInfo('Zoom: tanlangan obyekt');
+  }
+  function zoom1() { pushView(); state.scale = 4; updateScaleInfo(); render(); saveLS(); setInfo('Zoom 1:1 \u2014 1 sm = 4 px'); }
+  function startZoomWin() {
+    state.draft = { tool: 'zoomw', pts: [] };
+    setTool('select'); state.draft = { tool: 'zoomw', pts: [] };
+    setInfo('Zoom (oyna): ko\u2018rsatiladigan sohaning birinchi burchagini bosing');
+    render();
+  }
+  function zoomWinClick(w) {
+    const d = state.draft;
+    if (!d || d.tool !== 'zoomw') return;
+    d.pts.push({ x: w.x, y: w.y });
+    if (d.pts.length < 2) { setInfo('Zoom (oyna): qarama-qarshi burchakni bosing'); render(); return; }
+    const [a, b] = d.pts;
+    state.draft = null;
+    zoomToBox({ minX: Math.min(a.x, b.x), minY: Math.min(a.y, b.y), maxX: Math.max(a.x, b.x), maxY: Math.max(a.y, b.y) }, 6);
+    setInfo('Zoom: oyna');
+  }
+  function saveView() {
+    askText('Ko\u2018rinish nomi', 'Ko\u2018rinish ' + (state.views.length + 1), (nm) => {
+      const nomi = normBlockName(nm);
+      if (!nomi) { setInfo('Nom bo\u2018sh', 'err'); return; }
+      pushHistory();
+      const i = state.views.findIndex((v) => v.nomi.toLowerCase() === nomi.toLowerCase());
+      const v = { nomi, panX: state.panX, panY: state.panY, scale: state.scale };
+      if (i >= 0) state.views[i] = v; else state.views.push(v);
+      if (state.views.length > 20) state.views.shift();
+      renderViews(); saveLS();
+      setInfo('\u00ab' + nomi + '\u00bb ko\u2018rinishi saqlandi \u2014 yon paneldagi ro\u2018yxatdan qaytasiz');
+    });
+  }
+  function renderViews() {
+    const el = q('viewList'), cnt = q('viewCnt'); if (!el) return;
+    if (cnt) cnt.textContent = state.views.length ? '(' + state.views.length + ')' : '';
+    if (el.style.display === 'none') return;
+    if (!state.views.length) { el.innerHTML = '<div class="dtl-empty">Saqlangan ko\u2018rinish yo\u2018q \u2014 kerakli joyga zoom qilib \u00abV\u00bb bosing</div>'; return; }
+    el.innerHTML = state.views.map((v) => '<div class="dtl-libitem" data-view="' + escHtml(v.nomi) + '">'
+      + '<button type="button" class="dtl-libopen" data-act="go" title="Shu ko\u2018rinishga qaytish"><b>' + escHtml(v.nomi) + '</b><span>1 sm = ' + fmtNum(10 * v.scale, 1) + ' px</span></button>'
+      + '<button type="button" class="dtl-libdel" data-act="del" title="O\u2018chirish">&#10005;</button></div>').join('');
+  }
   function centerView() {
     const r = svg.getBoundingClientRect(); if (!r.width || !r.height) return;
     const b = bounds(true);
@@ -4424,6 +4591,11 @@ export function mountDetal(root, opts) {
     if (e.button !== 0) return;
     e.preventDefault();   // fokus kiritish qutisidan ketmasin
     const { sx, sy } = evScreen(e);
+    if (state.draft && state.draft.tool === 'zoomw') {   // Zoom (oyna) burchaklari
+      const wz = screenToWorld(sx, sy);
+      state.cursor = wz; state.cursorS = { sx, sy };
+      zoomWinClick(wz); return;
+    }
     if (state.draft && state.draft.tool === 'selpoly') {   // WP / CP / F nuqtalari
       const w2 = resolveCursor(sx, sy, null);
       state.draft.pts.push({ x: w2.x, y: w2.y });
@@ -4541,6 +4713,7 @@ export function mountDetal(root, opts) {
       if (q('layDlg').classList.contains('show')) { e.preventDefault(); openLayerDlg(false); return; }
       if (state.layPick || state.match) { e.preventDefault(); state.layPick = null; state.match = null; setInfo('*Bekor qilindi*'); return; }
       if (state.draft && state.draft.tool === 'selpoly') { e.preventDefault(); state.draft = null; state.pickMode = null; state.pickRemove = false; render(); setInfo('*Bekor qilindi*'); return; }
+      if (state.draft && state.draft.tool === 'zoomw') { e.preventDefault(); state.draft = null; render(); setInfo('*Bekor qilindi*'); return; }
       pendingNum = null; pendingText = null;
       if (ctxMenu.classList.contains('show')) { e.preventDefault(); hideCtx(); return; }
       if (state.picking) { e.preventDefault(); state.picking = false; state.sel.clear(); setTool('select'); state.cmdFresh = false; setInfo('*Bekor qilindi*'); return; }
@@ -4688,6 +4861,23 @@ export function mountDetal(root, opts) {
   on(q('tgLw'), 'click', () => { state.lwShow = !state.lwShow; const c = q('lwShowIn'); if (c) c.checked = state.lwShow; syncLayerUI(); render(); saveLS(); setInfo(state.lwShow ? '<Qalinlik yoqildi>' : '<Qalinlik o‘chirildi>'); });
   on(q('btnMatch'), 'click', () => startMatchProp());
   on(q('btnBlocks'), 'click', () => { const b = q('blkList'); if (b.style.display === 'none') q('tgBlocks').click(); else renderBlocks(); });
+  on(q('tgViews'), 'click', () => {
+    const box = q('viewList'), btn = q('tgViews');
+    const show = box.style.display === 'none';
+    box.style.display = show ? '' : 'none';
+    btn.classList.toggle('open', show);
+    if (show) renderViews();
+  });
+  on(q('viewList'), 'click', (e) => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const it = b.closest('[data-view]'); if (!it) return;
+    const nomi = it.getAttribute('data-view');
+    const v = state.views.find((x) => x.nomi === nomi); if (!v) return;
+    if (b.getAttribute('data-act') === 'go') { applyView(v); setInfo('\u00ab' + nomi + '\u00bb ko\u2018rinishi'); return; }
+    pushHistory();
+    state.views = state.views.filter((x) => x !== v);
+    renderViews(); saveLS(); setInfo('\u00ab' + nomi + '\u00bb ko\u2018rinishi o\u2018chirildi');
+  });
   on(q('tgBlocks'), 'click', () => {
     const box = q('blkList'), btn = q('tgBlocks');
     const show = box.style.display === 'none';
@@ -5030,7 +5220,13 @@ export function mountDetal(root, opts) {
     if (id === '#lwdisplay') return q('tgLw').click();
     if (id === '#undo') return undo();
     if (id === '#redo') return redo();
-    if (id === '#fit') return centerView();
+    if (id === '#fit') { pushView(); return centerView(); }
+    if (id === '#zoomw') return startZoomWin();
+    if (id === '#zoomo') return zoomObject();
+    if (id === '#zoomp') return zoomPrev();
+    if (id === '#zoom1') return zoom1();
+    if (id === '#view') return saveView();
+    if (id === '#views') { const b = q('viewList'); if (b.style.display === 'none') q('tgViews').click(); else renderViews(); return; }
     if (id === '#clear') return q('btnClear').click();
     if (id === '#start0') return start0();
     if (id.startsWith('arc:')) { const k = id.slice(4); if (ARC_BY_KEY[k]) { state.arcMethod = k; renderArcMenu(); saveLS(); } setTool('arc'); return; }

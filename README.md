@@ -272,6 +272,15 @@ Savdo bo'limidagi **Chizma** kartasi uch rejimda ishlaydi (tab):
   DXF eksportda **LTYPE** va **LAYER** jadvallari yoziladi (rang, chiziq turi, qalinlik), ko'rinmas va
   «chop etilmaydi» qatlamlar chiqmaydi. Yon paneldagi **Xususiyatlar** (Ctrl+1) — tanlanganning
   qatlami/rangi/chiziq turi/qalinligi (o'zgartiriladi) va o'lchovlari (radius, uzunlik, yuza, burchak).
+- **Ko'rsatkich, matn belgilari, o'lcham uslubi, ko'rinishlar** (`src/lib/curveGeom.js`, `npm run test:curve`):
+  **Ko'rsatkich (MLD / MLEADER)** — strelka uchini bosing, so'ng tirsak (matn) joyini, keyin buyruq
+  satriga matnni yozing; strelka + tirsak + gorizontal yelka + matn bitta element bo'lib ko'chadi,
+  ikki gripi bor (uchi va tirsagi), DXF ga chiziq + TEXT bo'lib chiqadi. **Matn maxsus belgilari**:
+  yozganda `%%c` → Ø, `%%d` → °, `%%p` → ±, `%%%` → %, `\U+2205` → ∅ (matn ham, ko'rsatkich ham).
+  **O'lcham uslubi** — o'lcham asbobining pastki qatorida **Aniqlik** (0–4 kasr xonasi) va
+  **O'lcham ×** (strelka/yozuv kattaligi). **Ko'rinish** guruhi: **Oyna (ZW)** — ikki burchak bosiladi,
+  **Obyekt (ZO)** — tanlanganga, **Oldingi (ZP)**, **1:1 (Z1)**, **Ko'rinish (V)** — joriy zoom/surishni
+  nom bilan saqlash, yon paneldagi **Ko'rinishlar** ro'yxatidan bir bosishda qaytish.
 - **Tanlash: guruh, filtr, tez tanlash** (`src/lib/overkillGeom.js`, `npm run test:overkill`) — lentadagi
   **Tanlash** guruhida: **Guruh (G)** — tanlanganlar bitta bo'lib tanlanadi (nom so'raladi, standarti
   `GURUH1`), **Tarqatish (UNG)**, **Ctrl+Shift+A** — guruh tanlashni vaqtincha o'chirish (PICKSTYLE);

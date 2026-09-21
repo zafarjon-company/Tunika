@@ -200,3 +200,51 @@ export function radialDim(e) {
   const P = { x: c.x + dx * e.r, y: c.y + dy * e.r }, Q = { x: c.x - dx * e.r, y: c.y - dy * e.r };
   return { c, L, P, Q, u: { x: dx, y: dy }, out: l > e.r };
 }
+
+// ---------- MATN MAXSUS BELGILARI (AutoCAD %%c, %%d, %%p) ----------
+// %%c -> Ø, %%d -> °, %%p -> ±, %%% -> %, \U+XXXX -> unicode belgisi.
+// AutoCAD kodni saqlaydi, biz esa yozilganda BELGIGA aylantiramiz — keyin
+// matn hamma joyda (DXF, rasm, tahrir) bir xil ko'rinadi.
+export function expandTextCodes(s) {
+  let t = String(s == null ? '' : s);
+  t = t.replace(/\U\+([0-9a-fA-F]{4})/g, (m, h) => { try { return String.fromCharCode(parseInt(h, 16)); } catch (e) { return m; } });
+  return t
+    .replace(/%%%/g, '\u0000PCT\u0000')
+    .replace(/%%[cC]/g, '\u00d8')
+    .replace(/%%[dD]/g, '\u00b0')
+    .replace(/%%[pP]/g, '\u00b1')
+    .replace(/\u0000PCT\u0000/g, '%');
+}
+
+// ---------- KO'RSATKICH (AutoCAD MLEADER) ----------
+// e = { x, y, lx, ly, text, h } — (x,y) strelka uchi, (lx,ly) tirsak (landing).
+// Tirsakdan matngacha gorizontal "yelka" tortiladi, matn shu yelka uchida turadi.
+// Qaytaradi: { tip, land, end, tx, ty, dir } — dir: +1 matn o'ngda, -1 chapda.
+export function leaderPts(e, w) {
+  const tip = { x: e.x, y: e.y }, land = { x: e.lx, y: e.ly };
+  const dir = land.x >= tip.x ? 1 : -1;
+  const sh = Math.max(e.h || 1, 0.1) * 1.6;            // yelka uzunligi (matn balandligiga bog'liq)
+  const end = { x: land.x + dir * sh, y: land.y };
+  const tx = end.x + dir * (e.h || 1) * 0.25;
+  const ty = land.y - (e.h || 1) * 0.28;               // matn yelka ustida (y pastga)
+  return { tip, land, end, tx, ty, dir, width: w || 0 };
+}
+// Ko'rsatkichning barcha tayanch nuqtalari (gabarit, tanlash ramkasi uchun)
+export function leaderVerts(e, w) {
+  const g = leaderPts(e, w);
+  const h = e.h || 1;
+  const x2 = g.dir > 0 ? g.tx + (w || 0) : g.tx - (w || 0);
+  return [g.tip, g.land, g.end, { x: x2, y: g.ty }, { x: x2, y: g.ty - h }, { x: g.tx, y: g.ty - h }];
+}
+// Kursordan ko'rsatkichgacha masofa (chiziqlar + matn to'rtburchagi)
+export function distToLeader(e, w, p, segDist) {
+  const g = leaderPts(e, w);
+  let best = Math.min(segDist(p, g.tip, g.land), segDist(p, g.land, g.end));
+  const h = e.h || 1;
+  const x1 = Math.min(g.tx, g.dir > 0 ? g.tx + w : g.tx - w), x2 = Math.max(g.tx, g.dir > 0 ? g.tx + w : g.tx - w);
+  const y1 = g.ty - h, y2 = g.ty;
+  if (p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2) return 0;
+  const cx = Math.max(x1, Math.min(p.x, x2)), cy = Math.max(y1, Math.min(p.y, y2));
+  best = Math.min(best, Math.hypot(p.x - cx, p.y - cy));
+  return best;
+}

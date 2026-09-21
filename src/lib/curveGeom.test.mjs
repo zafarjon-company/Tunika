@@ -4,6 +4,7 @@
 //  Konvensiya: world mm, x o'ngga, y PASTGA; 0° o'ng, 90° tepa, CCW musbat.
 // ============================================================
 import assert from 'node:assert/strict';
+import { expandTextCodes, leaderPts, leaderVerts, distToLeader } from './curveGeom.js';
 import { ellipsePoint, ellipsePts, ellipseSegs, ellipseFromCenter, ellipseFromAxis, distToAxis, ellipseGrips, ellipseMap, ellipsePerim, splinePts, textBox, distToTextBox, textMap, linearRot, rotatedDim, rotatedOff, angularDim, lineInt, radialDim } from './curveGeom.js';
 
 let jami = 0, xato = 0;
@@ -171,6 +172,58 @@ test('radialDim: yo\'nalish nuqtasi aylana tashqarisida/ichida; P aylanada, Q qa
   const r = radialDim({ x1: 0, y1: 0, x2: 30, y2: -40, r: 25 });
   ptNear(r.P, P(15, -20)); ptNear(r.Q, P(-15, 20)); assert.equal(r.out, true);
   assert.equal(radialDim({ x1: 0, y1: 0, x2: 3, y2: 4, r: 25 }).out, false);
+});
+
+/* ---- Matn maxsus belgilari va ko'rsatkich (MLEADER) ---- */
+
+
+test("expandTextCodes: %%c, %%d, %%p, %%% va \U+XXXX", () => {
+  assert.equal(expandTextCodes('%%c20'), '\u00d820');
+  assert.equal(expandTextCodes('45%%d'), '45\u00b0');
+  assert.equal(expandTextCodes('%%p0.5'), '\u00b10.5');
+  assert.equal(expandTextCodes('100%%%'), '100%');
+  assert.equal(expandTextCodes('%%C12 %%D %%P'), '\u00d812 \u00b0 \u00b1');
+  assert.equal(expandTextCodes('\U+2205 bo\'sh'), '\u2205 bo\'sh');
+  assert.equal(expandTextCodes('oddiy matn'), 'oddiy matn');
+  assert.equal(expandTextCodes(null), '');
+});
+
+test("expandTextCodes: %%% aralash holatda ham to'g'ri", () => {
+  assert.equal(expandTextCodes('%%%%%c'), '%\u00d8');
+});
+
+test('leaderPts: tirsak o\'ngda — yelka o\'ngga, matn o\'ngda', () => {
+  const g = leaderPts({ x: 0, y: 0, lx: 100, ly: -50, h: 10 }, 40);
+  assert.equal(g.dir, 1);
+  assert.deepEqual(g.tip, { x: 0, y: 0 });
+  assert.deepEqual(g.land, { x: 100, y: -50 });
+  assert.ok(g.end.x > g.land.x);
+  assert.equal(g.end.y, -50);
+  assert.ok(g.ty < g.land.y, 'matn yelka ustida');
+});
+
+test('leaderPts: tirsak chapda — yelka chapga', () => {
+  const g = leaderPts({ x: 0, y: 0, lx: -100, ly: -50, h: 10 }, 40);
+  assert.equal(g.dir, -1);
+  assert.ok(g.end.x < g.land.x);
+});
+
+test('leaderVerts: 6 ta tayanch nuqta (chiziq + matn ramkasi)', () => {
+  const vs = leaderVerts({ x: 0, y: 0, lx: 100, ly: -50, h: 10 }, 40);
+  assert.equal(vs.length, 6);
+  assert.ok(vs.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)));
+});
+
+test('distToLeader: chiziq ustida ~0, matn ichida 0, uzoqda katta', () => {
+  const seg = (p, a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0;
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  };
+  const e = { x: 0, y: 0, lx: 100, ly: -50, h: 10 };
+  assert.ok(distToLeader(e, 40, { x: 50, y: -25 }, seg) < 1e-6);
+  assert.ok(distToLeader(e, 40, { x: 0, y: 0 }, seg) < 1e-6);
+  assert.ok(distToLeader(e, 40, { x: 500, y: 500 }, seg) > 100);
 });
 
 console.log(`\nJami: ${jami}, xato: ${xato}`);
