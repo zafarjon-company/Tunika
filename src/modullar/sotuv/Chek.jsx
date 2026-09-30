@@ -10,6 +10,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Printer, Receipt, MapPin, Phone, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check, Scissors, Loader2, CalendarClock, Copy } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fmt, formatDate, formatDay } from '../../lib/helpers.js';
+import { sotuvchilarOl, sotuvchilarMatn } from '../../lib/sotuvchi.js';
 import { qrDataUrl, zakasHavola } from '../../lib/qr.js';
 import { applyTil, getTil } from '../../lib/til.js';
 import { KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
@@ -305,7 +306,14 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         <div className="mt-2 pt-1.5 border-t border-dashed border-slate-300 text-center leading-tight">
           <p className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">{smeta ? 'Taklifimiz bilan tanishganingiz uchun rahmat!' : 'Xaridingiz uchun rahmat!'} <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /></p>
           <div className="text-xs text-slate-400">{shopName}</div>
-          {shopPhone && <div className="text-[15px] font-bold text-slate-700 flex items-center justify-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {shopPhone}</div>}
+          {/* Sotuvchilar: har biri alohida qatorda — ism + barcha raqamlari (Sozlamalar) */}
+          {sotuvchilarOl(shopPhone).map((s) => (
+            <div key={s.id} className="text-[15px] font-bold text-slate-700 flex items-center justify-center gap-1.5 flex-wrap">
+              <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+              {s.ism && <span>{s.ism}{s.tel.length ? ':' : ''}</span>}
+              {s.tel.length > 0 && <span className="tabular-nums">{s.tel.join(', ')}</span>}
+            </div>
+          ))}
           {/* Holat havolasi matn bilan — QR o'qilmasa qo'lda terish uchun (bitta mayda qator) */}
           {havola && <div className="text-[9px] text-slate-400 break-all mt-0.5">Zakas holati: {qisqaHavola(havola)}</div>}
         </div>
@@ -494,7 +502,7 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
       }
     }
     if (havola) L.push(`Zakas holati: ${havola}`);
-    if (shopPhone) L.push(`Tel: ${shopPhone}`);
+    for (const q of sotuvchilarMatn(shopPhone)) L.push(`Tel: ${q}`);
     return L.join('\n');
   }
   // Mijozning birinchi telefoni (xalqaro format, faqat raqam)

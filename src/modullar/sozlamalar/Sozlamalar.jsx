@@ -27,6 +27,7 @@ import { Languages, Keyboard } from 'lucide-react';
 import { KEY_ACTIONS, comboFromEvent, comboValid } from '../../lib/keybind.js';
 import { telegramSozlangan, tgChatList } from '../../lib/telegram.js';
 import { NazoratBot } from './NazoratBot.jsx';
+import { SotuvchilarSozlama } from './Sotuvchilar.jsx';
 
 const MAVZULAR = [
   { id: 'light',     nom: "Yorug'",     icon: Sun,       rang: '#0f172a' },
@@ -170,7 +171,6 @@ function KeybindRow({ action, combo, onSet }) {
 
 export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateShopPhone, usdRate, updateUsdRate, usdOlish, updateUsdOlish, tunikaBaza = [], ranglar = [], updateRanglar, ishchilar = [], currentUser, users = [], apiUsers = async () => ({ ok: false, error: 'kirish' }), tema, setTema, shrift = 'oddiy', setShrift, til = 'uz', setTil = () => {}, keys = {}, updateKeys = () => {}, tgToken = '', updateTgToken = () => {}, tgChatId = '', updateTgChatId = () => {}, tgChats = [], updateTgChats = () => {}, avtoIsh = null, updateAvtoIsh = () => {}, libName = null, libSupported = false, onPickLib = () => {}, onClearLib = () => {}, onLogout, logAction = () => {}, showToast }) {
   const [shopDraft, setShopDraft] = useState(shopName);
-  const [phoneDraft, setPhoneDraft] = useState(shopPhone);
   const [tgTokenDraft, setTgTokenDraft] = useState(tgToken);
   const [tgChatsDraft, setTgChatsDraft] = useState(() => seedChats(tgChats, tgChatId));
   const [olishDraft, setOlishDraft] = useState(usdOlish);
@@ -188,7 +188,6 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
   const [koris, setKoris] = useState('sotish'); // qaysi kurs ko'rsatilmoqda: olish | sotish
 
   useEffect(() => { setShopDraft(shopName); }, [shopName]);
-  useEffect(() => { setPhoneDraft(shopPhone); }, [shopPhone]);
   useEffect(() => { setTgTokenDraft(tgToken); }, [tgToken]);
   // Tahrir qilinayotgan bo'lsa — masofadan kelgan yangilanish (o'z saqlovimiz aks-sadosi
   // yoki boshqa qurilma) draftni ustiga yozib, yozilmagan o'zgarishlarni o'chirmasin.
@@ -452,10 +451,8 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
             <label className="block text-xs text-slate-500 mb-1">Do'kon nomi</label>
             <div className="flex gap-2"><input value={shopDraft} onChange={(e) => setShopDraft(e.target.value)} className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none" /><button onClick={() => { updateShopName(shopDraft); showToast('Saqlandi'); }} className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800">Saqlash</button></div>
           </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Do'kon telefoni (chekda chiqadi)</label>
-            <div className="flex gap-2"><input value={phoneDraft} onChange={(e) => setPhoneDraft(e.target.value)} placeholder="+998 90 123 45 67" className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none" /><button onClick={() => { updateShopPhone(phoneDraft); showToast('Saqlandi'); }} className="px-4 py-2 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800">Saqlash</button></div>
-          </div>
+          {/* Sotuvchilar: ism + istalgancha raqam, istalgancha sotuvchi ('shop-phone' kalitida) */}
+          <SotuvchilarSozlama qiymat={shopPhone} onSaqla={updateShopPhone} showToast={showToast} />
           <div>
             <label className="block text-xs text-slate-500 mb-1">Dollar kursi (1 USD)</label>
             <SegmentedControl value={koris} onChange={setKoris}

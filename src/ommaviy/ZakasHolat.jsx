@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Hourglass, CheckCircle2, PackageCheck, Phone, RefreshCw, AlertTriangle, SearchX, Package, CalendarClock, User, Hammer } from 'lucide-react';
 import { fmt, formatDate, formatDay } from '../lib/helpers.js';
+import { sotuvchilarOl, telHref } from '../lib/sotuvchi.js';
 
 // Holat nishonlari
 const HOLAT = {
@@ -95,6 +96,10 @@ export function ZakasHolat({ token }) {
 
   const z = data && data.zakas;
   const dokon = (data && data.dokon) || {};
+  // Sotuvchilar (ism + raqamlar); eski API javobida faqat `telefon` bo'ladi.
+  // Raqamsiz sotuvchi bu yerda ko'rsatilmaydi — qo'ng'iroq qilib bo'lmaydi.
+  const sotuvchilar = (Array.isArray(dokon.sotuvchilar) ? sotuvchilarOl(dokon.sotuvchilar) : sotuvchilarOl(dokon.telefon))
+    .filter((s) => s.tel.length);
   const nishon = HOLAT[(z && z.holat) || 'jarayon'] || HOLAT.jarayon;
   const NishonIcon = nishon.Icon;
 
@@ -216,20 +221,29 @@ export function ZakasHolat({ token }) {
                 </div>
               </div>
 
-              {/* Pastki qism: telefon + yangilash */}
+              {/* Pastki qism: sotuvchilar (har raqam — qo'ng'iroq tugmasi) + yangilash */}
+              {sotuvchilar.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {sotuvchilar.map((s, i) => (
+                    <div key={i}>
+                      {s.ism && <div className="text-xs font-semibold text-slate-500 mb-1">{s.ism}</div>}
+                      <div className="flex flex-wrap gap-1.5">
+                        {s.tel.map((t, j) => (
+                          <a key={j} href={telHref(t)}
+                            className="flex-1 min-w-[45%] flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-slate-800 bg-slate-800 text-white font-semibold text-sm tabular-nums">
+                            <Phone size={16} /> {t}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2 pt-1">
-                {dokon.telefon ? (
-                  <a
-                    href={`tel:${String(dokon.telefon).replace(/\s/g, '')}`}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-slate-800 bg-slate-800 text-white font-semibold text-sm"
-                  >
-                    <Phone size={16} /> {dokon.telefon}
-                  </a>
-                ) : null}
                 <button
                   type="button"
                   onClick={yukla}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-slate-300 bg-white text-slate-700 font-semibold text-sm"
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 border-slate-300 bg-white text-slate-700 font-semibold text-sm"
                 >
                   <RefreshCw size={16} /> Yangilash
                 </button>

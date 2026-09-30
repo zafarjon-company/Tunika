@@ -26,6 +26,25 @@ function qatorOf(it) {
   return { nomi: it.tunikaName || it.productName || '', olchov };
 }
 
+// 'shop-phone' qiymati → sotuvchilar [{ ism, tel: [] }] (src/lib/sotuvchi.js
+// sotuvchilarOl bilan bir xil qoida; api src/ dan import qilmaydi).
+// Yangi: [{ id, ism, tel: [...] }]; eski: bitta satr — ismsiz bitta sotuvchi.
+function sotuvchilarOl(v) {
+  if (Array.isArray(v)) {
+    return v
+      .filter((s) => s && typeof s === 'object')
+      .map((s) => ({
+        ism: String(s.ism || '').trim(),
+        tel: (Array.isArray(s.tel) ? s.tel : [s.tel])
+          .map((t) => String(t == null ? '' : t).trim())
+          .filter(Boolean),
+      }))
+      .filter((s) => s.ism || s.tel.length);
+  }
+  const t = v == null ? '' : String(v).trim();
+  return t ? [{ ism: '', tel: [t] }] : [];
+}
+
 // Kazirok qatorining nomi (KazirokSavdo.jsx dagi kazRowNom bilan bir xil)
 function kazNom(r) {
   if (r.nom) return r.nom;
@@ -66,7 +85,9 @@ export default async function handler(req, res) {
     }
 
     const nomi = (await readShop(db, 'shop-name')) || '';
-    const telefon = (await readShop(db, 'shop-phone')) || '';
+    const sotuvchilar = sotuvchilarOl(await readShop(db, 'shop-phone'));
+    // Eski mijoz sahifasi (keshdagi) uchun — birinchi raqam
+    const telefon = (sotuvchilar.find((s) => s.tel.length) || { tel: [''] }).tel[0];
 
     return res.status(200).json({
       ok: true,
@@ -83,7 +104,7 @@ export default async function handler(req, res) {
         debt: Number(o.debt) || 0,
         qatorlar,
       },
-      dokon: { nomi: String(nomi || ''), telefon: String(telefon || '') },
+      dokon: { nomi: String(nomi || ''), telefon: String(telefon || ''), sotuvchilar },
     });
   } catch (e) {
     // Ichki xato matni ommaviy sahifaga chiqmasin — faqat serverda qoladi
