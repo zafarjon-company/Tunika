@@ -120,6 +120,18 @@ export function metrliAddon(m) {
   return Number(m && (m.metriNarx != null ? m.metriNarx : m.ustaHaqqi)) || 0;
 }
 
+// Metrli sotuv narxi (1 metr): (list narxi ÷ bo'lak soni) + metri uchun narx,
+// ENG YAQIN METRLI_QADAM (500) ga yaxlitlanadi — 17 250 → 17 500, 19 300 → 19 500,
+// 16 700 → 16 500. Avval 2 xonaga yaxlitlanadi: bo'lishdagi 17249.9999… kabi
+// suzuvchi xato 17 000 ga tushib qolmasin. Qadamdan kichik narx (0 ga
+// yaxlitlanib ketardi) o'zgarmaydi.
+export const METRLI_QADAM = 500;
+export function metrliNarx(base, son, m) {
+  const x = Math.round(((Number(base) || 0) / (son || 1) + metrliAddon(m)) * 100) / 100;
+  const r = Math.round(x / METRLI_QADAM) * METRLI_QADAM;
+  return r > 0 ? r : x;
+}
+
 // ----- RANGLAR -----
 // List nomidan faqat rangni ajratish ("SMZ" va o'lchov qavslari olib tashlanadi)
 // "SMZ", "plyonka", "yaltiroq" va o'lchov qavslari olib tashlanadi — faqat sof rang qoladi
@@ -324,7 +336,8 @@ export function calcItem(item, ctx = {}) {
     }, item);
   }
 
-  // ----- Metrli: (tanlangan tunika chakana/optom narxi ÷ variant soni) + metri uchun narx -----
+  // ----- Metrli: (tanlangan tunika chakana/optom narxi ÷ variant soni) + metri uchun narx,
+  //       eng yaqin 500 ga yaxlitlanadi (metrliNarx) -----
   if (item.kind === 'metrli') {
     const m = metrlilar.find((x) => x.id === item.metrliId);
     const tunika = tunikaBaza.find((t) => t.id === item.tunikaId);
@@ -333,8 +346,9 @@ export function calcItem(item, ctx = {}) {
     const v = variants[item.variantIndex] || variants[0];
     if (!v) return blankCalc(m.nomi);
     const base = item.priceType === 'optom' ? Number(tunika.optom) : Number(tunika.chakana);
-    const birBirlikNarxi = base / (v.son || 1) + metrliAddon(m);
-    const tanNarxBirlik = Number(tunika.optom) / (v.son || 1) + metrliAddon(m); // tan narx = optom asosida
+    const birBirlikNarxi = metrliNarx(base, v.son, m);
+    // tan narx = optom asosida, YAXLITLANMAYDI — haqiqiy tannarx (foyda hisobi uchun)
+    const tanNarxBirlik = Number(tunika.optom) / (v.son || 1) + metrliAddon(m);
     const zapas = sonQiymat(item.zapas); // qo'shimcha (zapas) metr — umumiy metrga qo'shiladi
     const jamiMeyor = uzunlik * soni + zapas;
     return applyOverride({
@@ -468,7 +482,7 @@ export function orderItemToDraft(it, ctx = {}) {
     let variantIndex = variants.findIndex((v) => (it.tafsilot || '').includes(`${v.son} bo'lak (${v.razmer})`));
     if (variantIndex < 0) variantIndex = 0;
     const v = variants[variantIndex];
-    const priceType = inferPriceType(it.birBirlikNarxi, tunika, (base) => base / ((v && v.son) || 1) + metrliAddon(m));
+    const priceType = inferPriceType(it.birBirlikNarxi, tunika, (base) => metrliNarx(base, v && v.son, m));
     return { id, kind: 'metrli', metrliId: m.id, tunikaId: tunika.id, variantIndex, priceType, uzunlik, soni: soni || '1' };
   }
 

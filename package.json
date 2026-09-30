@@ -21,7 +21,9 @@
     "test:overkill": "node src/lib/overkillGeom.test.mjs",
     "test:block": "node src/lib/blockGeom.test.mjs",
     "test:layer": "node src/lib/cadLayer.test.mjs",
-    "test:cmd": "node src/lib/cmdLine.test.mjs"
+    "test:cmd": "node src/lib/cmdLine.test.mjs",
+    "test:mijoz": "node src/lib/mijoz.test.mjs",
+    "test:metrli": "node src/lib/metrli.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",
