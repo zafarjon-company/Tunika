@@ -15,7 +15,7 @@ import { fmt, genId, metrliVariantlar, barchaRanglar, aksRangKerak, isKanyokAny,
 import { STANOK_OPTIONS } from '../../lib/constants.js';
 import { matchCombo } from '../../lib/keybind.js';
 import {
-  sotuvchilarOl, sotuvchilarTartib, sotuvchiKalit, tanlanganSotuvchi, qurilmaSotuvchisi, qurilmaSotuvchisiniSaqla,
+  sotuvchilarOl, sotuvchiKalitlari, tanlanganSotuvchi, qurilmaSotuvchisi,
 } from '../../lib/sotuvchi.js';
 
 // Enter bosilganda keyingi maydonga o'tish ("keyingi maydon/tovar")
@@ -115,7 +115,8 @@ export function NewOrderTab({ draft, setDraft, draftCalc, sotuvchilar = '', tuni
   // Sotuvchilar (Sozlamalar) va shu zakasda chekda birinchi turadigani:
   // zakasdagi tanlov → shu qurilmada oxirgi tanlangan → birinchi (App saqlashda ham shu qoida)
   const sotuvchiList = sotuvchilarOl(sotuvchilar);
-  const birinchiSotuvchi = sotuvchilarTartib(sotuvchiList, tanlanganSotuvchi(sotuvchiList, draft.sotuvchi, qurilmaSotuvchisi()))[0];
+  const sotuvchiKalitlar = sotuvchiKalitlari(sotuvchiList); // noyob ("Ali", "Ali#2")
+  const joriySotuvchi = tanlanganSotuvchi(sotuvchiList, draft.sotuvchi, qurilmaSotuvchisi());
   const hasItems = draft.items.length > 0;
   const kazRows = draftCalc.kazRows || [];
   const hasKaz = kazRows.length > 0;   // chizmadan kazirok bor — hisob-kitobda ham ko'rinadi
@@ -599,11 +600,12 @@ export function NewOrderTab({ draft, setDraft, draftCalc, sotuvchilar = '', tuni
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Sotuvchi — chekda uning raqami birinchi turadi</label>
                   <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Sotuvchi">
                     {sotuvchiList.map((s, i) => {
-                      const k = sotuvchiKalit(s);
-                      const on = k === sotuvchiKalit(birinchiSotuvchi);
+                      const k = sotuvchiKalitlar[i];
+                      const on = k === joriySotuvchi;
+                      // Faqat shu zakas; qurilma sukuti YANGI zakas saqlanganda yoziladi (App)
                       return (
                         <button key={i} type="button" role="radio" aria-checked={on}
-                          onClick={() => { setDraft({ ...draft, sotuvchi: k }); qurilmaSotuvchisiniSaqla(k); }}
+                          onClick={() => setDraft({ ...draft, sotuvchi: k })}
                           className={`px-3 py-1.5 rounded-lg border-2 text-left transition ${on ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'}`}>
                           <span className="block text-sm font-semibold leading-tight">{s.ism || s.tel[0]}</span>
                           {s.ism && s.tel[0] && <span className={`block text-[11px] tabular-nums leading-tight ${on ? 'text-slate-300' : 'text-slate-400'}`}>{s.tel[0]}</span>}

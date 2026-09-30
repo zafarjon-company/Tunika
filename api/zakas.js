@@ -27,23 +27,10 @@ function qatorOf(it) {
 }
 
 // 'shop-phone' qiymati → sotuvchilar [{ ism, tel: [] }] (src/lib/sotuvchi.js
-// sotuvchilarOl bilan bir xil qoida; api src/ dan import qilmaydi).
+// sotuvchilarOl / sotuvchilarTartib bilan BIR XIL qoida; api src/ dan import qilmaydi).
 // Satr: "Ism: raqam1, raqam2 | raqam3" (eski bitta raqam ham shu satr);
 // massiv [{ id, ism, tel: [...] }] — qisqa muddat yozilgan format.
-function sotuvchilarOl(v) {
-  if (Array.isArray(v)) {
-    return v
-      .filter((s) => s && typeof s === 'object')
-      .map((s) => ({
-        ism: String(s.ism || '').trim(),
-        tel: (Array.isArray(s.tel) ? s.tel : [s.tel])
-          .map((t) => String(t == null ? '' : t).trim())
-          .filter(Boolean),
-      }))
-      .filter((s) => s.ism || s.tel.length);
-  }
-  const t = v == null || typeof v === 'object' ? '' : String(v).trim();
-  if (!t) return [];
+function satrdanSotuvchilar(t) {
   return t.split('|').map((qism) => {
     const q = qism.trim();
     const k = q.lastIndexOf(':');
@@ -53,12 +40,43 @@ function sotuvchilarOl(v) {
     };
   }).filter((s) => s.ism || s.tel.length);
 }
+function sotuvchilarOl(v) {
+  if (Array.isArray(v)) {
+    return v
+      .filter((s) => s && typeof s === 'object')
+      .flatMap((s) => {
+        const ism = String(s.ism || '').trim();
+        const tels = (Array.isArray(s.tel) ? s.tel : [s.tel])
+          .map((t) => String(t == null ? '' : t).trim())
+          .filter(Boolean);
+        if (!ism && tels.length === 1 && /[|:]/.test(tels[0])) return satrdanSotuvchilar(tels[0]);
+        return [{ ism, tel: tels.flatMap((t) => t.split(/[,;|]/)).map((t) => t.trim()).filter(Boolean) }];
+      })
+      .filter((s) => s.ism || s.tel.length);
+  }
+  const t = v == null || typeof v === 'object' ? '' : String(v).trim();
+  return t ? satrdanSotuvchilar(t) : [];
+}
 
-// Zakasni saqlashda tanlangan sotuvchi (o.sotuvchi — ismi yoki 1-raqami) birinchi;
-// topilmasa — Sozlamalardagi tartib (src/lib/sotuvchi.js sotuvchilarTartib bilan bir xil).
+// Zakasni saqlashda tanlangan sotuvchi (o.sotuvchi — noyob kalit: ismi, ismsizda
+// 1-raqami, takror ismda "Ali#2") birinchi; topilmasa — Sozlamalardagi tartib.
 function sotuvchilarTartib(l, kalit) {
   const teng = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
-  const i = kalit ? l.findIndex((s) => teng(s.ism, kalit) || s.tel.some((t) => teng(t, kalit))) : -1;
+  const kalitOf = (s) => s.ism || s.tel[0] || '';
+  const soni = {};
+  const ks = l.map((s) => {
+    const k = kalitOf(s);
+    const n = k.trim().toLowerCase();
+    soni[n] = (soni[n] || 0) + 1;
+    return soni[n] > 1 ? `${k}#${soni[n]}` : k;
+  });
+  let i = -1;
+  if (kalit) {
+    i = ks.findIndex((k) => teng(k, kalit));
+    const asos = String(kalit).replace(/#d+$/, '');
+    if (i < 0) i = l.findIndex((s) => teng(kalitOf(s), asos));
+    if (i < 0) i = l.findIndex((s) => s.tel.some((t) => teng(t, asos)));
+  }
   return i > 0 ? [l[i], ...l.slice(0, i), ...l.slice(i + 1)] : l;
 }
 

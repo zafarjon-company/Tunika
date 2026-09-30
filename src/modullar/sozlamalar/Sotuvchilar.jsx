@@ -6,12 +6,15 @@
 //  o'qish: lib/sotuvchi.js. "Saqlash" bosilgandagina yoziladi.
 // ============================================================
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ChevronUp, ChevronDown, Phone, X } from 'lucide-react';
+import { Plus, Trash2, ChevronUp, ChevronDown, Phone, X, Globe } from 'lucide-react';
 import { PhoneInput } from '../../components/ui.jsx';
 import { genId, formatPhone } from '../../lib/helpers.js';
 import { sotuvchilarOl, sotuvchilarSatr } from '../../lib/sotuvchi.js';
 
-const bosh = () => ({ id: genId(), ism: '', tel: [''] });
+// maska[j] — j-raqam maydoni turi: true = PhoneInput (+998 maska), false = oddiy matn.
+// Maydon ochilganda BIR MARTA aniqlanadi va yozish paytida o'zgarmaydi (aks holda
+// qiymat 9 raqamdan o'tganda maydon almashib, fokus va chet el raqami yo'qolardi).
+const bosh = () => ({ id: genId(), ism: '', tel: [''], maska: [true] });
 
 // Eski qo'lda yozilgan raqam ("+998 90 123 45 67") — PhoneInput formatiga
 // ("+998 (90) 123-45-67"), chekda hamma raqam bir xil ko'rinsin. O'zbek raqami
@@ -21,18 +24,19 @@ function telFormat(t) {
   if (d.startsWith('998') && d.length > 9) d = d.slice(3);
   return d.length === 9 ? formatPhone(d) : t;
 }
-// PhoneInput (9 raqamli o'zbek maskasi) faqat bo'sh, "+998..." yoki o'zbek raqamiga
-// keltiriladigan qiymat uchun. Boshqasi ("+7 999...", "1234", "8 90 ...") oddiy
-// matn maydonida qoladi — aks holda maska uni kesib, boshqa raqam ko'rsatardi.
-const maskaBop = (t) => !t || /^\s*\+998/.test(t) || telFormat(t) !== t;
+// PhoneInput (9 raqamli o'zbek maskasi) faqat bo'sh, bitta "+998..." yoki o'zbek
+// raqamiga keltiriladigan qiymat uchun. Boshqasi ("+7 999...", "1234", "8 90 ...",
+// ikki raqam bitta maydonda) oddiy matnda — aks holda maska uni kesib yuborardi.
+const maskaBop = (t) => !t
+  || (/^\s*\+998/.test(t) && String(t).replace(/\D/g, '').length <= 12)
+  || telFormat(t) !== t;
 
 // Tahrir qoralamasi: har sotuvchida kamida bitta (bo'sh) raqam maydoni bo'ladi
 function qoralama(v) {
-  const l = sotuvchilarOl(v).map((s) => ({
-    id: genId(),
-    ism: s.ism,
-    tel: s.tel.length ? s.tel.map(telFormat) : [''],
-  }));
+  const l = sotuvchilarOl(v).map((s) => {
+    const tel = s.tel.length ? s.tel.map(telFormat) : [''];
+    return { id: genId(), ism: s.ism, tel, maska: tel.map(maskaBop) };
+  });
   return l.length ? l : [bosh()];
 }
 
@@ -46,6 +50,10 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
   const yangila = (next) => { setList(next); setOzgargan(true); };
   const sotuvchi = (i, patch) => yangila(list.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   const tel = (i, j, v) => sotuvchi(i, { tel: list[i].tel.map((t, k) => (k === j ? v : t)) });
+  const telQosh = (i) => sotuvchi(i, { tel: [...list[i].tel, ''], maska: [...list[i].maska, true] });
+  const telOchir = (i, j) => sotuvchi(i, { tel: list[i].tel.filter((_, k) => k !== j), maska: list[i].maska.filter((_, k) => k !== j) });
+  // Qo'lda almashtirish: o'zbek raqami (maska) ↔ boshqa format (chet el, qisqa raqam)
+  const maskaAlmashtir = (i, j) => sotuvchi(i, { maska: list[i].maska.map((m, k) => (k === j ? !m : m)) });
   function kochir(i, dir) {
     const j = i + dir;
     if (j < 0 || j >= list.length) return;
@@ -91,21 +99,25 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
               {s.tel.map((t, j) => (
                 <div key={j} className="flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                  {maskaBop(t) ? (
+                  {s.maska[j] ? (
                     <PhoneInput value={t} onChange={(v) => tel(i, j, v)}
                       className="flex-1 min-w-0 px-3 py-1.5 border-2 border-slate-200 rounded-lg bg-white text-sm tabular-nums" />
                   ) : (
                     <input value={t} onChange={(e) => tel(i, j, e.target.value)} title="Boshqa formatdagi raqam — qanday yozilsa, chekda shunday chiqadi"
                       className="flex-1 min-w-0 px-3 py-1.5 border-2 border-amber-200 rounded-lg bg-white text-sm tabular-nums" />
                   )}
+                  <button type="button" onClick={() => maskaAlmashtir(i, j)} aria-pressed={!s.maska[j]}
+                    title={s.maska[j] ? "Boshqa format (chet el yoki qisqa raqam)" : "O'zbek raqami (+998 maska)"}
+                    aria-label={s.maska[j] ? "Boshqa formatga o'tish" : "O'zbek raqami formatiga o'tish"}
+                    className={`p-1.5 rounded-lg flex-shrink-0 ${s.maska[j] ? 'text-slate-300 hover:text-slate-600 hover:bg-slate-100' : 'text-amber-600 bg-amber-50 hover:bg-amber-100'}`}><Globe className="w-3.5 h-3.5" /></button>
                   {s.tel.length > 1 && (
-                    <button type="button" onClick={() => sotuvchi(i, { tel: s.tel.filter((_, k) => k !== j) })}
+                    <button type="button" onClick={() => telOchir(i, j)}
                       aria-label="Raqamni o'chirish" title="Raqamni o'chirish"
                       className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
                   )}
                 </div>
               ))}
-              <button type="button" onClick={() => sotuvchi(i, { tel: [...s.tel, ''] })}
+              <button type="button" onClick={() => telQosh(i)}
                 className="text-xs text-slate-900 font-bold pl-5">+ Raqam qo'shish</button>
             </div>
           </div>

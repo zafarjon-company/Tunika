@@ -64,7 +64,7 @@ import {
 } from './lib/avtoIsh.js';
 import { sendTelegramDocument, sendTelegramMessage, telegramSozlangan } from './lib/telegram.js';
 import { zaxiraMalumot } from './lib/zaxira.js';
-import { sotuvchilarSatr, tanlanganSotuvchi, qurilmaSotuvchisi } from './lib/sotuvchi.js';
+import { sotuvchilarSatr, tanlanganSotuvchi, qurilmaSotuvchisi, qurilmaSotuvchisiniSaqla } from './lib/sotuvchi.js';
 
 import { SmallModal } from './components/ui.jsx';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
@@ -867,10 +867,17 @@ export default function App() {
   // ilova nusxalari uni chekda to'g'ridan-to'g'ri chizadi va massivda qulaydi.
   // 0bdb5a4 qisqa muddat massiv yozgan — boshliq ilovani ochishi bilan satrga
   // o'giramiz (ishchi bu kalitga yozolmaydi — Firestore qoidasi, shuning uchun faqat boshliq).
+  // DIQQAT: shopPhone lokal KESHdan kelgan bo'lishi mumkin (persistentLocalCache) —
+  // unga qarab yozsak, serverdagi yangiroq ro'yxat bosib ketiladi. Shuning uchun
+  // tranzaksiya: SERVERDAGI qiymat hali ham massiv bo'lsagina, o'sha qiymatdan o'giriladi.
+  const sotuvchiOgirildi = useRef(false);
   useEffect(() => {
-    if (Array.isArray(shopPhone) && (role === 'founder' || role === 'admin')) {
-      updateShopPhone(sotuvchilarSatr(shopPhone));
-    }
+    if (!Array.isArray(shopPhone) || !(role === 'founder' || role === 'admin') || sotuvchiOgirildi.current) return;
+    sotuvchiOgirildi.current = true;
+    storage.almashtirAgar('shop-phone', Array.isArray, sotuvchilarSatr).catch((e) => {
+      sotuvchiOgirildi.current = false; // oflayn — keyingi o'zgarishda qayta urinadi
+      console.error("shop-phone satrga o'girilmadi:", e);
+    });
   }, [shopPhone, role]);
   function updateTgToken(v)    { setTgToken(v);    persist('telegram-bot-token', v); }
   function updateTgChatId(v)   { setTgChatId(v);   persist('telegram-chat-id', v); }
@@ -1265,6 +1272,9 @@ export default function App() {
     };
 
     updateOrders([newOrder, ...orders]);
+    // Shu qurilmaning sukut sotuvchisi — faqat YANGI zakas saqlanganda (tahrir, smeta
+    // yoki tashlab ketilgan qoralamadagi bosish boshqa zakaslarga ta'sir qilmasin)
+    if (newOrder.sotuvchi) qurilmaSotuvchisiniSaqla(newOrder.sotuvchi);
     omborYech(newOrder);   // bog'langan materiallar ombordan avtomatik yechiladi
     logAction('zakas_yaratdi', `№${newOrder.number} · ${newOrder.customer.name} · ${fmt(newOrder.totalSum)} so'm`);
     setDraft(makeBlankDraft(usdRate));
@@ -1342,7 +1352,9 @@ export default function App() {
       ...makeBlankDraft(usdRate),
       customer: { ...order.customer },
       masterId: order.masterId, masterName: order.masterName,
-      sotuvchi: order.sotuvchi || '',
+      // Chekida hozir birinchi turgan sotuvchi (tanlovsiz eski zakasda — Sozlamalardagi
+      // birinchisi, qurilma tanlovi EMAS: tahrir chekni jimgina o'zgartirmasin)
+      sotuvchi: tanlanganSotuvchi(shopPhone, order.sotuvchi, ''),
       items,
       payments: (order.payments && order.payments.length) ? order.payments.map((p) => ({ ...p })) : [makeBlankPayment(usdRate)],
       notes: order.notes || '',

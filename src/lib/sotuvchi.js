@@ -31,27 +31,39 @@ function qismOl(qism, i) {
   return { id: `s${i}`, ism, tel };
 }
 
+function satrdan(t) {
+  return t.split('|').map(qismOl).filter((s) => s && (s.ism || s.tel.length));
+}
+
 // Har qanday saqlangan qiymat → toza ro'yxat (bo'sh sotuvchi/raqamlar tushib qoladi)
 export function sotuvchilarOl(v) {
   if (Array.isArray(v)) {
     return v
       .filter((s) => s && typeof s === 'object')
-      .map((s, i) => ({
-        id: String(s.id || `s${i}`),
-        ism: String(s.ism || '').trim(),
-        tel: (Array.isArray(s.tel) ? s.tel : [s.tel])
+      .flatMap((s, i) => {
+        const ism = String(s.ism || '').trim();
+        const tels = (Array.isArray(s.tel) ? s.tel : [s.tel])
           .map((t) => String(t == null ? '' : t).trim())
-          .filter(Boolean),
-      }))
+          .filter(Boolean);
+        // Qayta yuklanmagan 0bdb5a4 nusxasi satr formatini butunicha BITTA raqam
+        // qilib saqlagan bo'lishi mumkin: [{ ism: '', tel: ['Ali: 1, 2 | Vali: 3'] }]
+        if (!ism && tels.length === 1 && /[|:]/.test(tels[0])) {
+          return satrdan(tels[0]).map((x, k) => ({ ...x, id: `s${i}_${k}` }));
+        }
+        // Bitta maydonga vergul bilan yozilgan bir nechta raqam — alohida raqamlar
+        // (aks holda satrga o'girilganda bitta uzun raqam bo'lib yopishib qolardi)
+        return [{ id: String(s.id || `s${i}`), ism, tel: tels.flatMap((t) => t.split(/[,;|]/)).map((t) => t.trim()).filter(Boolean) }];
+      })
       .filter((s) => s.ism || s.tel.length);
   }
   const t = v == null || typeof v === 'object' ? '' : String(v).trim();
   if (!t) return [];
-  return t.split('|').map(qismOl).filter((s) => s && (s.ism || s.tel.length));
+  return satrdan(t);
 }
 
-// Ro'yxat → saqlanadigan satr. Ajratgich belgilari (| , ; :) ism/raqam ichida
-// bo'lsa — qayta o'qishda buzilmasligi uchun almashtiriladi.
+// Ro'yxat → saqlanadigan satr. Raqamlar sotuvchilarOl'da vergul bo'yicha
+// ajratilgan; qolgan ajratgich belgilari (| :) ism/raqam ichida bo'lsa —
+// qayta o'qishda buzilmasligi uchun almashtiriladi.
 export function sotuvchilarSatr(list) {
   return sotuvchilarOl(list)
     .map((s) => {
@@ -77,36 +89,63 @@ export function sotuvchilarMatn(v) {
 }
 
 // ----- Zakas bo'yicha: chekda qaysi sotuvchi BIRINCHI turadi -----
-// Har zakasga saqlashdan oldin tanlanadi: order.sotuvchi = kalit (ism, ismsiz
-// bo'lsa birinchi raqami). Id emas, chunki satr formatida barqaror id yo'q;
-// sotuvchi keyin o'chirilsa/nomi o'zgarsa — Sozlamalardagi tartib qoladi.
+// Har zakasga saqlashdan oldin tanlanadi: order.sotuvchi = NOYOB kalit (ism,
+// ismsiz bo'lsa birinchi raqami; bir xil ism takrorlansa "Ali#2"). Id emas,
+// chunki satr formatida barqaror id yo'q; sotuvchi keyin o'chirilsa/nomi
+// o'zgarsa — Sozlamalardagi tartib qoladi.
 export function sotuvchiKalit(s) {
   return (s && (s.ism || (s.tel || [])[0])) || '';
 }
 const kalitTeng = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
-function mosSotuvchi(s, kalit) {
-  return !!kalit && (kalitTeng(s.ism, kalit) || (s.tel || []).some((t) => kalitTeng(t, kalit)));
+
+// Ro'yxatdagi har sotuvchining noyob kaliti (tartib bilan bir xil indekslarda)
+export function sotuvchiKalitlari(v) {
+  const soni = {};
+  return sotuvchilarOl(v).map((s) => {
+    const k = sotuvchiKalit(s);
+    const n = k.trim().toLowerCase();
+    soni[n] = (soni[n] || 0) + 1;
+    return soni[n] > 1 ? `${k}#${soni[n]}` : k;
+  });
+}
+
+// Kalit bo'yicha sotuvchi indeksi (-1 = yo'q):
+//  1) aniq noyob kalit ("Ali#2", ismsizning o'z raqami);
+//  2) "#n"siz asos kalit — takrorning biri o'chirilgan bo'lsa ham qolgani topiladi;
+//  3) eski: istalgan raqami bo'yicha.
+// Aniq moslik birinchi — umumiy raqam boshqa sotuvchini "yoqib" yubormaydi.
+function sotuvchiIndeksi(l, kalitlar, kalit) {
+  if (!kalit) return -1;
+  let i = kalitlar.findIndex((k) => kalitTeng(k, kalit));
+  if (i >= 0) return i;
+  const asos = String(kalit).replace(/#\d+$/, '');
+  i = l.findIndex((s) => kalitTeng(sotuvchiKalit(s), asos));
+  if (i >= 0) return i;
+  return l.findIndex((s) => (s.tel || []).some((t) => kalitTeng(t, asos)));
 }
 
 // Ro'yxatda shu kalitli sotuvchi bormi (tanlov hali amaldami)
 export function sotuvchiBormi(v, kalit) {
-  return sotuvchilarOl(v).some((s) => mosSotuvchi(s, kalit));
+  const l = sotuvchilarOl(v);
+  return sotuvchiIndeksi(l, sotuvchiKalitlari(l), kalit) >= 0;
 }
 
 // Tanlangan sotuvchi birinchi, qolganlari Sozlamalardagi tartibda.
 // Topilmasa — o'zgarishsiz (eski zakaslar, o'chirilgan sotuvchi).
 export function sotuvchilarTartib(v, kalit) {
   const l = sotuvchilarOl(v);
-  const i = l.findIndex((s) => mosSotuvchi(s, kalit));
+  const i = sotuvchiIndeksi(l, sotuvchiKalitlari(l), kalit);
   return i > 0 ? [l[i], ...l.slice(0, i), ...l.slice(i + 1)] : l;
 }
 
-// Zakasda amaldagi tanlov: zakasning o'zi → shu qurilmada oxirgi tanlangan →
-// Sozlamalardagi birinchi sotuvchi. Ro'yxatda yo'q kalit hisobga olinmaydi.
+// Zakasda amaldagi tanlov (NOYOB kalit): zakasning o'zi → shu qurilmada oxirgi
+// tanlangan → Sozlamalardagi birinchi sotuvchi. Ro'yxatda yo'q kalit hisobga olinmaydi.
 export function tanlanganSotuvchi(v, zakasdagi, qurilmadagi) {
-  if (sotuvchiBormi(v, zakasdagi)) return zakasdagi;
-  if (sotuvchiBormi(v, qurilmadagi)) return qurilmadagi;
-  return sotuvchiKalit(sotuvchilarOl(v)[0]);
+  const l = sotuvchilarOl(v);
+  const ks = sotuvchiKalitlari(l);
+  let i = sotuvchiIndeksi(l, ks, zakasdagi);
+  if (i < 0) i = sotuvchiIndeksi(l, ks, qurilmadagi);
+  return ks[i < 0 ? 0 : i] || '';
 }
 
 // Shu qurilmada oxirgi tanlangan sotuvchi (har sotuvchi odatda o'z telefonidan
