@@ -870,15 +870,17 @@ export default function App() {
   // DIQQAT: shopPhone lokal KESHdan kelgan bo'lishi mumkin (persistentLocalCache) —
   // unga qarab yozsak, serverdagi yangiroq ro'yxat bosib ketiladi. Shuning uchun
   // tranzaksiya: SERVERDAGI qiymat hali ham massiv bo'lsagina, o'sha qiymatdan o'giriladi.
-  const sotuvchiOgirildi = useRef(false);
+  // Tranzaksiya faqat onlayn ishlaydi: oflayn bo'lsa kutamiz, internet qaytganda
+  // (online o'zgaradi) qayta urinadi — kesh bilan server bir xil bo'lsa onSnapshot
+  // qayta chaqirilmaydi, shuning uchun faqat shopPhone ga tayanib bo'lmaydi.
+  const sotuvchiOgirilmoqda = useRef(false);
   useEffect(() => {
-    if (!Array.isArray(shopPhone) || !(role === 'founder' || role === 'admin') || sotuvchiOgirildi.current) return;
-    sotuvchiOgirildi.current = true;
-    storage.almashtirAgar('shop-phone', Array.isArray, sotuvchilarSatr).catch((e) => {
-      sotuvchiOgirildi.current = false; // oflayn — keyingi o'zgarishda qayta urinadi
-      console.error("shop-phone satrga o'girilmadi:", e);
-    });
-  }, [shopPhone, role]);
+    if (!Array.isArray(shopPhone) || !(role === 'founder' || role === 'admin') || !online || sotuvchiOgirilmoqda.current) return;
+    sotuvchiOgirilmoqda.current = true;
+    storage.almashtirAgar('shop-phone', Array.isArray, sotuvchilarSatr)
+      .catch((e) => console.error("shop-phone satrga o'girilmadi:", e))
+      .finally(() => { sotuvchiOgirilmoqda.current = false; });
+  }, [shopPhone, role, online]);
   function updateTgToken(v)    { setTgToken(v);    persist('telegram-bot-token', v); }
   function updateTgChatId(v)   { setTgChatId(v);   persist('telegram-chat-id', v); }
   function updateTgChats(v)    { setTgChats(v);    persist('telegram-dxf-chats', v); }
@@ -1272,9 +1274,11 @@ export default function App() {
     };
 
     updateOrders([newOrder, ...orders]);
-    // Shu qurilmaning sukut sotuvchisi — faqat YANGI zakas saqlanganda (tahrir, smeta
-    // yoki tashlab ketilgan qoralamadagi bosish boshqa zakaslarga ta'sir qilmasin)
-    if (newOrder.sotuvchi) qurilmaSotuvchisiniSaqla(newOrder.sotuvchi);
+    // Shu qurilmaning sukut sotuvchisi — faqat YANGI zakasda ANIQ tanlangan bo'lsa
+    // (draft.sotuvchi faqat tugma bosilganda yoziladi). Tanlanmagan bo'lsa yozilmaydi —
+    // aks holda qurilma Sozlamalardagi tartib o'zgarishiga ergashmay qolardi; tahrir,
+    // smeta yoki tashlab ketilgan qoralamadagi bosish ham boshqa zakaslarga ta'sir qilmaydi.
+    if (draft.sotuvchi && newOrder.sotuvchi) qurilmaSotuvchisiniSaqla(newOrder.sotuvchi);
     omborYech(newOrder);   // bog'langan materiallar ombordan avtomatik yechiladi
     logAction('zakas_yaratdi', `№${newOrder.number} · ${newOrder.customer.name} · ${fmt(newOrder.totalSum)} so'm`);
     setDraft(makeBlankDraft(usdRate));

@@ -28,6 +28,7 @@ function qatorOf(it) {
 
 // 'shop-phone' qiymati → sotuvchilar [{ ism, tel: [] }] (src/lib/sotuvchi.js
 // sotuvchilarOl / sotuvchilarTartib bilan BIR XIL qoida; api src/ dan import qilmaydi).
+// Mos kelishi src/lib/sotuvchi.test.mjs da tekshiriladi (shu blok ajratib olinadi).
 // Satr: "Ism: raqam1, raqam2 | raqam3" (eski bitta raqam ham shu satr);
 // massiv [{ id, ism, tel: [...] }] — qisqa muddat yozilgan format.
 function satrdanSotuvchilar(t) {
@@ -58,25 +59,53 @@ function sotuvchilarOl(v) {
   return t ? satrdanSotuvchilar(t) : [];
 }
 
-// Zakasni saqlashda tanlangan sotuvchi (o.sotuvchi — noyob kalit: ismi, ismsizda
-// 1-raqami, takror ismda "Ali#2") birinchi; topilmasa — Sozlamalardagi tartib.
+// Zakasni saqlashda tanlangan sotuvchi (o.sotuvchi — noyob kalit: ismi; ism
+// takrorlansa "Ism#<1-raqam sonlari>"; ismsizda 1-raqami) birinchi;
+// topilmasa — Sozlamalardagi tartib.
 function sotuvchilarTartib(l, kalit) {
-  const teng = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
-  const kalitOf = (s) => s.ism || s.tel[0] || '';
-  const soni = {};
-  const ks = l.map((s) => {
-    const k = kalitOf(s);
-    const n = k.trim().toLowerCase();
-    soni[n] = (soni[n] || 0) + 1;
-    return soni[n] > 1 ? `${k}#${soni[n]}` : k;
+  const kichik = (a) => String(a || '').trim().toLowerCase();
+  const teng = (a, b) => kichik(a) === kichik(b);
+  const raqam = (t) => {
+    let d = String(t || '').replace(/\D/g, '');
+    if (d.length > 9 && d.startsWith('998')) d = d.slice(3);
+    return d;
+  };
+  const ismSoni = {};
+  for (const s of l) if (s.ism) ismSoni[kichik(s.ism)] = (ismSoni[kichik(s.ism)] || 0) + 1;
+  const band = new Set();
+  const ks = l.map((s, i) => {
+    let k = s.ism || s.tel[0] || '';
+    if (s.ism && ismSoni[kichik(s.ism)] > 1) k = `${s.ism}#${raqam(s.tel[0]) || `n${i + 1}`}`;
+    const asl = k;
+    for (let n = 2; band.has(kichik(k)); n += 1) k = `${asl}~${n}`;
+    band.add(kichik(k));
+    return k;
   });
-  let i = -1;
-  if (kalit) {
-    i = ks.findIndex((k) => teng(k, kalit));
-    const asos = String(kalit).replace(/#d+$/, '');
-    if (i < 0) i = l.findIndex((s) => teng(kalitOf(s), asos));
-    if (i < 0) i = l.findIndex((s) => s.tel.some((t) => teng(t, asos)));
-  }
+  const indeks = () => {
+    if (!kalit) return -1;
+    let i = ks.findIndex((k) => teng(k, kalit));
+    if (i >= 0) return i;
+    let asos = String(kalit).trim();
+    const m = /^(.+)#(\d+)$/.exec(asos);
+    if (m) {
+      const [, ism, dum] = m;
+      const shuIsm = l.map((s, j) => j).filter((j) => teng(l[j].ism, ism));
+      if (dum.length >= 7) {
+        const j = shuIsm.find((x) => l[x].tel.some((t) => raqam(t) === raqam(dum)));
+        if (j != null) return j;
+      } else if (shuIsm.length >= Number(dum) && Number(dum) > 0) return shuIsm[Number(dum) - 1];
+      if (shuIsm.length) return shuIsm[0];
+      asos = dum.length >= 7 ? dum : ism;
+    }
+    i = l.findIndex((s) => teng(s.ism, asos));
+    if (i >= 0) return i;
+    const d = raqam(asos);
+    if (d.length < 7) return -1;
+    i = l.findIndex((s) => !s.ism && s.tel.length && raqam(s.tel[0]) === d);
+    if (i >= 0) return i;
+    return l.findIndex((s) => s.tel.some((t) => raqam(t) === d));
+  };
+  const i = indeks();
   return i > 0 ? [l[i], ...l.slice(0, i), ...l.slice(i + 1)] : l;
 }
 

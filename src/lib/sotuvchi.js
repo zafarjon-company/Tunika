@@ -89,39 +89,74 @@ export function sotuvchilarMatn(v) {
 }
 
 // ----- Zakas bo'yicha: chekda qaysi sotuvchi BIRINCHI turadi -----
-// Har zakasga saqlashdan oldin tanlanadi: order.sotuvchi = NOYOB kalit (ism,
-// ismsiz bo'lsa birinchi raqami; bir xil ism takrorlansa "Ali#2"). Id emas,
-// chunki satr formatida barqaror id yo'q; sotuvchi keyin o'chirilsa/nomi
-// o'zgarsa — Sozlamalardagi tartib qoladi.
+// Har zakasga saqlashdan oldin tanlanadi: order.sotuvchi = NOYOB kalit. Id emas,
+// chunki satr formatida barqaror id yo'q. Kalit MAZMUNDAN yasaladi (pozitsiyadan
+// emas) — sotuvchilar joyi almashsa yoki biri o'chirilsa ham o'sha odamga ishora qiladi:
+//   ism (ro'yxatda yagona)          → "Sardor"
+//   ism takrorlansa                 → "Ali#901111111" (ism + 1-raqam sonlari)
+//   ismsiz                          → uning 1-raqami ("+998 (71) 200-00-00")
+// Sotuvchi o'chirilsa/nomi o'zgarsa — Sozlamalardagi tartib qoladi.
 export function sotuvchiKalit(s) {
   return (s && (s.ism || (s.tel || [])[0])) || '';
 }
-const kalitTeng = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+const kichik = (a) => String(a || '').trim().toLowerCase();
+const kalitTeng = (a, b) => kichik(a) === kichik(b);
+// Raqamni formatdan qat'i nazar solishtirish: faqat sonlar, boshidagi 998 siz
+// ("+998 (90) 222-22-22" = "90 222 22 22")
+export function telRaqam(t) {
+  let d = String(t || '').replace(/\D/g, '');
+  if (d.length > 9 && d.startsWith('998')) d = d.slice(3);
+  return d;
+}
 
 // Ro'yxatdagi har sotuvchining noyob kaliti (tartib bilan bir xil indekslarda)
 export function sotuvchiKalitlari(v) {
-  const soni = {};
-  return sotuvchilarOl(v).map((s) => {
-    const k = sotuvchiKalit(s);
-    const n = k.trim().toLowerCase();
-    soni[n] = (soni[n] || 0) + 1;
-    return soni[n] > 1 ? `${k}#${soni[n]}` : k;
+  const l = sotuvchilarOl(v);
+  const ismSoni = {};
+  for (const s of l) if (s.ism) ismSoni[kichik(s.ism)] = (ismSoni[kichik(s.ism)] || 0) + 1;
+  const band = new Set();
+  return l.map((s, i) => {
+    let k = sotuvchiKalit(s);
+    if (s.ism && ismSoni[kichik(s.ism)] > 1) k = `${s.ism}#${telRaqam(s.tel[0]) || `n${i + 1}`}`;
+    // Kafolat: bir xil ism VA bir xil 1-raqam (yoki "Filial#2" kabi haqiqiy ism) bo'lsa ham takrorlanmasin
+    const asl = k;
+    for (let n = 2; band.has(kichik(k)); n += 1) k = `${asl}~${n}`;
+    band.add(kichik(k));
+    return k;
   });
 }
 
 // Kalit bo'yicha sotuvchi indeksi (-1 = yo'q):
-//  1) aniq noyob kalit ("Ali#2", ismsizning o'z raqami);
-//  2) "#n"siz asos kalit — takrorning biri o'chirilgan bo'lsa ham qolgani topiladi;
-//  3) eski: istalgan raqami bo'yicha.
-// Aniq moslik birinchi — umumiy raqam boshqa sotuvchini "yoqib" yubormaydi.
+//  1) aniq noyob kalit (ismsizning o'z raqami ham) — umumiy raqam boshqa sotuvchini
+//     "yoqib" yubormaydi;
+//  2) "Ism#<raqam>": shu ismli va shu raqamli; bo'lmasa shu ismlining birinchisi;
+//     "Ism#<n>" (7c8c005 dagi pozitsion eski kalit) — shu ismlilarning n-chisi;
+//  3) ism bo'yicha;
+//  4) raqam bo'yicha (formatdan qat'i nazar): avval ismsiz sotuvchining o'z raqami,
+//     keyin istalgan sotuvchining istalgan raqami.
 function sotuvchiIndeksi(l, kalitlar, kalit) {
   if (!kalit) return -1;
   let i = kalitlar.findIndex((k) => kalitTeng(k, kalit));
   if (i >= 0) return i;
-  const asos = String(kalit).replace(/#\d+$/, '');
-  i = l.findIndex((s) => kalitTeng(sotuvchiKalit(s), asos));
+  let asos = String(kalit).trim();
+  const m = /^(.+)#(\d+)$/.exec(asos);
+  if (m) {
+    const [, ism, dum] = m;
+    const shuIsm = l.map((s, j) => j).filter((j) => kalitTeng(l[j].ism, ism));
+    if (dum.length >= 7) {
+      const j = shuIsm.find((x) => l[x].tel.some((t) => telRaqam(t) === telRaqam(dum)));
+      if (j != null) return j;
+    } else if (shuIsm.length >= Number(dum) && Number(dum) > 0) return shuIsm[Number(dum) - 1];
+    if (shuIsm.length) return shuIsm[0];
+    asos = dum.length >= 7 ? dum : ism;
+  }
+  i = l.findIndex((s) => kalitTeng(s.ism, asos));
   if (i >= 0) return i;
-  return l.findIndex((s) => (s.tel || []).some((t) => kalitTeng(t, asos)));
+  const d = telRaqam(asos);
+  if (d.length < 7) return -1;
+  i = l.findIndex((s) => !s.ism && s.tel.length && telRaqam(s.tel[0]) === d);
+  if (i >= 0) return i;
+  return l.findIndex((s) => s.tel.some((t) => telRaqam(t) === d));
 }
 
 // Ro'yxatda shu kalitli sotuvchi bormi (tanlov hali amaldami)

@@ -2,6 +2,7 @@
 //  SOTUVCHILAR (chekdagi ism + raqamlar) — SINOV
 //  Ishga tushirish:  npm run test:sotuvchi   (node src/lib/sotuvchi.test.mjs)
 // ============================================================
+import { readFileSync } from 'node:fs';
 import {
   sotuvchilarOl, sotuvchilarSatr, sotuvchiQatori, sotuvchilarMatn, telHref,
   sotuvchiKalit, sotuvchiKalitlari, sotuvchiBormi, sotuvchilarTartib, tanlanganSotuvchi,
@@ -90,18 +91,59 @@ tekshir('bormi', [true, false], [sotuvchiBormi(Z, 'Sardor'), sotuvchiBormi(Z, ''
 
 console.log('\n=== noyob kalitlar (ko\'rik topilmalari) ===\n');
 const T = 'Ali: +998 (90) 111-11-11 | ALI: +998 (93) 222-22-22 | Vali: +998 (94) 333-33-33';
-tekshir('bir xil ism → "#2"', ['Ali', 'ALI#2', 'Vali'], sotuvchiKalitlari(T));
+tekshir('bir xil ism → ism + raqam (pozitsiya emas)', ['Ali#901111111', 'ALI#932222222', 'Vali'], sotuvchiKalitlari(T));
+const tel1 = (l) => l.map((s) => s.tel[0]);
 tekshir('2-Ali tanlansa u birinchi', ['+998 (93) 222-22-22', '+998 (90) 111-11-11', '+998 (94) 333-33-33'],
-  sotuvchilarTartib(T, 'ALI#2').map((s) => s.tel[0]));
-tekshir('tanlov 2-Ali ni qaytaradi', 'ALI#2', tanlanganSotuvchi(T, 'ALI#2', ''));
+  tel1(sotuvchilarTartib(T, 'ALI#932222222')));
+tekshir('tanlov 2-Ali ni qaytaradi', 'ALI#932222222', tanlanganSotuvchi(T, 'ALI#932222222', ''));
+tekshir('ikki Ali joyi almashsa ham o\'sha odam', ['+998 (93) 222-22-22', '+998 (90) 111-11-11'],
+  tel1(sotuvchilarTartib('ALI: +998 (93) 222-22-22 | Ali: +998 (90) 111-11-11', 'ALI#932222222')));
+tekshir('uch Alidan o\'rtadagisi o\'chirilsa — 3-si baribir topiladi', ['+998 (94) 333-33-33', '+998 (90) 111-11-11'],
+  tel1(sotuvchilarTartib('Ali: +998 (90) 111-11-11 | Ali: +998 (94) 333-33-33', 'Ali#943333333')));
+tekshir('eski pozitsion "Ali#2" (7c8c005) — 2-Ali', ['+998 (93) 222-22-22', '+998 (90) 111-11-11', '+998 (94) 333-33-33'],
+  tel1(sotuvchilarTartib(T, 'ALI#2')));
 tekshir('1-Ali o\'chirilsa "Ali#2" qolganini topadi', ['+998 (93) 222-22-22', '+998 (94) 333-33-33'],
-  sotuvchilarTartib('Ali: +998 (93) 222-22-22 | Vali: +998 (94) 333-33-33', 'Ali#2').map((s) => s.tel[0]));
+  tel1(sotuvchilarTartib('Ali: +998 (93) 222-22-22 | Vali: +998 (94) 333-33-33', 'Ali#2')));
+tekshir('takroriy Ali biri qayta nomlansa — qolgan Ali (API bilan bir xil)', ['222', '111'],
+  tel1(sotuvchilarTartib('Alisher: 111 | Ali: 222', 'Ali#2')));
+const F = 'Filial: 1 | Filial: 2 | Filial#2: 3';
+tekshir('haqiqiy "Filial#2" ismi bilan ham kalitlar noyob', 3, new Set(sotuvchiKalitlari(F).map((k) => k.toLowerCase())).size);
+tekshir('… 3-sotuvchini tanlasa bo\'ladi', '3', sotuvchilarTartib(F, sotuvchiKalitlari(F)[2])[0].tel[0]);
+tekshir('ismsiz sotuvchi raqami formati o\'zgarsa ham topiladi', ['90 222 22 22', 'Zafar'],
+  ismlar(sotuvchilarTartib('Zafar: 1 | 90 222 22 22', '+998 (90) 222-22-22')));
 const U = 'Zafar: +998 (90) 111-11-11, +998 (71) 200-00-00 | +998 (71) 200-00-00 | Sardor: +998 (97) 000-11-22';
 tekshir('umumiy raqamli ismsiz sotuvchi — o\'zi tanlanadi (Zafar emas)', ['+998 (71) 200-00-00', 'Zafar', 'Sardor'],
   ismlar(sotuvchilarTartib(U, '+998 (71) 200-00-00')));
 tekshir('eski kalit — faqat raqam bo\'yicha (aniq mos yo\'q)', ['Sardor', 'Zafar', '+998 (71) 200-00-00'],
   ismlar(sotuvchilarTartib(U, '+998 (97) 000-11-22')));
 tekshir('tahrir: tanlovsiz eski zakas → hozirgi birinchi (qurilma emas)', 'Zafar', tanlanganSotuvchi(U, undefined, ''));
+
+console.log('\n=== api/zakas.js nusxasi kutubxona bilan bir xilmi ===\n');
+{
+  // api/ src/ dan import qilmaydi — nusxa tutadi. Blokni fayldan ajratib, bir xil
+  // kirishlarda solishtiramiz (nusxa farqlanib ketsa shu yerda ushlanadi).
+  const src = readFileSync(new URL('../../api/zakas.js', import.meta.url), 'utf8');
+  const a = src.indexOf('function satrdanSotuvchilar');
+  const b = src.indexOf('// Kazirok qatorining nomi');
+  tekshir('api blok topildi', true, a > 0 && b > a);
+  const api = new Function(`${src.slice(a, b)}; return { ol: sotuvchilarOl, tartib: (v, k) => sotuvchilarTartib(sotuvchilarOl(v), k) };`)();
+  const soddaOl = (l) => l.map(({ ism, tel }) => ({ ism, tel }));
+  const qiymatlar = ['', null, { a: 1 }, 901234567, '+998 90 123 45 67', '90 123 45 67, 93 765 43 21', 'Tel: 1', Z, T, U, F,
+    'Ali: 111 | Ali: 333', 'Alisher: 111 | Ali: 222', 'Zafar: 1 | 90 222 22 22', 'ALI: +998 (93) 222-22-22 | Ali: +998 (90) 111-11-11',
+    [{ id: 'a', ism: ' Ali ', tel: ['1, 2', ' '] }], [{ ism: '', tel: ['Z: 1, 2 | S: 3'] }], [{ ism: '', tel: [] }, null, { ism: 'X', tel: '1' }]];
+  let farq = 0; let n = 0;
+  for (const v of qiymatlar) {
+    n += 1;
+    if (JSON.stringify(api.ol(v)) !== JSON.stringify(soddaOl(sotuvchilarOl(v)))) farq += 1;
+    const kalitlar = ['', undefined, 'Sardor', ' sardor ', 'ALI#2', 'Ali#2', 'Ali#943333333', 'ALI#932222222', 'Filial#2', '71',
+      '+998 (71) 200-00-00', '+998 (90) 222-22-22', 'Bobur', 'Vali', '3', ...sotuvchiKalitlari(v)];
+    for (const k of kalitlar) {
+      n += 1;
+      if (JSON.stringify(api.tartib(v, k)) !== JSON.stringify(soddaOl(sotuvchilarTartib(v, k)))) farq += 1;
+    }
+  }
+  tekshir(`api = kutubxona (${n} holat)`, 0, farq);
+}
 
 console.log(`\n${xato ? '❌' : '✅'} ${jami - xato}/${jami} o'tdi\n`);
 if (xato) process.exit(1);

@@ -52,8 +52,24 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
   const tel = (i, j, v) => sotuvchi(i, { tel: list[i].tel.map((t, k) => (k === j ? v : t)) });
   const telQosh = (i) => sotuvchi(i, { tel: [...list[i].tel, ''], maska: [...list[i].maska, true] });
   const telOchir = (i, j) => sotuvchi(i, { tel: list[i].tel.filter((_, k) => k !== j), maska: list[i].maska.filter((_, k) => k !== j) });
-  // Qo'lda almashtirish: o'zbek raqami (maska) ↔ boshqa format (chet el, qisqa raqam)
-  const maskaAlmashtir = (i, j) => sotuvchi(i, { maska: list[i].maska.map((m, k) => (k === j ? !m : m)) });
+  // Qo'lda almashtirish: o'zbek raqami (maska) ↔ boshqa format (chet el, qisqa raqam).
+  // Maskaga o'tishda qiymat ham o'sha zahoti formatlanadi — maydon bitta raqamni
+  // ko'rsatib, boshqasi saqlanib qolmasin. O'zbek raqamiga keltirib bo'lmasa (chet el,
+  // qisqa raqam) — maska uni kesib yuborardi, shuning uchun tozalashdan oldin so'raladi.
+  function maskaAlmashtir(i, j) {
+    const s = list[i];
+    const t = s.tel[j];
+    if (s.maska[j]) {
+      sotuvchi(i, { maska: s.maska.map((m, k) => (k === j ? false : m)) });
+      return;
+    }
+    const yangi = maskaBop(t) ? telFormat(t) : '';
+    if (t && !yangi && !window.confirm(`"${t}" o'zbek raqami formatiga mos emas — maydon tozalanadi. Davom etilsinmi?`)) return;
+    sotuvchi(i, {
+      tel: s.tel.map((x, k) => (k === j ? yangi : x)),
+      maska: s.maska.map((m, k) => (k === j ? true : m)),
+    });
+  }
   function kochir(i, dir) {
     const j = i + dir;
     if (j < 0 || j >= list.length) return;
@@ -103,7 +119,7 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
                     <PhoneInput value={t} onChange={(v) => tel(i, j, v)}
                       className="flex-1 min-w-0 px-3 py-1.5 border-2 border-slate-200 rounded-lg bg-white text-sm tabular-nums" />
                   ) : (
-                    <input value={t} onChange={(e) => tel(i, j, e.target.value)} title="Boshqa formatdagi raqam — qanday yozilsa, chekda shunday chiqadi"
+                    <input value={t} onChange={(e) => tel(i, j, e.target.value)} title="Boshqa formatdagi raqam (chet el, qisqa) — qanday yozilsa, chekda shunday chiqadi. 9 xonali o'zbek raqami keyingi ochilishda +998 ko'rinishiga keltiriladi"
                       className="flex-1 min-w-0 px-3 py-1.5 border-2 border-amber-200 rounded-lg bg-white text-sm tabular-nums" />
                   )}
                   <button type="button" onClick={() => maskaAlmashtir(i, j)} aria-pressed={!s.maska[j]}
