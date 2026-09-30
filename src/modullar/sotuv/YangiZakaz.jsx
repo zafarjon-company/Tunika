@@ -6,7 +6,7 @@
 // ============================================================
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Plus, Trash2, Save, ShoppingCart, User, Hammer, Wallet, Package, ChevronRight, ChevronDown,
+  Plus, Trash2, Save, ShoppingCart, User, Hammer, Wallet, Package, ChevronRight, ChevronDown, ChevronUp,
   Loader2, Check, X, AlertCircle, MapPin, Copy, CopyPlus, Truck, Pencil, Scissors,
   CalendarClock, FileText,
 } from 'lucide-react';
@@ -207,6 +207,14 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
     const copy = { ...it, id: genId() };
     setDraft({ ...draft, items: [...draft.items.slice(0, idx + 1), copy, ...draft.items.slice(idx + 1)] });
   }
+  // Tovar tartibini o'zgartirish (▲▼) — chek va zakasda ham aynan shu tartibda chiqadi
+  function moveItem(idx, dir) {
+    const j = idx + dir;
+    if (j < 0 || j >= draft.items.length) return;
+    const items = [...draft.items];
+    [items[idx], items[j]] = [items[j], items[idx]];
+    setDraft({ ...draft, items });
+  }
   function removeItem(idx) {
     const it = draft.items[idx];
     if (!it) return;
@@ -343,6 +351,8 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                     tunikaBaza={tunikaBaza} metrlilar={metrlilar} colorOptions={colorOptions}
                     onUpdate={(patch) => updateItem(idx, patch)}
                     onDuplicate={() => duplicateItem(idx)}
+                    onMoveUp={idx > 0 ? () => moveItem(idx, -1) : null}
+                    onMoveDown={idx < draftCalc.items.length - 1 ? () => moveItem(idx, 1) : null}
                     onRemove={() => removeItem(idx)} />
                 ))}
               </div>
@@ -629,7 +639,7 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
 }
 
 // ----- Bitta zakas qatori (kind bo'yicha) — accordion (yopiladigan) -----
-function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOptions = [], onUpdate, onDuplicate, onRemove }) {
+function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOptions = [], onUpdate, onDuplicate, onMoveUp = null, onMoveDown = null, onRemove }) {
   const rangOpts = item.rang && !colorOptions.includes(item.rang) ? [item.rang, ...colorOptions] : colorOptions;
   const isFilled = item.jamiSumma > 0;
   const [open, setOpen] = useState(false); // har doim yopiq qo'shiladi — faqat foydalanuvchi ochsa ochiladi
@@ -702,6 +712,21 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
     <div className={`border rounded-xl bg-slate-50/50 overflow-hidden transition-colors ${removing ? 'anim-item-out' : 'anim-item-in'} ${open ? 'border-slate-900' : 'border-slate-200'}`}>
       {/* ----- SARLAVHA (bosilganda ochiladi/yopiladi) ----- */}
       <div className="flex items-center gap-2 p-2.5">
+        {/* Tartib: ▲▼ (bitta tovar bo'lsa ko'rinmaydi) — Narxlar bo'limidagi kabi */}
+        {(onMoveUp || onMoveDown) && (
+          <div className="flex flex-col -my-1.5 -ml-1.5 flex-shrink-0">
+            <button type="button" onClick={onMoveUp || undefined} disabled={!onMoveUp}
+              aria-label="Tovarni yuqoriga ko'chirish" title="Yuqoriga"
+              className="p-1 rounded text-slate-400 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-20 disabled:hover:bg-transparent">
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={onMoveDown || undefined} disabled={!onMoveDown}
+              aria-label="Tovarni pastga ko'chirish" title="Pastga"
+              className="p-1 rounded text-slate-400 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-20 disabled:hover:bg-transparent">
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <button type="button" onClick={() => setOpen((o) => !o)}
           className="flex items-center gap-2 min-w-0 flex-1 text-left">
           <span className="w-5 h-5 rounded-md bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">{idx + 1}</span>
