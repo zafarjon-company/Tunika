@@ -8,7 +8,7 @@
 //   • har avans faqat bitta oyda hisoblanadi (teleskopik tenglik).
 // ============================================================
 import {
-  MAOSH_KUNI, oldingiOy, avansOyi, avansTaqsimot, tolovlarSummasi, avansYozuvlari,
+  MAOSH_KUNI, oldingiOy, avansOyi, avansTaqsimot, avansSanasiOyga, tolovlarSummasi, avansYozuvlari,
   oyIshlangan, oylikYoqlama, ishchiHisobi, oylikBalans, ishKuniMi,
 } from './helpers.js';
 
@@ -33,6 +33,21 @@ tekshir('faqat sana ("2026-09-03") → o\'tgan oy', '2026-08', avansOyi({ create
 tekshir('eski (sonli) yozuv → o\'z oyi', '2026-09', avansOyi({ eski: true, createdAt: '2026-09-01' }, '2026-09'));
 tekshir('sanasiz yozuv → o\'z oyi', '2026-09', avansOyi({ createdAt: null }, '2026-09'));
 tekshir("avansYozuvlari eski sonli → eski: true", true, avansYozuvlari(300000, '2026-09')[0].eski);
+
+console.log('\n=== 1b) AVANS OYNASIDA SANA TANLANGAN OYGA MOSLANADI (avansSanasiOyga) ===\n');
+{
+  // Oktabrda "Avgust" tanlab, sanani o'zgartirmay avans qo'shildi → avgust maoshidan ushlanishi kerak
+  const bugun = new Date('2026-10-03T10:00:00').toISOString();
+  const s = avansSanasiOyga(bugun, '2026-08');
+  tekshir('boshqa oy sanasi → 6-sana (1-sana emas)', 6, new Date(s).getDate());
+  tekshir('→ tanlangan oy maoshidan ushlanadi', '2026-08', avansOyi({ createdAt: s }, '2026-08'));
+  const tanlangan = new Date('2026-08-20T09:00:00').toISOString();
+  tekshir('o\'sha oyda tanlangan sana o\'zgarmaydi', tanlangan, avansSanasiOyga(tanlangan, '2026-08'));
+  const birinchi = new Date('2026-09-01T02:00:00').toISOString(); // UTC: 2026-08-31T21:00Z
+  tekshir('1-sana 02:00 (UTC da o\'tgan oy) mahalliy oyda qoladi', birinchi, avansSanasiOyga(birinchi, '2026-09'));
+  tekshir('… va 1–5-kun qoidasi bilan o\'tgan oyga', '2026-08', avansOyi({ createdAt: birinchi }, '2026-09'));
+  tekshir('sanasiz → 6-sana', 6, new Date(avansSanasiOyga(null, '2026-09')).getDate());
+}
 
 console.log('\n=== 2) OYLIK BALANS: SENTABR 1–5 AVANSI AVGUST MAOSHIDAN ===\n');
 {

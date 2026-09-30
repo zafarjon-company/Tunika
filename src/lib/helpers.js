@@ -482,7 +482,10 @@ export function orderItemToDraft(it, ctx = {}) {
     let variantIndex = variants.findIndex((v) => (it.tafsilot || '').includes(`${v.son} bo'lak (${v.razmer})`));
     if (variantIndex < 0) variantIndex = 0;
     const v = variants[variantIndex];
-    const priceType = inferPriceType(it.birBirlikNarxi, tunika, (base) => metrliNarx(base, v && v.son, m));
+    // YAXLITLANMAGAN formula bilan: bu yo'lga faqat srcItems'siz ESKI zakaslar keladi,
+    // ular yaxlitlashdan oldin saqlangan. Yaxlitlangan nomzodlar ko'pincha teng chiqib
+    // (masalan ikkalasi 10 500), optom qator "chakana" bo'lib tiklanardi.
+    const priceType = inferPriceType(it.birBirlikNarxi, tunika, (base) => base / ((v && v.son) || 1) + metrliAddon(m));
     return { id, kind: 'metrli', metrliId: m.id, tunikaId: tunika.id, variantIndex, priceType, uzunlik, soni: soni || '1' };
   }
 
@@ -690,6 +693,20 @@ export function avansOyi(entry, oy) {
   const kun = avansKuni(entry);
   if (kun == null || kun > MAOSH_KUNI) return oy;
   return oldingiOy(oy);
+}
+
+// Avans oynasida kiritilgan sana tanlangan oyga (oy — 'YYYY-MM', yozuv kaliti)
+// mos kelmasa — o'sha oyning maosh kunidan KEYINGI kuni (6-sana, 12:00 mahalliy).
+//  - oy MAHALLIY vaqtda olinadi: ISO (UTC) satrda 1-sana 00:00–04:59 o'tgan oy
+//    bo'lib ko'rinardi;
+//  - 1-sana emas: 1–5-kun qoidasi (avansOyi) uni yana bir oy oldinga surar,
+//    avans tanlangan oy maoshidan ushlanmay qolardi.
+// Sana mos bo'lsa (foydalanuvchi o'zi tanlagan) — o'zgarmaydi.
+export function avansSanasiOyga(createdAt, oy) {
+  const d = new Date(createdAt);
+  const lokalOy = Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  if (createdAt && lokalOy === oy) return createdAt;
+  return new Date(`${oy}-${String(MAOSH_KUNI + 1).padStart(2, '0')}T12:00:00`).toISOString();
 }
 
 // Ishchining barcha avanslari — QAYSI OY MAOSHIDAN ushlanishi bo'yicha (so'mda):

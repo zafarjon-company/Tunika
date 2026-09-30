@@ -12,7 +12,7 @@ import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
 import {
   fmt, toMonthInput, formatDate, formatDay, daysInMonth, makeBlankPayment, ishchiHisobi, oyIshlangan,
-  sonQiymat, oyFaolmi, avansOyi, avansTaqsimot, MAOSH_KUNI,
+  sonQiymat, oyFaolmi, avansOyi, avansTaqsimot, avansSanasiOyga, MAOSH_KUNI,
 } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
@@ -74,10 +74,8 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
       .map((p) => {
         const y = { ...p, amount: sonQiymat(p.amount), rate: sonQiymat(p.rate) || usdRate };
         // Sana tanlangan oyga mos bo'lsin: o'tgan oyga avans kiritilayotganda
-        // sukut "bugun" bo'lib qolsa, hisobot uni boshqa oyga qo'yib yuborardi.
-        if ((y.createdAt || '').slice(0, 7) !== oy) {
-          y.createdAt = new Date(`${oy}-01T12:00:00`).toISOString();
-        }
+        // sukut "bugun" bo'lib qolsa, hisobot uni boshqa oyga qo'yib yuborardi (avansSanasiOyga).
+        y.createdAt = avansSanasiOyga(y.createdAt, oy);
         return y;
       });
     if (valid.length === 0) { showToast('Summani kiriting'); return; }
