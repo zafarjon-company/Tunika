@@ -7,6 +7,8 @@ import { Trash2, ChevronLeft, Layers, Package, Ruler, Triangle, Search, Check } 
 import { FullModal, PhoneInput } from '../../components/ui.jsx';
 import { fmt, genId, metrliVariantlar } from '../../lib/helpers.js';
 import { BOSHQA_USTA } from '../../lib/constants.js';
+import { KlentTavsiya, TelefonTakror } from './KlentTavsiya.jsx';
+import { klentQidiruvMos, klentTakrorXabar } from '../../lib/mijoz.js';
 
 // 2 bosqichli guruhli ko'p tanlov: guruh -> tovarlarni belgilash -> Saqlash.
 // Saqlaganda tanlanganlar GURUHLAR ketma-ketligi va har guruhdagi tartib bo'yicha qo'shiladi.
@@ -159,20 +161,31 @@ export function ProductPickerModal({ tunikaBaza = [], metrlilar = [], aksessuarl
   );
 }
 
-export function ClientPickerModal({ klentlar, updateKlentlar, onSelect, onClose }) {
+export function ClientPickerModal({ klentlar, updateKlentlar, orders = [], onSelect, onClose }) {
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', phones: [''], address: '', orientir: '' });
 
-  const filtered = klentlar.filter((c) => !query.trim() || c.name.toLowerCase().includes(query.toLowerCase()));
+  // Ism (apostrof/kiril/so'z tartibidan qat'i nazar), telefon (bo'shliqsiz ham), manzil
+  const filtered = klentlar.filter((c) => klentQidiruvMos(c, query));
 
   function changePhone(idx, v) {
     setForm({ ...form, phones: form.phones.map((p, i) => (i === idx ? v : p)) });
   }
 
+  // Qidiruvda ism yozilgan-u topilmagan bo'lsa — yangi mijoz formasiga o'sha ism tushadi
+  function startAdd() {
+    const q = query.trim();
+    if (!form.name && /\p{L}/u.test(q)) setForm({ ...form, name: q });
+    setAdding(true);
+  }
+
   function saveAndSelect() {
     if (!form.name.trim()) return;
     const cleaned = form.phones.map((p) => p.trim()).filter(Boolean);
+    // Adashib qayta kiritmaslik: aynan shu ism yoki shu raqamli mijoz bo'lsa — tasdiq
+    const takror = klentTakrorXabar(klentlar, form.name, cleaned);
+    if (takror && !window.confirm(takror)) return;
     const nK = {
       id: genId(),
       name: form.name.trim(),
@@ -193,6 +206,8 @@ export function ClientPickerModal({ klentlar, updateKlentlar, onSelect, onClose 
             <div>
               <label className="block text-xs text-slate-600 mb-1 font-medium">Ism familiya *</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ism familiya" className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white" />
+              {/* Shu ismdagi avval yozilgan mijozlar — "Tanlash" yangisini ochmasdan o'shani zakasga qo'yadi */}
+              <KlentTavsiya klentlar={klentlar} ism={form.name} orders={orders} amal="Tanlash" onTanla={onSelect} />
             </div>
 
             <div>
@@ -204,6 +219,8 @@ export function ClientPickerModal({ klentlar, updateKlentlar, onSelect, onClose 
                 </div>
               ))}
               <button type="button" onClick={() => setForm({ ...form, phones: [...form.phones, ''] })} className="text-xs text-slate-900 font-bold mt-1">+ Raqam qo'shish</button>
+              {/* Shu raqam allaqachon boshqa mijozda bo'lsa (ism boshqacha yozilgan bo'lsa ham) */}
+              <TelefonTakror klentlar={klentlar} phones={form.phones} orders={orders} amal="Tanlash" onTanla={onSelect} />
             </div>
 
             <div>
@@ -222,9 +239,17 @@ export function ClientPickerModal({ klentlar, updateKlentlar, onSelect, onClose 
             </div>
           </div>
         ) : (
-          <button onClick={() => setAdding(true)} className="w-full py-2 border border-dashed rounded text-center">+ Yangi mijoz ochish</button>
+          <button onClick={startAdd} className="w-full py-2 border border-dashed rounded text-center">+ Yangi mijoz ochish</button>
         )}
-        <div className="space-y-1">{filtered.map((c) => <button key={c.id} onClick={() => onSelect(c)} className="w-full text-left p-2.5 border rounded-lg hover:bg-slate-50 block"><b>{c.name}</b> <div className="text-slate-400">{c.phones?.filter(Boolean).join(', ')}</div></button>)}</div>
+        {/* Nomdosh mijozlar chalkashmasin — telefon bilan birga manzil/mo'ljal ham ko'rinadi */}
+        <div className="space-y-1">{filtered.map((c) => (
+          <button key={c.id} onClick={() => onSelect(c)} className="w-full text-left p-2.5 border rounded-lg hover:bg-slate-50 block">
+            <b>{c.name}</b>
+            <div className="text-slate-400">
+              {[(c.phones || []).filter(Boolean).join(', '), c.address, c.orientir].filter(Boolean).join(' · ')}
+            </div>
+          </button>
+        ))}</div>
       </div>
     </FullModal>
   );

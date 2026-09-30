@@ -1776,7 +1776,7 @@ export default function App() {
       )}
       {clientPicker && (
         <ClientPickerModal
-          klentlar={klentlar} updateKlentlar={updateKlentlar}
+          klentlar={klentlar} updateKlentlar={updateKlentlar} orders={orders}
           onSelect={onClientSelected} onClose={() => setClientPicker(false)}
         />
       )}

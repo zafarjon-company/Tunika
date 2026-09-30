@@ -19,31 +19,9 @@ function telWa(phones) {
 }
 import { Card, PhoneInput, StatBox } from '../../components/ui.jsx';
 import { genId, fmt, formatDate } from '../../lib/helpers.js';
-
-const norm = (s) => (s || '').trim().toLowerCase();
-
-// Bir mijozning zakaslari — clientId bo'yicha, bo'lmasa nom bo'yicha
-function mijozZakaslari(orders, c) {
-  if (!c) return [];
-  return orders.filter((o) =>
-    o.customer?.clientId
-      ? o.customer.clientId === c.id
-      : norm(o.customer?.name) === norm(c.name),
-  );
-}
-// Haqiqiy qarz: to'lov umuman kiritilmagan zakas "Hisob (xom)" hisoblanadi
-// (Zakaslar bo'limidagi qoida bilan bir xil) — u qarz statistikasiga kirmaydi.
-function realQarz(o) {
-  return (o.debt > 0 && (o.totalPaid || 0) > 0) ? o.debt : 0;
-}
-function jamla(os) {
-  return os.reduce((a, o) => ({
-    jami: a.jami + (o.totalSum || 0),
-    tolangan: a.tolangan + (o.totalPaid || 0),
-    qarz: a.qarz + realQarz(o),
-    n: a.n + 1,
-  }), { jami: 0, tolangan: 0, qarz: 0, n: 0 });
-}
+// Mijoz statistikasi (zakaslar, qarz) — tavsiya kartasi bilan bir xil qoida
+import { norm, mijozZakaslari, realQarz, jamla, klentQidiruvMos, klentTakrorXabar } from '../../lib/mijoz.js';
+import { KlentTavsiya, TelefonTakror } from './KlentTavsiya.jsx';
 
 const STATUS = {
   paid:    { t: "To'langan", Icon: CheckCircle2, c: 'bg-emerald-100 text-emerald-700' },
@@ -163,10 +141,8 @@ function KlentlarSubTab({ klentlar, updateKlentlar, orders, showToast }) {
   const [detail, setDetail]   = useState(null); // ko'rilayotgan mijoz
   const [form, setForm]       = useState({ name: '', phones: [''], address: '', orientir: '' });
 
-  const filtered = klentlar.filter((c) =>
-    !query.trim() || c.name.toLowerCase().includes(query.toLowerCase()) ||
-    c.phones.some((p) => p.includes(query)) || (c.address || '').toLowerCase().includes(query.toLowerCase())
-  );
+  // Ism (apostrof/kiril/so'z tartibidan qat'i nazar), telefon (bo'shliqsiz ham), manzil
+  const filtered = klentlar.filter((c) => klentQidiruvMos(c, query));
 
   function startAdd() { setForm({ name: '', phones: [''], address: '', orientir: '' }); setAdding(true); setEditing(null); }
   function startEdit(c) { setForm({ name: c.name, phones: c.phones || [''], address: c.address || '', orientir: c.orientir || '' }); setEditing(c.id); setAdding(false); }
@@ -181,6 +157,12 @@ function KlentlarSubTab({ klentlar, updateKlentlar, orders, showToast }) {
     if (!form.name.trim()) { showToast('Ism kiriting'); return; }
     const cleaned = form.phones.map((p) => p.trim()).filter(Boolean);
     const finalData = { ...form, phones: cleaned.length ? cleaned : [''] };
+
+    // Adashib qayta kiritmaslik: aynan shu ism yoki shu raqamli mijoz bo'lsa — tasdiq
+    if (adding) {
+      const takror = klentTakrorXabar(klentlar, form.name, cleaned);
+      if (takror && !window.confirm(takror)) return;
+    }
 
     if (adding) { updateKlentlar([{ id: genId(), ...finalData }, ...klentlar]); showToast('Mijoz qo\'shildi'); }
     else { updateKlentlar(klentlar.map((c) => (c.id === editing ? { ...c, ...finalData } : c))); showToast('Saqlandi'); }
@@ -204,6 +186,8 @@ function KlentlarSubTab({ klentlar, updateKlentlar, orders, showToast }) {
           <div>
             <label className="block text-xs text-slate-600 mb-1 font-medium">Ism familiya *</label>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ism familiya" className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white" />
+            {/* Yangi mijoz: shu ismdagi avval yozilganlar — "Ochish" tarixini ko'rsatadi */}
+            {adding && <KlentTavsiya klentlar={klentlar} ism={form.name} orders={orders} amal="Ochish" onTanla={setDetail} />}
           </div>
 
           <div>
@@ -215,6 +199,8 @@ function KlentlarSubTab({ klentlar, updateKlentlar, orders, showToast }) {
               </div>
             ))}
             <button type="button" onClick={() => setForm({ ...form, phones: [...form.phones, ''] })} className="text-xs text-slate-900 font-bold mt-1">+ Raqam qo'shish</button>
+            {/* Shu raqam allaqachon boshqa mijozda bo'lsa (ism boshqacha yozilgan bo'lsa ham) */}
+            {adding && <TelefonTakror klentlar={klentlar} phones={form.phones} orders={orders} amal="Ochish" onTanla={setDetail} />}
           </div>
 
           <div>

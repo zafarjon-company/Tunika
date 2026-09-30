@@ -150,6 +150,12 @@ const RU = {
   'Foydalanuvchi, amal yoki tafsilot...': 'Пользователь, действие или детали...',
   "Zakas uchun qo'shimcha eslatma...": 'Доп. примечание к заказу...', "+ Raqam qo'shish": '+ Добавить номер',
   'Telefon kiritilmagan': 'Телефон не указан', "Mijoz tanlang yoki yangisini qo'shing": 'Выберите клиента или добавьте нового',
+  // Yangi mijoz — ism bo'yicha tavsiya
+  'Bu ism bilan mijoz allaqachon bor': 'Клиент с таким именем уже есть', "O'xshash ismli mijozlar": 'Клиенты с похожим именем',
+  "Yangisini ochishdan oldin tekshiring — balki shu mijozdir.": 'Проверьте перед созданием — возможно, это он.',
+  'Bu raqam allaqachon bor': 'Этот номер уже есть', "Shu raqamli mijoz — ehtimol aynan shu odam.": 'Клиент с этим номером — вероятно, тот же человек.',
+  'Aynan shu ism': 'Точно такое имя', 'Ismi yoki familiyasi bir xil': 'Совпадает имя или фамилия',
+  'Tanlash': 'Выбрать', 'Ochish': 'Открыть', "Hali zakas yo'q": 'Заказов пока нет',
   "Hozircha bo'sh": 'Пока пусто', 'Mijozlar mavjud emas': 'Клиентов нет', 'Ustalar topilmadi': 'Мастера не найдены',
   'Ishchilar mavjud emas': 'Работников нет', 'Listlar mavjud emas': 'Листов нет',
   'Aksessuarlar mavjud emas': 'Аксессуаров нет', 'Lavozimlar mavjud emas': 'Должностей нет',
