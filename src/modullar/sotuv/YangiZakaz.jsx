@@ -734,9 +734,12 @@ function ItemRow({ idx, item, removing = false, tunikaBaza, metrlilar, colorOpti
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-semibold text-sm text-slate-800 leading-tight">
               <span className="truncate">{item.nomi}</span>
-              <TeskariBadge item={item} />
+              {/* Tor telefonda (▲▼ ham bor) belgi nomni butunlay siqib yubormasin —
+                  u yerda ikkinchi qatorga tushadi */}
+              <TeskariBadge item={item} className="hidden sm:inline-flex" />
             </span>
             <span className="block text-[11px] text-slate-500 truncate">
+              <TeskariBadge item={item} className="sm:hidden mr-1" />
               {olchovDisp(item)}{item.rang ? ` · ${item.rang}` : ''}
               {/* Yopiq turganda izohning o'zi qisqartirib ko'rsatiladi (ochilganda input bor) */}
               {!open && item.izoh ? <span className="italic text-slate-400"> · {item.izoh}</span> : null}

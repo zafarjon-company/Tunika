@@ -7,10 +7,11 @@
 //  nusxa — uning rasmi botga albom bilan birga yuboriladi.
 // ============================================================
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, Receipt, MapPin, Phone, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check, Scissors, Loader2, CalendarClock, Copy } from 'lucide-react';
+import { Printer, Receipt, MapPin, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check, Scissors, Loader2, CalendarClock, Copy } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fmt, formatDate, formatDay } from '../../lib/helpers.js';
-import { sotuvchilarOl, sotuvchilarMatn } from '../../lib/sotuvchi.js';
+import { sotuvchilarMatn } from '../../lib/sotuvchi.js';
+import { SotuvchiQatorlari } from '../sozlamalar/Sotuvchilar.jsx';
 import { qrDataUrl, zakasHavola } from '../../lib/qr.js';
 import { applyTil, getTil } from '../../lib/til.js';
 import { KanyokImg, TeskariBadge, rangChipStyle } from '../../components/ui.jsx';
@@ -307,13 +308,7 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
           <p className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">{smeta ? 'Taklifimiz bilan tanishganingiz uchun rahmat!' : 'Xaridingiz uchun rahmat!'} <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /></p>
           <div className="text-xs text-slate-400">{shopName}</div>
           {/* Sotuvchilar: har biri alohida qatorda — ism + barcha raqamlari (Sozlamalar) */}
-          {sotuvchilarOl(shopPhone).map((s) => (
-            <div key={s.id} className="text-[15px] font-bold text-slate-700 flex items-center justify-center gap-1.5 flex-wrap">
-              <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-              {s.ism && <span>{s.ism}{s.tel.length ? ':' : ''}</span>}
-              {s.tel.length > 0 && <span className="tabular-nums">{s.tel.join(', ')}</span>}
-            </div>
-          ))}
+          <SotuvchiQatorlari qiymat={shopPhone} klass="text-[15px]" />
           {/* Holat havolasi matn bilan — QR o'qilmasa qo'lda terish uchun (bitta mayda qator) */}
           {havola && <div className="text-[9px] text-slate-400 break-all mt-0.5">Zakas holati: {qisqaHavola(havola)}</div>}
         </div>

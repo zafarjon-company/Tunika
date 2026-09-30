@@ -9,7 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Phone, X } from 'lucide-react';
 import { PhoneInput } from '../../components/ui.jsx';
 import { genId, formatPhone } from '../../lib/helpers.js';
-import { sotuvchilarOl, sotuvchiQatori } from '../../lib/sotuvchi.js';
+import { sotuvchilarOl, sotuvchilarSatr } from '../../lib/sotuvchi.js';
 
 const bosh = () => ({ id: genId(), ism: '', tel: [''] });
 
@@ -21,11 +21,15 @@ function telFormat(t) {
   if (d.startsWith('998') && d.length > 9) d = d.slice(3);
   return d.length === 9 ? formatPhone(d) : t;
 }
+// PhoneInput (9 raqamli o'zbek maskasi) faqat bo'sh, "+998..." yoki o'zbek raqamiga
+// keltiriladigan qiymat uchun. Boshqasi ("+7 999...", "1234", "8 90 ...") oddiy
+// matn maydonida qoladi — aks holda maska uni kesib, boshqa raqam ko'rsatardi.
+const maskaBop = (t) => !t || /^\s*\+998/.test(t) || telFormat(t) !== t;
 
 // Tahrir qoralamasi: har sotuvchida kamida bitta (bo'sh) raqam maydoni bo'ladi
 function qoralama(v) {
   const l = sotuvchilarOl(v).map((s) => ({
-    id: s.id === 'eski' ? genId() : s.id,
+    id: genId(),
     ism: s.ism,
     tel: s.tel.length ? s.tel.map(telFormat) : [''],
   }));
@@ -54,12 +58,13 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
     yangila(next.length ? next : [bosh()]);
   }
   function saqla() {
-    onSaqla(sotuvchilarOl(list));
+    // DOIM oddiy satr — eski ilova nusxalari ham xavfsiz chizadi (lib/sotuvchi.js)
+    onSaqla(sotuvchilarSatr(list));
     setOzgargan(false);
     showToast('Saqlandi');
   }
 
-  const korinish = sotuvchilarOl(list).map(sotuvchiQatori);
+  const korinish = sotuvchilarOl(list);
 
   return (
     <div>
@@ -68,13 +73,13 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
         {list.map((s, i) => (
           <div key={s.id} className="p-2.5 rounded-lg border-2 border-slate-200 bg-slate-50/60">
             <div className="flex items-center gap-1.5">
-              <div className="flex flex-col -my-1 flex-shrink-0">
+              <div className="flex flex-col -my-1.5 flex-shrink-0">
                 <button type="button" onClick={() => kochir(i, -1)} disabled={i === 0}
                   aria-label="Sotuvchini yuqoriga" title="Yuqoriga"
-                  className="p-0.5 rounded text-slate-400 hover:text-slate-900 disabled:opacity-20"><ChevronUp className="w-4 h-4" /></button>
+                  className="p-1 rounded text-slate-400 hover:text-slate-900 disabled:opacity-20"><ChevronUp className="w-4 h-4" /></button>
                 <button type="button" onClick={() => kochir(i, 1)} disabled={i === list.length - 1}
                   aria-label="Sotuvchini pastga" title="Pastga"
-                  className="p-0.5 rounded text-slate-400 hover:text-slate-900 disabled:opacity-20"><ChevronDown className="w-4 h-4" /></button>
+                  className="p-1 rounded text-slate-400 hover:text-slate-900 disabled:opacity-20"><ChevronDown className="w-4 h-4" /></button>
               </div>
               <input value={s.ism} onChange={(e) => sotuvchi(i, { ism: e.target.value })}
                 placeholder="Sotuvchi ismi (masalan: Zafar aka)"
@@ -86,8 +91,13 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
               {s.tel.map((t, j) => (
                 <div key={j} className="flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                  <PhoneInput value={t} onChange={(v) => tel(i, j, v)}
-                    className="flex-1 min-w-0 px-3 py-1.5 border-2 border-slate-200 rounded-lg bg-white text-sm tabular-nums" />
+                  {maskaBop(t) ? (
+                    <PhoneInput value={t} onChange={(v) => tel(i, j, v)}
+                      className="flex-1 min-w-0 px-3 py-1.5 border-2 border-slate-200 rounded-lg bg-white text-sm tabular-nums" />
+                  ) : (
+                    <input value={t} onChange={(e) => tel(i, j, e.target.value)} title="Boshqa formatdagi raqam — qanday yozilsa, chekda shunday chiqadi"
+                      className="flex-1 min-w-0 px-3 py-1.5 border-2 border-amber-200 rounded-lg bg-white text-sm tabular-nums" />
+                  )}
                   {s.tel.length > 1 && (
                     <button type="button" onClick={() => sotuvchi(i, { tel: s.tel.filter((_, k) => k !== j) })}
                       aria-label="Raqamni o'chirish" title="Raqamni o'chirish"
@@ -118,13 +128,24 @@ export function SotuvchilarSozlama({ qiymat, onSaqla, showToast = () => {} }) {
       {korinish.length > 0 && (
         <div className="mt-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-center">
           <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Chekda shunday chiqadi</div>
-          {korinish.map((q, k) => (
-            <div key={k} className="text-sm font-bold text-slate-700 inline-flex items-center justify-center gap-1.5 w-full">
-              <Phone className="w-3.5 h-3.5 flex-shrink-0" /><span className="break-words">{q}</span>
-            </div>
-          ))}
+          <SotuvchiQatorlari qiymat={korinish} />
         </div>
       )}
     </div>
   );
+}
+
+// Chek pastidagi va "Chekda shunday chiqadi" qatorlari: har sotuvchi alohida
+// qatorda, har raqam butun (whitespace-nowrap) — qator faqat raqamlar ORASIDA
+// bo'linadi (mijoz raqamni ikki qatorga bo'lingan holda ko'rmasin).
+export function SotuvchiQatorlari({ qiymat, klass = 'text-sm' }) {
+  return sotuvchilarOl(qiymat).map((s, i) => (
+    <div key={i} className={`font-bold text-slate-700 flex items-center justify-center gap-x-1.5 flex-wrap ${klass}`}>
+      <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+      {s.ism && <span>{s.ism}{s.tel.length ? ':' : ''}</span>}
+      {s.tel.map((t, k) => (
+        <span key={k} className="whitespace-nowrap tabular-nums">{t}{k < s.tel.length - 1 ? ',' : ''}</span>
+      ))}
+    </div>
+  ));
 }

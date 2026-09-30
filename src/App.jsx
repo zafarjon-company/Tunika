@@ -64,6 +64,7 @@ import {
 } from './lib/avtoIsh.js';
 import { sendTelegramDocument, sendTelegramMessage, telegramSozlangan } from './lib/telegram.js';
 import { zaxiraMalumot } from './lib/zaxira.js';
+import { sotuvchilarSatr } from './lib/sotuvchi.js';
 
 import { SmallModal } from './components/ui.jsx';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
@@ -862,6 +863,15 @@ export default function App() {
   function updateLatokData(v)  { setLatokData(v);  persist('latok-data', v); }
   function updateShopName(v)   { setShopName(v);   persist('shop-name', v); }
   function updateShopPhone(v)  { setShopPhone(v);  persist('shop-phone', v); }
+  // 'shop-phone' (sotuvchilar) DOIM oddiy satr bo'lishi kerak: qayta yuklanmagan eski
+  // ilova nusxalari uni chekda to'g'ridan-to'g'ri chizadi va massivda qulaydi.
+  // 0bdb5a4 qisqa muddat massiv yozgan — boshliq ilovani ochishi bilan satrga
+  // o'giramiz (ishchi bu kalitga yozolmaydi — Firestore qoidasi, shuning uchun faqat boshliq).
+  useEffect(() => {
+    if (Array.isArray(shopPhone) && (role === 'founder' || role === 'admin')) {
+      updateShopPhone(sotuvchilarSatr(shopPhone));
+    }
+  }, [shopPhone, role]);
   function updateTgToken(v)    { setTgToken(v);    persist('telegram-bot-token', v); }
   function updateTgChatId(v)   { setTgChatId(v);   persist('telegram-chat-id', v); }
   function updateTgChats(v)    { setTgChats(v);    persist('telegram-dxf-chats', v); }

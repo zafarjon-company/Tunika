@@ -28,7 +28,8 @@ function qatorOf(it) {
 
 // 'shop-phone' qiymati → sotuvchilar [{ ism, tel: [] }] (src/lib/sotuvchi.js
 // sotuvchilarOl bilan bir xil qoida; api src/ dan import qilmaydi).
-// Yangi: [{ id, ism, tel: [...] }]; eski: bitta satr — ismsiz bitta sotuvchi.
+// Satr: "Ism: raqam1, raqam2 | raqam3" (eski bitta raqam ham shu satr);
+// massiv [{ id, ism, tel: [...] }] — qisqa muddat yozilgan format.
 function sotuvchilarOl(v) {
   if (Array.isArray(v)) {
     return v
@@ -41,8 +42,16 @@ function sotuvchilarOl(v) {
       }))
       .filter((s) => s.ism || s.tel.length);
   }
-  const t = v == null ? '' : String(v).trim();
-  return t ? [{ ism: '', tel: [t] }] : [];
+  const t = v == null || typeof v === 'object' ? '' : String(v).trim();
+  if (!t) return [];
+  return t.split('|').map((qism) => {
+    const q = qism.trim();
+    const k = q.lastIndexOf(':');
+    return {
+      ism: k >= 0 ? q.slice(0, k).trim() : '',
+      tel: (k >= 0 ? q.slice(k + 1) : q).split(/[,;]/).map((x) => x.trim()).filter(Boolean),
+    };
+  }).filter((s) => s.ism || s.tel.length);
 }
 
 // Kazirok qatorining nomi (KazirokSavdo.jsx dagi kazRowNom bilan bir xil)
