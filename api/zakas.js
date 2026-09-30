@@ -54,6 +54,14 @@ function sotuvchilarOl(v) {
   }).filter((s) => s.ism || s.tel.length);
 }
 
+// Zakasni saqlashda tanlangan sotuvchi (o.sotuvchi — ismi yoki 1-raqami) birinchi;
+// topilmasa — Sozlamalardagi tartib (src/lib/sotuvchi.js sotuvchilarTartib bilan bir xil).
+function sotuvchilarTartib(l, kalit) {
+  const teng = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const i = kalit ? l.findIndex((s) => teng(s.ism, kalit) || s.tel.some((t) => teng(t, kalit))) : -1;
+  return i > 0 ? [l[i], ...l.slice(0, i), ...l.slice(i + 1)] : l;
+}
+
 // Kazirok qatorining nomi (KazirokSavdo.jsx dagi kazRowNom bilan bir xil)
 function kazNom(r) {
   if (r.nom) return r.nom;
@@ -94,7 +102,7 @@ export default async function handler(req, res) {
     }
 
     const nomi = (await readShop(db, 'shop-name')) || '';
-    const sotuvchilar = sotuvchilarOl(await readShop(db, 'shop-phone'));
+    const sotuvchilar = sotuvchilarTartib(sotuvchilarOl(await readShop(db, 'shop-phone')), o.sotuvchi);
     // Eski mijoz sahifasi (keshdagi) uchun — birinchi raqam
     const telefon = (sotuvchilar.find((s) => s.tel.length) || { tel: [''] }).tel[0];
 

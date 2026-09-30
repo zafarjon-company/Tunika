@@ -10,7 +10,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Printer, Receipt, MapPin, Heart, CheckCircle2, Clock, XCircle, Send, MessageCircle, Truck, EyeOff, Check, Scissors, Loader2, CalendarClock, Copy } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import { fmt, formatDate, formatDay } from '../../lib/helpers.js';
-import { sotuvchilarMatn } from '../../lib/sotuvchi.js';
+import { sotuvchilarMatn, sotuvchilarTartib } from '../../lib/sotuvchi.js';
 import { SotuvchiQatorlari } from '../sozlamalar/Sotuvchilar.jsx';
 import { qrDataUrl, zakasHavola } from '../../lib/qr.js';
 import { applyTil, getTil } from '../../lib/til.js';
@@ -307,8 +307,9 @@ function ReceiptBody({ order, shopName, shopPhone, narxsiz, statBadge, olishUsd,
         <div className="mt-2 pt-1.5 border-t border-dashed border-slate-300 text-center leading-tight">
           <p className="text-sm font-bold text-slate-700 inline-flex items-center gap-1.5">{smeta ? 'Taklifimiz bilan tanishganingiz uchun rahmat!' : 'Xaridingiz uchun rahmat!'} <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /></p>
           <div className="text-xs text-slate-400">{shopName}</div>
-          {/* Sotuvchilar: har biri alohida qatorda — ism + barcha raqamlari (Sozlamalar) */}
-          <SotuvchiQatorlari qiymat={shopPhone} klass="text-[15px]" />
+          {/* Sotuvchilar: har biri alohida qatorda — ism + barcha raqamlari (Sozlamalar).
+              Zakasni saqlashda tanlangan sotuvchi (order.sotuvchi) birinchi turadi */}
+          <SotuvchiQatorlari qiymat={sotuvchilarTartib(shopPhone, order.sotuvchi)} klass="text-[15px]" />
           {/* Holat havolasi matn bilan — QR o'qilmasa qo'lda terish uchun (bitta mayda qator) */}
           {havola && <div className="text-[9px] text-slate-400 break-all mt-0.5">Zakas holati: {qisqaHavola(havola)}</div>}
         </div>
@@ -497,7 +498,7 @@ export function ReceiptModal({ order, shopName, shopPhone, usdRate, usdOlish, ka
       }
     }
     if (havola) L.push(`Zakas holati: ${havola}`);
-    for (const q of sotuvchilarMatn(shopPhone)) L.push(`Tel: ${q}`);
+    for (const q of sotuvchilarMatn(sotuvchilarTartib(shopPhone, order.sotuvchi))) L.push(`Tel: ${q}`);
     return L.join('\n');
   }
   // Mijozning birinchi telefoni (xalqaro format, faqat raqam)

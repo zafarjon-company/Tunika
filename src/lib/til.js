@@ -159,6 +159,7 @@ const RU = {
   'Sotuvchilar — ism va telefon raqamlari (chekda chiqadi)': 'Продавцы — имя и номера телефонов (на чеке)',
   "Sotuvchi qo'shish": 'Добавить продавца', "Saqlanmagan o'zgarishlar bor": 'Есть несохранённые изменения',
   'Chekda shunday chiqadi': 'На чеке будет так', 'Sotuvchi ismi (masalan: Zafar aka)': 'Имя продавца (например: Зафар ака)',
+  'Sotuvchi — chekda uning raqami birinchi turadi': 'Продавец — его номер на чеке будет первым',
   'Tanlash': 'Выбрать', 'Ochish': 'Открыть', "Hali zakas yo'q": 'Заказов пока нет',
   "Hozircha bo'sh": 'Пока пусто', 'Mijozlar mavjud emas': 'Клиентов нет', 'Ustalar topilmadi': 'Мастера не найдены',
   'Ishchilar mavjud emas': 'Работников нет', 'Listlar mavjud emas': 'Листов нет',

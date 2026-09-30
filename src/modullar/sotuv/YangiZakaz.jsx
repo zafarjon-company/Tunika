@@ -14,6 +14,9 @@ import { Card, SectionTitle, SegmentedControl, KanyokImg, TeskariBadge, CountUp,
 import { fmt, genId, metrliVariantlar, barchaRanglar, aksRangKerak, isKanyokAny, reducedMotion, toDateInput, sonMatn, sonQiymat, sonAjrat, kursorOrni } from '../../lib/helpers.js';
 import { STANOK_OPTIONS } from '../../lib/constants.js';
 import { matchCombo } from '../../lib/keybind.js';
+import {
+  sotuvchilarOl, sotuvchilarTartib, sotuvchiKalit, tanlanganSotuvchi, qurilmaSotuvchisi, qurilmaSotuvchisiniSaqla,
+} from '../../lib/sotuvchi.js';
 
 // Enter bosilganda keyingi maydonga o'tish ("keyingi maydon/tovar")
 function focusNextNav(e) {
@@ -103,12 +106,16 @@ function muddatQoldi(sana) {
   return { kun, matn: `${kun} kun qoldi`, kechikkan: false };
 }
 
-export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar, products, ranglar = [],
+export function NewOrderTab({ draft, setDraft, draftCalc, sotuvchilar = '', tunikaBaza, metrlilar, products, ranglar = [],
                               kazData, kazNarx = {}, onKazPrice,
                               onOpenProductPicker, onOpenClientPicker, onOpenMasterPicker, onSave, onSmeta, usdRate, usdOlish,
                               onCopyLast, canCopyLast = false, editing = false, onCancelEdit, editNumber = null,
                               saqlashKey = 'Ctrl+S' }) {
   const colorOptions = barchaRanglar(tunikaBaza, ranglar);
+  // Sotuvchilar (Sozlamalar) va shu zakasda chekda birinchi turadigani:
+  // zakasdagi tanlov → shu qurilmada oxirgi tanlangan → birinchi (App saqlashda ham shu qoida)
+  const sotuvchiList = sotuvchilarOl(sotuvchilar);
+  const birinchiSotuvchi = sotuvchilarTartib(sotuvchiList, tanlanganSotuvchi(sotuvchiList, draft.sotuvchi, qurilmaSotuvchisi()))[0];
   const hasItems = draft.items.length > 0;
   const kazRows = draftCalc.kazRows || [];
   const hasKaz = kazRows.length > 0;   // chizmadan kazirok bor — hisob-kitobda ham ko'rinadi
@@ -585,6 +592,27 @@ export function NewOrderTab({ draft, setDraft, draftCalc, tunikaBaza, metrlilar,
                   placeholder="Zakas uchun qo'shimcha eslatma..." rows={2}
                   className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none resize-none text-sm" />
               </div>
+
+              {/* Sotuvchi — shu zakas chekida uning raqami BIRINCHI turadi (2+ sotuvchi bo'lsa) */}
+              {sotuvchiList.length > 1 && (
+                <div className="mt-3">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Sotuvchi — chekda uning raqami birinchi turadi</label>
+                  <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Sotuvchi">
+                    {sotuvchiList.map((s, i) => {
+                      const k = sotuvchiKalit(s);
+                      const on = k === sotuvchiKalit(birinchiSotuvchi);
+                      return (
+                        <button key={i} type="button" role="radio" aria-checked={on}
+                          onClick={() => { setDraft({ ...draft, sotuvchi: k }); qurilmaSotuvchisiniSaqla(k); }}
+                          className={`px-3 py-1.5 rounded-lg border-2 text-left transition ${on ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'}`}>
+                          <span className="block text-sm font-semibold leading-tight">{s.ism || s.tel[0]}</span>
+                          {s.ism && s.tel[0] && <span className={`block text-[11px] tabular-nums leading-tight ${on ? 'text-slate-300' : 'text-slate-400'}`}>{s.tel[0]}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Smeta (narx taklifi) — zakas saqlanmaydi, faqat mijozga narx chiqariladi */}
               {showSmeta && (

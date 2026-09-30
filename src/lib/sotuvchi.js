@@ -76,6 +76,49 @@ export function sotuvchilarMatn(v) {
   return sotuvchilarOl(v).map(sotuvchiQatori).filter(Boolean);
 }
 
+// ----- Zakas bo'yicha: chekda qaysi sotuvchi BIRINCHI turadi -----
+// Har zakasga saqlashdan oldin tanlanadi: order.sotuvchi = kalit (ism, ismsiz
+// bo'lsa birinchi raqami). Id emas, chunki satr formatida barqaror id yo'q;
+// sotuvchi keyin o'chirilsa/nomi o'zgarsa — Sozlamalardagi tartib qoladi.
+export function sotuvchiKalit(s) {
+  return (s && (s.ism || (s.tel || [])[0])) || '';
+}
+const kalitTeng = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+function mosSotuvchi(s, kalit) {
+  return !!kalit && (kalitTeng(s.ism, kalit) || (s.tel || []).some((t) => kalitTeng(t, kalit)));
+}
+
+// Ro'yxatda shu kalitli sotuvchi bormi (tanlov hali amaldami)
+export function sotuvchiBormi(v, kalit) {
+  return sotuvchilarOl(v).some((s) => mosSotuvchi(s, kalit));
+}
+
+// Tanlangan sotuvchi birinchi, qolganlari Sozlamalardagi tartibda.
+// Topilmasa — o'zgarishsiz (eski zakaslar, o'chirilgan sotuvchi).
+export function sotuvchilarTartib(v, kalit) {
+  const l = sotuvchilarOl(v);
+  const i = l.findIndex((s) => mosSotuvchi(s, kalit));
+  return i > 0 ? [l[i], ...l.slice(0, i), ...l.slice(i + 1)] : l;
+}
+
+// Zakasda amaldagi tanlov: zakasning o'zi → shu qurilmada oxirgi tanlangan →
+// Sozlamalardagi birinchi sotuvchi. Ro'yxatda yo'q kalit hisobga olinmaydi.
+export function tanlanganSotuvchi(v, zakasdagi, qurilmadagi) {
+  if (sotuvchiBormi(v, zakasdagi)) return zakasdagi;
+  if (sotuvchiBormi(v, qurilmadagi)) return qurilmadagi;
+  return sotuvchiKalit(sotuvchilarOl(v)[0]);
+}
+
+// Shu qurilmada oxirgi tanlangan sotuvchi (har sotuvchi odatda o'z telefonidan
+// ishlaydi — keyingi zakasda qayta tanlash shart bo'lmasin)
+const QURILMA_KALIT = 'zakas-sotuvchi';
+export function qurilmaSotuvchisi() {
+  try { return localStorage.getItem(QURILMA_KALIT) || ''; } catch (e) { return ''; }
+}
+export function qurilmaSotuvchisiniSaqla(kalit) {
+  try { localStorage.setItem(QURILMA_KALIT, kalit || ''); } catch (e) { /* noop */ }
+}
+
 // tel: havola uchun — faqat raqam va "+"
 export function telHref(t) {
   return `tel:${String(t || '').replace(/[^\d+]/g, '')}`;

@@ -2,7 +2,10 @@
 //  SOTUVCHILAR (chekdagi ism + raqamlar) — SINOV
 //  Ishga tushirish:  npm run test:sotuvchi   (node src/lib/sotuvchi.test.mjs)
 // ============================================================
-import { sotuvchilarOl, sotuvchilarSatr, sotuvchiQatori, sotuvchilarMatn, telHref } from './sotuvchi.js';
+import {
+  sotuvchilarOl, sotuvchilarSatr, sotuvchiQatori, sotuvchilarMatn, telHref,
+  sotuvchiKalit, sotuvchiBormi, sotuvchilarTartib, tanlanganSotuvchi,
+} from './sotuvchi.js';
 
 let xato = 0;
 let jami = 0;
@@ -58,6 +61,24 @@ tekshir('qatorlar (satrdan)', ['Zafar aka: +998 (90) 123-45-67, +998 (93) 765-43
   sotuvchilarMatn(S));
 tekshir('eski satrdan qatorlar', ['+998 90 123 45 67'], sotuvchilarMatn('+998 90 123 45 67'));
 tekshir('telHref', 'tel:+998901112233', telHref('+998 (90) 111-22-33'));
+
+console.log('\n=== zakas bo\'yicha birinchi sotuvchi ===\n');
+const Z = 'Zafar aka: +998 (90) 123-45-67 | Sardor: +998 (97) 000-11-22 | +998 (71) 200-00-00';
+const ismlar = (l) => l.map((s) => s.ism || s.tel[0]);
+tekshir('kalit — ism', 'Sardor', sotuvchiKalit({ ism: 'Sardor', tel: ['1'] }));
+tekshir('kalit — ismsiz bo\'lsa 1-raqam', '+998 (71) 200-00-00', sotuvchiKalit({ ism: '', tel: ['+998 (71) 200-00-00'] }));
+tekshir('kalit — bo\'sh', '', sotuvchiKalit(undefined));
+tekshir('tanlanmagan → Sozlamalar tartibi', ['Zafar aka', 'Sardor', '+998 (71) 200-00-00'], ismlar(sotuvchilarTartib(Z, '')));
+tekshir('"Sardor" birinchi', ['Sardor', 'Zafar aka', '+998 (71) 200-00-00'], ismlar(sotuvchilarTartib(Z, 'Sardor')));
+tekshir('katta-kichik harf farqi yo\'q', ['Sardor', 'Zafar aka', '+998 (71) 200-00-00'], ismlar(sotuvchilarTartib(Z, ' sardor ')));
+tekshir('ismsiz sotuvchi raqami bilan', ['+998 (71) 200-00-00', 'Zafar aka', 'Sardor'], ismlar(sotuvchilarTartib(Z, '+998 (71) 200-00-00')));
+tekshir('o\'chirilgan sotuvchi → o\'zgarishsiz', ['Zafar aka', 'Sardor', '+998 (71) 200-00-00'], ismlar(sotuvchilarTartib(Z, 'Bobur')));
+tekshir('tanlov: zakasdagi', 'Sardor', tanlanganSotuvchi(Z, 'Sardor', 'Zafar aka'));
+tekshir('tanlov: zakasda yo\'q → qurilmadagi', 'Zafar aka', tanlanganSotuvchi(Z, '', 'Zafar aka'));
+tekshir('tanlov: o\'chirilgan → qurilmadagi', 'Sardor', tanlanganSotuvchi(Z, 'Bobur', 'Sardor'));
+tekshir('tanlov: hech biri → birinchi', 'Zafar aka', tanlanganSotuvchi(Z, 'Bobur', 'Eski'));
+tekshir('tanlov: sotuvchi yo\'q → bo\'sh', '', tanlanganSotuvchi('', 'Sardor', 'Sardor'));
+tekshir('bormi', [true, false], [sotuvchiBormi(Z, 'Sardor'), sotuvchiBormi(Z, '')]);
 
 console.log(`\n${xato ? '❌' : '✅'} ${jami - xato}/${jami} o'tdi\n`);
 if (xato) process.exit(1);

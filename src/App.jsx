@@ -64,7 +64,7 @@ import {
 } from './lib/avtoIsh.js';
 import { sendTelegramDocument, sendTelegramMessage, telegramSozlangan } from './lib/telegram.js';
 import { zaxiraMalumot } from './lib/zaxira.js';
-import { sotuvchilarSatr } from './lib/sotuvchi.js';
+import { sotuvchilarSatr, tanlanganSotuvchi, qurilmaSotuvchisi } from './lib/sotuvchi.js';
 
 import { SmallModal } from './components/ui.jsx';
 import { GlobalSearch } from './components/GlobalSearch.jsx';
@@ -1179,6 +1179,8 @@ export default function App() {
       customer: { ...draft.customer },
       masterId: draft.masterId,
       masterName: draft.masterName,
+      // Chekda BIRINCHI turadigan sotuvchi (kalit: ismi yoki 1-raqami) — formada tanlanadi
+      sotuvchi: tanlanganSotuvchi(shopPhone, draft.sotuvchi, qurilmaSotuvchisi()),
       items: draftCalc.items.map((it) => ({
         id: it.id,
         kind: it.kind,
@@ -1287,6 +1289,7 @@ export default function App() {
       customer: { ...draft.customer, name: draft.customer.name || 'Mijoz' },
       masterId: draft.masterId,
       masterName: draft.masterName,
+      sotuvchi: tanlanganSotuvchi(shopPhone, draft.sotuvchi, qurilmaSotuvchisi()),
       items: draftCalc.items.map((it) => ({
         id: it.id, kind: it.kind, nomi: it.nomi, tafsilot: it.tafsilot, birlik: it.birlik,
         uzunlik: sonQiymat(it.uzunlik), soni: sonQiymat(it.soni),
@@ -1339,6 +1342,7 @@ export default function App() {
       ...makeBlankDraft(usdRate),
       customer: { ...order.customer },
       masterId: order.masterId, masterName: order.masterName,
+      sotuvchi: order.sotuvchi || '',
       items,
       payments: (order.payments && order.payments.length) ? order.payments.map((p) => ({ ...p })) : [makeBlankPayment(usdRate)],
       notes: order.notes || '',
@@ -1665,6 +1669,7 @@ export default function App() {
         {tab === 'new' && (
           <NewOrderTab
             draft={draft} setDraft={setDraft} draftCalc={draftCalc}
+            sotuvchilar={shopPhone}
             kazData={kazData} kazNarx={kazNarx} onKazPrice={setKazPrice}
             tunikaBaza={tunikaBaza} metrlilar={metrlilar} products={products} ranglar={ranglar}
             onOpenProductPicker={() => setProductPicker(true)}
