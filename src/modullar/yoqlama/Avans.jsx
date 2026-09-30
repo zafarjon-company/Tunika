@@ -12,13 +12,20 @@ import { Card, SectionTitle, SmallModal } from '../../components/ui.jsx';
 import { DynamicPaymentsSection } from '../sotuv/Tolovlar.jsx';
 import {
   fmt, toMonthInput, formatDate, formatDay, daysInMonth, makeBlankPayment, ishchiHisobi, oyIshlangan,
-  sonQiymat, oyFaolmi, avansOyi, MAOSH_KUNI,
+  sonQiymat, oyFaolmi, avansOyi, avansTaqsimot, MAOSH_KUNI,
 } from '../../lib/helpers.js';
 import { OY_NOMLARI } from '../../lib/constants.js';
 
 function oyLabel(oy) {
   const [y, m] = oy.split('-');
   return `${OY_NOMLARI[parseInt(m, 10) - 1] || m} ${y}`;
+}
+
+// "2026-09" → "5-sentabrdan" (maosh kunidan keyingi, shu oy maoshidan ushlanadigan avans)
+function maoshKunidan(oy) {
+  const m = parseInt(String(oy).split('-')[1], 10);
+  const nom = (OY_NOMLARI[m - 1] || '').toLowerCase();
+  return `${MAOSH_KUNI}-${nom}dan`;
 }
 
 // Eski (sonli) yoki yangi (massiv) formatni bir xil massivga keltirish
@@ -123,41 +130,40 @@ export function AvansTab({ ishchilar, avanslar, updateAvanslar, setAvansYozuv, y
       ) : (
         faollar.map((i) => {
           const entries = normEntries(oyAvanslar[i.id]);
-          const summa = avansSumma(oyAvanslar[i.id]);
           // Butun davr bo'yicha hisob (Hisobot > Ishchilar bilan bir xil) — avans
           // berishdan oldin ishchining haqiqiy qoldig'i ko'rinib tursin.
           // "Hozirgi haqqi" to'langan maoshlarni ham ayiradi.
           const h = ishchiHisobi(i, yoqlama, avanslar, maoshlar);
+          // Avans — SHU OY maoshidan ushlanadigani: oyning MAOSH_KUNI-sanasidan keyin
+          // olinganlar (+ keyingi oyning 1–5-kunlari). 1–5-kundagilar o'tgan oyga ketadi.
+          // Maosh bo'limidagi oylikBalans(...).avans bilan bir xil qiymat.
+          const avansOy = avansTaqsimot(avanslar, i.id)[oy] || 0;
           // "Ishlangan" FAQAT tanlangan oy uchun hisoblanadi (butun davr emas):
           // yo'qlamadan shu oyning ish kunlari yig'iladi.
           // Maosh bo'limidagi oylikBalans(...).ishlangan bilan bir xil qiymat.
           const ishlanganOy = oyIshlangan(i, yoqlama, oy);
           return (
             <Card key={i.id}>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-base flex-shrink-0">{(i.name || '?').charAt(0).toUpperCase()}</span>
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-900 truncate">{i.name}</div>
-                    {i.lavozim && <div className="text-xs text-slate-400">{i.lavozim}</div>}
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400">Avans ({oyLabel(oy)})</div>
-                  <div className="font-bold tabular-nums text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">{fmt(summa)} so'm</div>
+              <div className="flex items-center gap-2.5 min-w-0 mb-2">
+                <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-base flex-shrink-0">{(i.name || '?').charAt(0).toUpperCase()}</span>
+                <div className="min-w-0">
+                  <div className="font-bold text-slate-900 truncate">{i.name}</div>
+                  {i.lavozim && <div className="text-xs text-slate-400">{i.lavozim}</div>}
                 </div>
               </div>
 
-              {/* Ishlangan — FAQAT tanlangan oy; Avans va Hozirgi haqqi — butun davr
-                  (shuning uchun ularning yorlig'ida "jami" / "hozirgi" turadi) */}
+              {/* Ishlangan va Avans — FAQAT tanlangan oy (Avans: maosh kunidan beri,
+                  shu oy maoshidan ushlanadigani); Hozirgi haqqi — butun davr */}
               <div className="grid grid-cols-3 gap-1.5 mb-2">
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center">
                   <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Ishlangan (shu oy)</div>
                   <div className="text-xs font-bold tabular-nums text-slate-700 leading-tight">{fmt(ishlanganOy)}</div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Avans (jami)</div>
-                  <div className="text-xs font-bold tabular-nums text-amber-700 leading-tight">{fmt(h.avans)}</div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center"
+                  title={`Oyning ${MAOSH_KUNI}-sanasidan keyin olingan avanslar — ${oyLabel(oy)} maoshidan ushlanadi`}>
+                  {/* "5-sentabrdan" defisdan uzilmasin — bir qatorda */}
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400 leading-tight">Avans (<span className="whitespace-nowrap">{maoshKunidan(oy)}</span> beri)</div>
+                  <div className="text-xs font-bold tabular-nums text-amber-700 leading-tight">{fmt(avansOy)}</div>
                 </div>
                 <div className={`rounded-lg border px-2 py-1.5 text-center ${
                   h.haqqi >= 0 ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'
