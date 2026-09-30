@@ -24,10 +24,10 @@ tekshir('null', '', klentKalit(null));
 tekshir('apostrof turlari', 'gayrat oktam', klentKalit("G‘ayrat Oʻktam"));
 tekshir("to'g'ri apostrof", 'gayrat oktam', klentKalit("G'ayrat O'ktam"));
 tekshir('kiril ў/ғ', 'gayrat oktam', klentKalit('Ғайрат Ўктам'));
-tekshir('kiril ш/ю/ё/қ', 'sherzod yulduz yoqub', klentKalit('Шерзод Юлдуз Ёқуб'));
+tekshir('kiril ш/ю/ё/қ (q = k)', 'sherzod yulduz yokub', klentKalit('Шерзод Юлдуз Ёқуб'));
 tekshir('kiril е so\'z boshida', 'yelena', klentKalit('Елена'));
 tekshir('kiril е undoshdan keyin', 'meli', klentKalit('Мели'));
-tekshir('kiril э/х/ҳ', 'erkin xurshid hamid', klentKalit('Эркин Хуршид Ҳамид'));
+tekshir('kiril э/х/ҳ (x = h)', 'erkin hurshid hamid', klentKalit('Эркин Хуршид Ҳамид'));
 tekshir('defis/nuqta ajratadi', 'ali aka v', klentKalit('Ali-aka V.'));
 tekshir('lotin diakritika', 'oktam', klentKalit('Öktam'));
 tekshir('raqam saqlanadi', 'ali 2', klentKalit('Ali 2'));
@@ -77,6 +77,28 @@ tekshir('"Karimov Ali" → teskari tartib aynan emas, so\'zlar mos', ['k2', 'a4'
 tekshir('"Toshev" (1 so\'z) — ismdosh qoidasi ishlamaydi, faqat so\'z boshi', ['x2'], ids(klentTavsiyalar(K2, 'Toshev')));
 tekshir('ismdosh: false — faqat 0–3', ['a0'], ids(klentTavsiyalar(K2, 'Ali Valiyev', { ismdosh: false })));
 
+console.log('\n=== ko\'rik topilmalari: murojaat so\'zlari, tartib, imlo variantlari ===\n');
+const K3 = [
+  { id: 'ab', name: 'Abdulla aka' }, { id: 'ba', name: 'Bahodir aka' }, { id: 'di', name: 'Dilshod aka' },
+  { id: 'ka', name: 'Karim' }, { id: 'do', name: 'Dilnoza opa' },
+];
+tekshir('"Karim aka" → "Karim" aynan, boshqa "... aka"lar chiqmaydi', ['ka0'], ids(klentTavsiyalar(K3, 'Karim aka')));
+tekshir('"Karim opa" → "Dilnoza opa" chiqmaydi', ['ka0'], ids(klentTavsiyalar(K3, 'Karim opa')));
+tekshir('saqlangan "Abdulla aka" ← yozilgan "Abdulla" aynan', ['ab0'], ids(klentTavsiyalar(K3, 'Abdulla')));
+const K4 = [{ id: 'a2', name: 'Ali 2' }, { id: 'a3', name: 'Ali-2' }, { id: 'ak', name: 'Ali Karimov' }, { id: 'av', name: 'Ali Valiyev' }];
+tekshir('"Ali Valiyev aka" → haqiqiy takror birinchi (aynan)', 'av0', ids(klentTavsiyalar(K4, 'Ali Valiyev aka'))[0]);
+tekshir('"Ali Valiyev Chilonzor" → saqlangan ism so\'zlari ichida (2)', 'av2', ids(klentTavsiyalar(K4, 'Ali Valiyev Chilonzor'))[0]);
+const K5 = [{ id: 'b1', name: 'Aziz Toshmatov' }, { id: 'b2', name: 'Abror Karim' }, { id: 'b3', name: 'Karim Toshmatov Olim' }];
+tekshir('4-darajada ko\'p so\'z mos kelgani oldinda (2 so\'z > 1 so\'z)', ['b34', 'b24', 'b14'],
+  ids(klentTavsiyalar(K5, 'Karim Toshmatov Samarqand')));
+const K6 = [{ id: 'h', name: 'Hamid Qodirov' }, { id: 's', name: 'Shuhrat' }, { id: 'z', name: 'Abdulaziz' }];
+tekshir('x = h, q = k: "Xamid Kodirov" → aynan', ['h0'], ids(klentTavsiyalar(K6, 'Xamid Kodirov')));
+tekshir('kiril "Шухрат" → "Shuhrat" aynan', ['s0'], ids(klentTavsiyalar(K6, 'Шухрат')));
+tekshir('"Abdul Aziz" → "Abdulaziz" aynan (bo\'shliqsiz)', ['z0'], ids(klentTavsiyalar(K6, 'Abdul Aziz')));
+tekshir('saqlashda: "Karim aka" → "Karim" ogohlantirishi', '"Karim" ismli mijoz allaqachon bor.\nBaribir yangi mijoz ochilsinmi?',
+  klentTakrorXabar(K3, 'Karim aka', []));
+tekshir('saqlashda: "Xamid Kodirov" → imlo varianti ham', true, klentTakrorXabar(K6, 'Xamid Kodirov', []).startsWith('"Hamid Qodirov"'));
+
 console.log('\n=== klentBolaklar (belgilash) ===\n');
 tekshir('mos so\'zlar belgilanadi', [['Ali', true], [' ', false], ['Karimov', false]],
   klentBolaklar('Ali Karimov', 'Ali Valiyev').map((b) => [b.matn, b.mos]));
@@ -88,6 +110,13 @@ console.log('\n=== telefon takrori ===\n');
 tekshir('telKalit to\'liq', '901111111', telKalit('+998 90 111 11 11'));
 tekshir('telKalit 998siz', '901111111', telKalit('90 111-11-11'));
 tekshir('telKalit chala → bo\'sh', '', telKalit('+998 90 111'));
+tekshir('telKalit PhoneInput chala (6 raqam, 998 bilan 9 ta!) → bo\'sh', '', telKalit('+998 (90) 111-1'));
+tekshir('telKalit PhoneInput chala (8 raqam) → bo\'sh', '', telKalit('+998 (90) 111-11-1'));
+tekshir('telKalit PhoneInput to\'liq', '901111111', telKalit('+998 (90) 111-11-11'));
+tekshir('telKalit 998 bilan, plyussiz', '901111111', telKalit('998901111111'));
+tekshir('telKalit 99 8.. abonent (plyussiz 9 raqam)', '998901111', telKalit('99 890 11 11'));
+tekshir('chala raqam boshqa mijozning to\'liq raqamiga mos kelmaydi', [],
+  telefonTakrorlar([{ id: 'u', phones: ['+998 (99) 890-11-11'] }], ['+998 (90) 111-1']).map((c) => c.id));
 tekshir('telKalit bo\'sh', '', telKalit(undefined));
 tekshir('takror topiladi (format boshqacha)', ['a'], telefonTakrorlar(K2, ['', '(90) 111 11 11']).map((c) => c.id));
 tekshir('chala raqam — takror yo\'q', [], telefonTakrorlar(K2, ['+998 90 111 11']).map((c) => c.id));

@@ -63,33 +63,59 @@ function kirilLotin(s) {
 // "  G‘ayrat  O'ktam-ov " → "gayrat oktam ov". Kiril ham lotinga o'tadi.
 // NFD (diakritikani olib tashlash: "Ö" → "o") FAQAT kiril o'girilgandan keyin —
 // aks holda й/ё/ў ham bo'linib ketardi.
+// Talaffuzi bir xil imlo variantlari bitta kalitga tushadi — takror aynan shunday
+// paydo bo'ladi: x = h ("Xamid" = "Hamid", "Shuxrat" = "Shuhrat"), q = k
+// ("Qodir" = "Kodir"). Shuning uchun kalit o'qish uchun emas, FAQAT solishtirish uchun.
 export function klentKalit(s) {
   return kirilLotin(String(s || '').normalize('NFC').toLowerCase())
     .normalize('NFD').replace(/\p{M}/gu, '')
     .replace(/['ʻʼ‘’`´]/g, '')           // apostroflar: o' = o
     .replace(/[^a-z0-9]+/g, ' ')         // qolgan belgi — so'z ajratgich
+    .replace(/x/g, 'h').replace(/q/g, 'k')
     .trim();
+}
+
+// Murojaat so'zlari ("Karim aka", "Dilnoza opa") — ism emas. Solishtirishda
+// e'tiborga olinmaydi, aks holda "Karim aka" yozilganda barcha "... aka"lar
+// ismdosh bo'lib chiqib, haqiqiy "Karim" ortga surilardi. (Kalit shaklida: x→h.)
+const MUROJAAT = new Set([
+  'aka', 'akajon', 'opa', 'opajon', 'uka', 'ukajon', 'singil', 'ota', 'ona', 'hola', 'amaki',
+  'toga', 'pochcha', 'domla', 'usta', 'hoji', 'bobo', 'buvi', 'momo', 'honim', 'janob',
+]);
+// Ismning asosiy so'zlari (murojaatsiz). Faqat murojaatdan iborat bo'lsa — o'zi.
+function asosiy(sozlar) {
+  const t = sozlar.filter((w) => w && !MUROJAAT.has(w));
+  return t.length ? t : sozlar.filter(Boolean);
+}
+// Ikki ism "aynan bir xil"mi: murojaatsiz, bo'shliqsiz ("Abdul Aziz" = "Abdulaziz").
+function ismTeng(a, b) {
+  return !!a.length && a.join('') === b.join('');
 }
 
 // Yozilgan ism bo'yicha avval yozilgan mijozlar (tavsiya).
 //  Maqsad: bir mijozni adashib qayta kiritmaslik, tez topish va ismi yoki
 //  familiyasi bir xil mijozlarni chalkashtirmaslik.
-//  daraja 0 — aynan shu ism
+//  Hammasi murojaat so'zlarisiz (aka/opa...) va imlo variantlariga chidamli kalitda.
+//  daraja 0 — aynan shu ism ("Karim aka" = "Karim", "Abdul Aziz" = "Abdulaziz")
 //         1 — ism shu yozuv bilan boshlanadi ("Ali" → "Alisher Karimov")
-//         2 — har bir so'z qaysidir so'zning boshi ("valiyev ali" → "Ali Valiyev")
+//         2 — so'zlar mos: har bir yozilgan so'z qaysidir so'zning boshi
+//             ("valiyev ali" → "Ali Valiyev") YOKI saqlangan ismning barcha so'zlari
+//             yozilganda bor ("Karim Toshmatov Chilonzor" → "Karim Toshmatov")
 //         3 — so'z (4+ harf) ism ichida uchraydi ("Karim" → "Abdukarim")
 //         4 — ISMI YOKI FAMILIYASI bir xil: 2+ so'zli yozuvda kamida bitta to'liq
 //             so'z (3+ harf) mos ("Ali Valiyev" → "Ali Karimov", "Anvar Valiyev").
 //             Oxirgi (hali yozilayotgan) so'z uchun so'z boshi ham yetadi.
-//             ismdosh: false — o'chiriladi (qidiruv ro'yxati uchun).
-//  Qaytaradi: [{ c, daraja }] — daraja, keyin ism bo'yicha tartiblangan
+//             Ko'proq so'zi mos kelgani oldinda. ismdosh: false — o'chiriladi
+//             (qidiruv ro'yxati uchun).
+//  Qaytaradi: [{ c, daraja }] — daraja (4 da mos so'zlar soni), keyin ism bo'yicha
 //  (bir xil ismlarda ro'yxatdagi asl tartib — eng yangisi oldin — saqlanadi).
 export const TAVSIYA_MIN = 2;
 
 export function klentTavsiyalar(klentlar, ism, { ismdosh = true } = {}) {
   const q = klentKalit(ism);
   if (q.replace(/ /g, '').length < TAVSIYA_MIN) return [];
-  const qAsl = q.split(' ');
+  const qAsl = asosiy(q.split(' '));             // yozilish tartibida
+  const qc = qAsl.join(' ');
   const oxirgi = qAsl[qAsl.length - 1];
   const qs = [...qAsl].sort((a, b) => b.length - a.length);
 
@@ -98,10 +124,12 @@ export function klentTavsiyalar(klentlar, ism, { ismdosh = true } = {}) {
     if (!c) continue;
     const n = klentKalit(c.name);
     if (!n) continue;
-    const ns = n.split(' ');
+    const ns = asosiy(n.split(' '));
+    const nc = ns.join(' ');
     let daraja = -1;
-    if (n === q) daraja = 0;
-    else if (n.startsWith(q)) daraja = 1;
+    let soni = 0;                                 // 4-darajada mos so'zlar soni
+    if (ismTeng(ns, qAsl)) daraja = 0;
+    else if (nc.startsWith(qc)) daraja = 1;
     else {
       const band = new Set();
       const sozlar = qs.every((t) => {
@@ -110,15 +138,26 @@ export function klentTavsiyalar(klentlar, ism, { ismdosh = true } = {}) {
         band.add(j);
         return true;
       });
-      if (sozlar) daraja = 2;
-      else if (qs.every((t) => t.length >= 4 && n.includes(t))) daraja = 3;
-      else if (ismdosh && qAsl.length >= 2 && ns.some((w) =>
-        qAsl.some((t) => t.length >= 3 && (w === t || (t === oxirgi && w.startsWith(t)))))) daraja = 4;
+      const qBand = new Set();
+      const ichida = ns.every((w) => {
+        const j = qAsl.findIndex((t, k) => !qBand.has(k) && t === w);
+        if (j < 0) return false;
+        qBand.add(j);
+        return true;
+      });
+      if (sozlar || ichida) daraja = 2;
+      else if (qs.every((t) => t.length >= 4 && nc.includes(t))) daraja = 3;
+      else if (ismdosh && qAsl.length >= 2) {
+        soni = qAsl.filter((t) => t.length >= 3
+          && ns.some((w) => w === t || (t === oxirgi && w.startsWith(t)))).length;
+        if (soni > 0) daraja = 4;
+      }
     }
-    if (daraja >= 0) out.push({ c, daraja, n, i: out.length });
+    if (daraja >= 0) out.push({ c, daraja, soni, n: nc, i: out.length });
   }
   return out
-    .sort((a, b) => a.daraja - b.daraja || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i)
+    .sort((a, b) => a.daraja - b.daraja || b.soni - a.soni
+      || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i)
     .map(({ c, daraja }) => ({ c, daraja }));
 }
 
@@ -134,11 +173,16 @@ export function klentBolaklar(name, ism) {
 }
 
 // ----- Telefon bo'yicha takror -----
-// Solishtirish kaliti — oxirgi 9 raqam ("+998 90 111 11 11" → "901111111").
-// To'liq bo'lmagan raqam (9 tadan kam) — kalit yo'q (yozilayotganda shovqin bo'lmasin).
+// Solishtirish kaliti — abonent raqamining 9 ta raqami ("+998 (90) 111-11-11" → "901111111").
+// PhoneInput qiymati CHALA bo'lsa ham "+998" bilan boshlanadi ("+998 (90) 111-1" →
+// 998901111 — 9 ta raqam!), shuning uchun "+" yoki 9 tadan ortiq raqam bo'lsa 998
+// prefiksi avval olinadi (ui.jsx phoneDigits bilan bir xil) va FAQAT roppa-rosa
+// 9 raqam kalit bo'ladi — chala raqam yozilayotganda shovqin bo'lmasin.
 export function telKalit(p) {
-  const d = String(p || '').replace(/\D/g, '');
-  return d.length >= 9 ? d.slice(-9) : '';
+  const s = String(p || '');
+  let d = s.replace(/\D/g, '');
+  if ((/^\s*\+/.test(s) || d.length > 9) && d.startsWith('998')) d = d.slice(3);
+  return d.length === 9 ? d : '';
 }
 
 // Shu raqamlardan birortasi allaqachon yozilgan mijozlar.
@@ -158,8 +202,9 @@ export function klentTakrorXabar(klentlar, name, phones) {
     const raqam = (c.phones || []).find((p) => (phones || []).some((x) => telKalit(x) && telKalit(x) === telKalit(p)));
     return `${raqam} raqami allaqachon "${c.name}" mijozida bor.\nBaribir yangi mijoz ochilsinmi?`;
   }
-  const q = klentKalit(name);
-  const aynan = q ? (klentlar || []).filter((c) => c && klentKalit(c.name) === q) : [];
+  // "Aynan" — tavsiyadagi 0-daraja bilan bir xil: murojaatsiz, imlo variantlariga chidamli
+  const q = asosiy(klentKalit(name).split(' '));
+  const aynan = q.length ? (klentlar || []).filter((c) => c && ismTeng(asosiy(klentKalit(c.name).split(' ')), q)) : [];
   if (aynan.length) {
     const tel = (aynan[0].phones || []).filter(Boolean)[0];
     return `"${aynan[0].name}" ismli mijoz allaqachon bor${aynan.length > 1 ? ` (${aynan.length} ta)` : ''}${tel ? ` — ${tel}` : ''}.\nBaribir yangi mijoz ochilsinmi?`;

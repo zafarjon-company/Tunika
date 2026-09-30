@@ -171,8 +171,9 @@ function KlentlarSubTab({ klentlar, updateKlentlar, orders, showToast }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] gap-4 items-start">
-      {/* CHAP: sticky qidiruv + qo'shish/forma */}
-      <aside className="lg:sticky lg:top-36">
+      {/* CHAP: sticky qidiruv + qo'shish/forma. Ekrandan baland bo'lsa (tavsiya kartalari
+          chiqqanda) o'zi aylanadi — aks holda Telefon/Saqlash ekrandan pastda qolib ketardi */}
+      <aside className="lg:sticky lg:top-36 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto">
         <Card>
       <div className="relative mb-3">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
