@@ -204,7 +204,8 @@ guruhida va uning a'zolariga.
 - Bot tokeni: Vercel env `BOT_TOKEN`, bo'lmasa — Sozlamalardagi **Telegram bot tokeni**
   (`telegram-bot-token`). Webhook maxfiy so'zi: env `TG_WEBHOOK_SECRET`, bo'lmasa tokendan
   HMAC bilan hosil qilinadi. Sozlamalar → Ishchilar boti → **«Botni ulash»** webhookni
-  `https://<production>/api/telegram` ga ulaydi va buyruqlar menyusini o'rnatadi.
+  `https://tunika-sex.vercel.app/api/telegram` ga ulaydi (env `TG_WEBHOOK_URL` bilan almashtiriladi;
+  tunika.uz DNS'i Vercel'ga ulanguncha u ishlatilmaydi) va buyruqlar menyusini o'rnatadi.
 - `api/telegram.js` — webhook (ulanish, menyu, ◀ ▶ tugmalar, menejer tuzatishlari);
   `api/ishchi-bot.js` — holat / ulash / xabar signali; `api/_ishchiBot.js` — xabar
   qarorlari va jurnal; `api/_ishchiMatn.js` — matnlar (sof); `src/lib/ishchiXabar.js` —

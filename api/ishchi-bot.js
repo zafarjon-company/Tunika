@@ -29,10 +29,12 @@ const BUYRUQLAR = [
   { command: 'start', description: 'Boshlash / telefonni ulash' },
 ];
 
-// Webhook manzili — doim production domeni (preview deploylar Telegramga yopiq)
+// Webhook manzili — loyihaning doimiy *.vercel.app domeni (preview deploylar Telegramga
+// yopiq). VERCEL_PROJECT_PRODUCTION_URL ATAYIN ishlatilmaydi: u 'tunika.uz' bo'lib
+// qolgan, lekin domen DNS'i hali Vercel'ga ulanmagan — webhook u yerga ulansa bot
+// jim qolardi. Domen ishga tushgach kerak bo'lsa env TG_WEBHOOK_URL bilan almashtiriladi.
 function webhookManzil() {
-  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || 'tunika-sex.vercel.app';
-  return `https://${host}/api/telegram`;
+  return process.env.TG_WEBHOOK_URL || 'https://tunika-sex.vercel.app/api/telegram';
 }
 
 async function holat(db) {
