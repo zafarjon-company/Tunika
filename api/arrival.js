@@ -15,7 +15,8 @@ import { sendMessage, sendPhotoOrText, tokenYukla } from './_tg.js';
 import { findIshchiByName } from './_match.js';
 import { markArrival, bugunTashkent, vaqtTashkent } from './_attendance.js';
 import { correctionKeyboard } from './_cb.js';
-import { yoqlamaKameraLog } from './_ishchiBot.js';
+import { yoqlamaKameraLog, ishchiChatlari, xabarYoqilgan } from './_ishchiBot.js';
+import { esc } from './_ishchiMatn.js';
 
 function safeEqual(a, b) {
   if (!a || !b) return false;
@@ -49,7 +50,7 @@ export default async function handler(req, res) {
     // --- BEGONA YUZ ---
     if (kind === 'unknown') {
       if (managersChatId && settings.unknownAlerts !== false) {
-        const cap = `⚠️ <b>Notanish odam</b>\n📷 ${cam || '—'} · 🕐 ${vaqtTashkent()}\n<i>Ro'yxatda yo'q yuz aniqlandi</i>`;
+        const cap = `⚠️ <b>Notanish odam</b>\n📷 ${esc(cam || '—')} · 🕐 ${vaqtTashkent()}\n<i>Ro'yxatda yo'q yuz aniqlandi</i>`;
         await sendPhotoOrText(managersChatId, photo_base64, cap);
       }
       return res.status(200).json({ ok: true, kind: 'unknown' });
@@ -84,8 +85,8 @@ export default async function handler(req, res) {
       });
       if (managersChatId) {
         const cap = `❓ <b>Tanildi, lekin ishchi topilmadi</b>\n`
-          + `👤 Kameradagi nom: <b>${name || '—'}</b>\n`
-          + `📷 ${cam || '—'} · 🕐 ${vaqtTashkent()}\n\n`
+          + `👤 Kameradagi nom: <b>${esc(name || '—')}</b>\n`
+          + `📷 ${esc(cam || '—')} · 🕐 ${vaqtTashkent()}\n\n`
           + `<i>Sozlamalar → Kamera bog'lash bo'limidan ushbu odamni ishchiga bog'lang.</i>`;
         await sendPhotoOrText(managersChatId, photo_base64, cap);
       }
@@ -95,8 +96,8 @@ export default async function handler(req, res) {
     // --- ISHDAN BO'SHATILGAN (yoki hali ishga kirmagan) — yo'qlama YOZILMAYDI ---
     if (!faol(ishchi, date)) {
       if (managersChatId) {
-        const cap = `⚠️ <b>${ishchi.name}</b> ishdan bo'shatilgan, lekin kamerada ko'rindi\n`
-          + `🕐 ${vaqtTashkent()} · 📷 ${cam || '—'}\n`
+        const cap = `⚠️ <b>${esc(ishchi.name)}</b> ishdan bo'shatilgan, lekin kamerada ko'rindi\n`
+          + `🕐 ${vaqtTashkent()} · 📷 ${esc(cam || '—')}\n`
           + `<i>Yo'qlamaga yozilmadi.</i>`;
         await sendPhotoOrText(managersChatId, photo_base64, cap);
       }
@@ -108,15 +109,21 @@ export default async function handler(req, res) {
     if (!firstTime) return res.status(200).json({ ok: true, duplicate: true });
 
     // --- ISHCHIGA "XUSH KELIBSIZ" DM ---
+    // Ishchi boti qoidalari bilan bir xil: faqat raqami hali kartochkada turgan
+    // (ishchiChatlari) BARCHA akkauntlarga va Sozlamalarda "Yo'qlama" xabari yoqilgan bo'lsa.
     const tgLinks = (await readShop(db, 'telegram-links')) || {};
-    const workerTg = Object.keys(tgLinks).find((tid) => tgLinks[tid] && tgLinks[tid].ishchiId === ishchiId);
+    const chats = xabarYoqilgan(settings, 'yoqlama') ? ishchiChatlari(tgLinks, ishchilar, ishchiId) : [];
     let xabarBerildi = false;
-    if (workerTg) {
+    if (chats.length) {
       const tmpl = settings.welcomeText
         || "Assalomu alaykum, {ism}! 🌅\nIshga xush kelibsiz, charchamang — barakali ish kuni bo'lsin! 💪";
-      const text = tmpl.replace(/\{ism\}/g, ishchi.name || '');
-      const r = await sendMessage(workerTg, text);
-      xabarBerildi = !!(r && r.ok);
+      // Shablon oddiy matn (Sozlamalarda yoziladi) — butunlay escape; funksiya shaklida
+      // almashtirish ismdagi '$&' kabi belgilarni ham buzmaydi
+      const text = esc(tmpl).replace(/\{ism\}/g, () => esc(ishchi.name || ''));
+      for (const tid of chats) {
+        const r = await sendMessage(tid, text);
+        if (r && r.ok) xabarBerildi = true;
+      }
     }
     // Ishchi boti jurnali: kamera "keldi" yozdi — keyin qo'lda "Keldi" bosilsa
     // ishchiga ikkinchi xabar ketmaydi; "Kelmadi"ga tuzatilsa — "tuzatildi" boradi.
@@ -126,8 +133,8 @@ export default async function handler(req, res) {
 
     // --- MENEJERLAR GURUHIGA: foto + tuzatish tugmalari ---
     if (managersChatId) {
-      const cap = `✅ <b>${ishchi.name}</b> ishga keldi\n`
-        + `🕐 ${vaqtTashkent()} · 📷 ${cam || '—'}\n`
+      const cap = `✅ <b>${esc(ishchi.name)}</b> ishga keldi\n`
+        + `🕐 ${vaqtTashkent()} · 📷 ${esc(cam || '—')}\n`
         + `<i>Yo'qlamaga avtomatik yozildi. Noto'g'ri bo'lsa tuzating 👇</i>`;
       const sent = await sendPhotoOrText(managersChatId, photo_base64, cap, correctionKeyboard(date, ishchiId));
       if (sent && sent.ok && sent.result) {

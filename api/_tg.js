@@ -6,7 +6,6 @@
 //  ishlay oladi. Token brauzerga chiqmaydi (bu yerda faqat serverda).
 //  Node 18+ global fetch / FormData / Blob ishlatiladi.
 // ============================================================
-import crypto from 'crypto';
 
 let TOKEN = process.env.BOT_TOKEN || '';
 let tokenManbasi = TOKEN ? 'env' : '';
@@ -34,30 +33,62 @@ export async function tokenYukla(db, readShop) {
 export function tokenBormi() { return !!TOKEN; }
 export function tokenManba() { return tokenManbasi; }
 
-// Webhook maxfiy so'zi: env TG_WEBHOOK_SECRET; bo'lmasa tokendan HMAC bilan
-// hosil qilinadi (tokenni bilmagan odam uni topa olmaydi). Telegram ruxsat
-// bergan belgilar: A-Z a-z 0-9 _ - (hex mos keladi).
+// Webhook maxfiy so'zi — FAQAT env TG_WEBHOOK_SECRET. Tokendan hosil qilinmaydi:
+// Firestore'dagi 'telegram-bot-token'ni ilovaning har bir mijozi o'qiy oladi,
+// undan hosil qilingan so'z ham maxfiy bo'lmay qolardi. Env yo'q bo'lsa webhook
+// fail-closed (401) va «Botni ulash» xato qaytaradi.
 export function webhookSecret() {
-  if (process.env.TG_WEBHOOK_SECRET) return process.env.TG_WEBHOOK_SECRET;
-  if (!TOKEN) return '';
-  return crypto.createHmac('sha256', TOKEN).update('tunika-webhook-v1').digest('hex').slice(0, 48);
+  return process.env.TG_WEBHOOK_SECRET || '';
 }
-export function secretManba() { return process.env.TG_WEBHOOK_SECRET ? 'env' : 'hosila'; }
+export function secretBormi() { return !!process.env.TG_WEBHOOK_SECRET; }
 
 const api = (method) => `https://api.telegram.org/bot${TOKEN}/${method}`;
+const kut = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function call(method, body) {
   if (!TOKEN) return { ok: false, description: 'token yo\'q' };
-  try {
-    const r = await fetch(api(method), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body || {}),
-    });
-    return await r.json().catch(() => ({ ok: false }));
-  } catch (e) {
-    return { ok: false, description: String(e) };
+  // 429 (Too Many Requests): retry_after qisqa bo'lsa (Vercel 10 s chegarasiga sig'sin)
+  // kutib BIR marta qayta urinamiz; uzun bo'lsa — chaqiruvchi "vaqtinchalik xato" deb biladi.
+  for (let urinish = 0; urinish < 2; urinish += 1) {
+    let j;
+    try {
+      const r = await fetch(api(method), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+      j = await r.json().catch(() => ({ ok: false, error_code: r.status }));
+    } catch (e) {
+      return { ok: false, description: String(e) };
+    }
+    const sek = Number(j && j.parameters && j.parameters.retry_after) || 0;
+    if (j && !j.ok && j.error_code === 429 && urinish === 0 && sek > 0 && sek <= 3) {
+      await kut(sek * 1000 + 200);
+      continue;
+    }
+    return j;
   }
+  return { ok: false, error_code: 429 };
+}
+
+// Yuborish natijasi: 'ok' | 'doimiy' (403 — ishchi botni bloklagan; 400 — chat yo'q,
+// matn juda uzun, HTML xato: qayta urinish baribir foydasiz) | 'vaqtinchalik'
+// (429, 5xx, tarmoq, 401/404 token muammosi — keyin qayta urinish kerak)
+export function natijaTuri(r) {
+  if (r && r.ok) return 'ok';
+  const kod = r && r.error_code;
+  if (kod === 403 || kod === 400) return 'doimiy';
+  return 'vaqtinchalik';
+}
+
+// Botning @username'i (getMe, modul darajasida kesh) — guruhda "/buyruq@bot" bizga
+// atalganini bilish uchun
+let _username = null;
+export async function botUsername() {
+  if (_username) return _username;
+  const r = await call('getMe', {});
+  if (r && r.ok && r.result && r.result.username) _username = String(r.result.username);
+  return _username || '';
 }
 
 export function sendMessage(chatId, text, extra = {}) {
@@ -99,11 +130,14 @@ export function answerCallbackQuery(id, text = '') {
 // ---- Bot holati va webhook (api/ishchi-bot.js ishlatadi) ----
 export function getMe() { return call('getMe', {}); }
 export function getWebhookInfo() { return call('getWebhookInfo', {}); }
-export function setWebhook(url) {
+// tashla — Telegram navbatidagi (24 soatgacha) eski update'larni tashlash: birinchi
+// ulashda kecha bosilgan eski tugmalar qayta bajarilib yo'qlamani buzmasin.
+export function setWebhook(url, { tashla = false } = {}) {
   return call('setWebhook', {
     url,
     secret_token: webhookSecret(),
     allowed_updates: ['message', 'callback_query'],
+    ...(tashla ? { drop_pending_updates: true } : {}),
   });
 }
 export function setMyCommands(commands, scope) {

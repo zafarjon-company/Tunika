@@ -86,7 +86,7 @@ service cloud.firestore {
         // Avtomatika va Telegram sozlamalari
         'avto-ish',
         'telegram-bot-token', 'telegram-chat-id', 'telegram-dxf-chats',
-        'telegram-settings', 'telegram-links', 'telegram_config', 'telegram_links',
+        'telegram-settings', 'telegram-links', 'telegram-unlinked', 'telegram_config', 'telegram_links',
         // Kamera bog'lamalari
         'camera-links', 'camera-unlinked',
         // Ombor → Rulonlar: narx ro'yxati, kurs/ustama sozlamasi va rulonlar.

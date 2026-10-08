@@ -13,7 +13,7 @@
 //  qilinadi — env'siz deploylarda modul umuman yuklanmaydi.
 // ============================================================
 import { initializeApp, getApps } from 'firebase/app';
-import { initializeFirestore, getFirestore, doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, doc, getDoc, setDoc, deleteField, runTransaction } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -135,4 +135,36 @@ export async function mergeShop(db, key, partial) {
     return;
   }
   await setDoc(doc(db, 'shop', key), { value: partial }, { merge: true });
+}
+
+// Atomar "o'qi → qaror → yoz": fn(joriyQiymat, qoshimcha) → { patch, natija }.
+//  qoshimchaKalitlar — shu tranzaksiyada FAQAT O'QILADIGAN boshqa hujjatlar
+//  (masalan 'yoqlama'): qoshimcha = { kalit: qiymat }. Ular ham tranzaksiyada
+//  o'qilgani uchun oraliqda o'zgarsa Firestore tranzaksiyani yangi ma'lumot bilan
+//  qayta ishga tushiradi — qaror eskirgan ma'lumotga tayanmaydi.
+// patch bo'lsa merge bilan yoziladi (FieldValue.delete() ichma-ich ham ishlaydi).
+// fn SOF bo'lsin — Firestore to'qnashuvda tranzaksiyani qayta ishga tushiradi.
+// Ishchi botida "bir xabar — bir marta" kafolati shunga tayanadi (ustma-ust
+// kelgan ikki so'rov bir yozuvni ikkalasi ham "yangi" deb ko'rmasin).
+export async function txShop(db, key, fn, qoshimchaKalitlar = []) {
+  const tana = async (tx, ref, qRefs, bormi) => {
+    const snap = await tx.get(ref);
+    const qoshimcha = {};
+    for (let i = 0; i < qRefs.length; i += 1) {
+      const s = await tx.get(qRefs[i]);
+      qoshimcha[qoshimchaKalitlar[i]] = bormi(s) ? ((s.data() || {}).value ?? null) : null;
+    }
+    const v = bormi(snap) ? ((snap.data() || {}).value ?? null) : null;
+    const { patch, natija } = fn(v, qoshimcha);
+    if (patch && Object.keys(patch).length) tx.set(ref, { value: patch }, { merge: true });
+    return natija;
+  };
+  if (adminBormi()) {
+    const ref = db.collection('shop').doc(key);
+    const qRefs = qoshimchaKalitlar.map((k) => db.collection('shop').doc(k));
+    return db.runTransaction((tx) => tana(tx, ref, qRefs, (s) => s.exists));
+  }
+  const ref = doc(db, 'shop', key);
+  const qRefs = qoshimchaKalitlar.map((k) => doc(db, 'shop', k));
+  return runTransaction(db, (tx) => tana(tx, ref, qRefs, (s) => s.exists()));
 }

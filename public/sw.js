@@ -8,7 +8,7 @@
 //    to'g'ridan-to'g'ri tarmoqqa ketadi.
 //  Yangi versiya chiqsa CACHE nomidagi raqamni oshiring.
 // ============================================================
-const CACHE = 'tunika-v115';
+const CACHE = 'tunika-v116';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -31,6 +31,9 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   // Tashqi so'rovlar (Firebase, kurs API va h.k.) — SW aralashmaydi
   if (url.origin !== self.location.origin) return;
+  // API (bot holati, zakas holati va h.k.) — hech qachon keshlanmaydi, har doim tarmoq:
+  // Cache API serverdagi 'Cache-Control: no-store' ga qaramaydi, eski javob berib qo'yardi
+  if (url.pathname.startsWith('/api/')) return;
 
   // HTML navigatsiyasi — avval tarmoq, offline bo'lsa kesh
   if (req.mode === 'navigate') {

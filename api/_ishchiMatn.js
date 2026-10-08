@@ -11,7 +11,7 @@
 // ============================================================
 import {
   fmt, sonQiymat, formatDate, formatDay, daysInMonth, ishKuniMi, ishchiFaolmi,
-  avansYozuvlari, avansOyi, oldingiOy, oylikYoqlama, ishchiHisobi, oylikBalans,
+  avansYozuvlari, avansOyi, avansTaqsimot, oldingiOy, oylikYoqlama, ishchiHisobi, oylikBalans,
   tolovlarSummasi, MAOSH_KUNI,
 } from '../src/lib/helpers.js';
 import { OY_NOMLARI } from '../src/lib/constants.js';
@@ -72,10 +72,14 @@ function summaMatni(p) {
   return `<b>${soM(amt)}</b>`;
 }
 
-function tolovSatri(p) {
+// Izoh (📝) — menejer yozgan erkin matn: unda ishxona ichki gapi bo'lishi mumkin
+// ("kimning pulidan", "qaytarish kerak" va h.k.). Shuning uchun SUKUT BO'YICHA
+// ishchiga ko'rsatilmaydi; Sozlamalar → Ishchilar boti → "Izohlar ko'rinsin"
+// yoqilgandagina (opts.izoh) chiqadi.
+function tolovSatri(p, opts = {}) {
   const vaqt = vaqtMatni(p.createdAt);
   let s = `• ${vaqt ? `${vaqt} — ` : ''}${summaMatni(p)}${p.method ? ` · ${esc(p.method)}` : ''}`;
-  if (p.notes) s += `\n   📝 ${esc(p.notes)}`;
+  if (opts.izoh && p.notes && !p.eski) s += `\n   📝 ${esc(p.notes)}`;
   return s;
 }
 
@@ -100,20 +104,20 @@ export function oyDavomati(ishchi, yoqlama = {}, oy, bugun) {
   return { keldi, kelmadi, yoq };
 }
 
-// Ishchining ma'lumoti boshlangan oy (navigatsiya chegarasi)
-export function boshOy(ishchi, { yoqlama = {}, avanslar = {}, maoshlar = {} }, joriy) {
-  let min = joriy;
-  if (ishchi.ishgaKirgan) {
-    const m = String(ishchi.ishgaKirgan).slice(0, 7);
-    if (m < min) min = m;
-    return min;
-  }
-  for (const sana in yoqlama) {
-    if (yoqlama[sana] && yoqlama[sana][ishchi.id] && sana.slice(0, 7) < min) min = sana.slice(0, 7);
-  }
-  for (const oy in avanslar) if (avanslar[oy] && avanslar[oy][ishchi.id] && oy < min) min = oy;
-  for (const oy in maoshlar) if (maoshlar[oy] && maoshlar[oy][ishchi.id] && oy < min) min = oy;
-  return min;
+// Ishchining ma'lumoti bor oylar chegarasi (◀ ▶ navigatsiyasi uchun): ishga kirgan oy,
+// yo'qlama oylari, avanslar USHLANADIGAN oyi bo'yicha (1–5-kunda olingan avans o'tgan
+// oyga tushadi — o'sha oy ham ochilsin) va maosh oylari. { min, max }; max ≥ joriy.
+export function oyChegarasi(ishchi, { yoqlama = {}, avanslar = {}, maoshlar = {} }, joriy) {
+  const oylar = [joriy];
+  if (ishchi.ishgaKirgan) oylar.push(String(ishchi.ishgaKirgan).slice(0, 7));
+  for (const sana in yoqlama) if (yoqlama[sana] && yoqlama[sana][ishchi.id]) oylar.push(sana.slice(0, 7));
+  for (const oy in avansTaqsimot(avanslar, ishchi.id)) oylar.push(oy);
+  for (const oy in maoshlar) if (maoshlar[oy] && maoshlar[oy][ishchi.id]) oylar.push(oy);
+  const toza = oylar.filter((o) => /^\d{4}-\d{2}$/.test(o)).sort();
+  return { min: toza[0], max: toza[toza.length - 1] };
+}
+export function boshOy(ishchi, d, joriy) {
+  return oyChegarasi(ishchi, d, joriy).min;
 }
 
 // Oy bo'yicha ◀ ▶ tugmalari. k: d (davomat) | a (avans) | m (maosh)
@@ -181,8 +185,11 @@ export function hisobMatni(ishchi, d, bugun) {
     `✅ Keldi: ${dv.keldi.length} kun · ❌ Kelmadi: ${dv.kelmadi.length} kun`,
     `💼 Ishlangan: ${soM(bj.ishlangan)}`,
     `💸 Avans: ${soM(bj.avans)}`,
-    `<i>Oylik ${soM(oylik)} · kunlik ${soM(kunSoni ? oylik / kunSoni : 0)}</i>`,
   ];
+  // Shu oy UCHUN berilgan maosh (masalan ishdan ketayotganda yakuniy hisob-kitob) —
+  // ko'rsatilmasa "hozirgi haqqi" izohsiz kamayib qolardi
+  if (bj.maosh > 0) q.push(`🧾 Berilgan maosh: ${soM(bj.maosh)}`);
+  q.push(`<i>Oylik ${soM(oylik)} · kunlik ${soM(kunSoni ? oylik / kunSoni : 0)}</i>`);
 
   const otganBor = Math.round(bo.yakun) !== 0 || bo.maosh > 0 || bo.ishlangan > 0 || bo.avans > 0;
   if (otganBor) {
@@ -199,10 +206,12 @@ export function hisobMatni(ishchi, d, bugun) {
       q.push(kun <= MAOSH_KUNI
         ? `⏳ Qoldiq ${soM(qoldiq)} — ${MAOSH_KUNI}-${oyKichik(joriy)}da beriladi`
         : `⏳ Qoldiq ${soM(qoldiq)} — hali berilmagan`);
+    } else if (qoldiq < 0) {
+      // Manfiy qoldiq "to'liq berilgan" ostida yashirinmasin (masalan maoshdan keyin
+      // 1–5-kunda olingan avans) — u keyingi hisobdan ushlanadi
+      q.push(`Qoldiq: −${soM(-qoldiq)} (ortiqcha olingan — keyingi hisobdan ushlanadi)`);
     } else if (bo.maosh > 0) {
       q.push('✅ To\'liq berilgan');
-    } else if (qoldiq < 0) {
-      q.push(`Qoldiq: −${soM(-qoldiq)} (avans ko'p olingan)`);
     }
   }
 
@@ -249,7 +258,7 @@ export function oyAvanslari(ishchi, avanslar = {}, oy) {
 }
 
 // ---------------- 💸 AVANSLAR ----------------
-export function avanslarMatni(ishchi, avanslar = {}, oy) {
+export function avanslarMatni(ishchi, avanslar = {}, oy, opts = {}) {
   const list = oyAvanslari(ishchi, avanslar, oy);
   const q = [
     `💸 <b>Avanslar — ${oyNomi(oy)} maoshidan</b>`,
@@ -260,13 +269,13 @@ export function avanslarMatni(ishchi, avanslar = {}, oy) {
     q.push('Bu oy maoshidan avans olinmagan.');
     return q.join('\n');
   }
-  list.forEach((p) => q.push(tolovSatri(p)));
+  list.forEach((p) => q.push(tolovSatri(p, opts)));
   q.push(CHIZIQ, `Jami: <b>${soM(tolovlarSummasi(list))}</b> (${list.length} ta)`);
   return q.join('\n');
 }
 
 // ---------------- 🧾 MAOSH ----------------
-export function maoshMatni(ishchi, d, oy, bugun) {
+export function maoshMatni(ishchi, d, oy, bugun, opts = {}) {
   const { yoqlama = {}, avanslar = {}, maoshlar = {} } = d;
   const b = oylikBalans(ishchi, yoqlama, avanslar, maoshlar, oy);
   const y = oylikYoqlama(yoqlama, oy, ishchi.id);
@@ -297,7 +306,7 @@ export function maoshMatni(ishchi, d, oy, bugun) {
   const tolovlar = avansYozuvlari(maoshlar[oy] && maoshlar[oy][ishchi.id], oy);
   if (tolovlar.length) {
     q.push('', '<b>Berilgan maoshlar:</b>');
-    tolovlar.forEach((p) => q.push(tolovSatri(p)));
+    tolovlar.forEach((p) => q.push(tolovSatri(p, opts)));
   }
   q.push('', `<i>Maosh ${MAOSH_KUNI}-sanada o'tgan oy uchun beriladi.</i>`);
   return q.join('\n');
@@ -320,28 +329,54 @@ export function yoqlamaXabarMatni(ishchi, sana, holat, avval, yoqlama = {}) {
     q.push(`▫️ <b>${sanaHafta(sana)}</b>`, 'Yo\'qlamadagi belgi olib tashlandi.');
   }
   if (avval && avval !== holat && HOLAT_NOM[avval]) q.push(`✏️ <i>Tuzatildi — avval: ${HOLAT_NOM[avval]}</i>`);
+  q.push('', oyYigindisi(ishchi, yoqlama, oy));
+  if (holat === 'kelmadi') q.push('<i>Xato bo\'lsa, boshliqqa ayting.</i>');
+  return q.join('\n');
+}
+
+// "📅 Oktabr 2026: ✅ 6 kun · ❌ 1 kun"
+function oyYigindisi(ishchi, yoqlama, oy) {
   let keldi = 0; let kelmadi = 0;
   for (const s in yoqlama) {
     if (!s.startsWith(oy)) continue;
     const h = holatNorm(yoqlama[s] && yoqlama[s][ishchi.id]);
     if (h === 'keldi') keldi += 1; else if (h === 'kelmadi') kelmadi += 1;
   }
-  q.push('', `📅 ${oyNomi(oy)}: ✅ ${keldi} kun · ❌ ${kelmadi} kun`);
-  if (holat === 'kelmadi') q.push('<i>Xato bo\'lsa, boshliqqa ayting.</i>');
+  return `📅 ${oyNomi(oy)}: ✅ ${keldi} kun · ❌ ${kelmadi} kun`;
+}
+
+// Bir nechta kun birdaniga belgilansa (masalan Kalendarda o'tgan oyni to'ldirish) —
+// har kun uchun alohida xabar emas, BITTA yig'ma xabar (Telegram bitta chatga
+// soniyasiga ~1 xabardan ko'pini qabul qilmaydi, ishchini ham bezovta qilmaymiz).
+//  kunlar — [{ sana, holat, avval }] (sana bo'yicha tartiblangan)
+const JAMLANMA_MAX = 40; // Telegram xabari 4096 belgidan oshmasin
+export function yoqlamaJamlanmaMatni(ishchi, kunlar, yoqlama = {}) {
+  const q = [`📅 <b>Yo'qlama yangilandi — ${kunlar.length} kun</b>`, ''];
+  // Juda ko'p bo'lsa — eng YANGI kunlar ko'rsatiladi, eskilari bitta qatorda
+  if (kunlar.length > JAMLANMA_MAX) q.push(`<i>… va yana ${kunlar.length - JAMLANMA_MAX} ta oldingi kun (📅 Davomat bo'limida)</i>`);
+  for (const k of kunlar.slice(-JAMLANMA_MAX)) {
+    const belgi = k.holat === 'keldi' ? '✅ keldi' : k.holat === 'kelmadi' ? '❌ kelmadi' : '▫️ belgi olib tashlandi';
+    const tuz = k.avval && k.avval !== k.holat && HOLAT_NOM[k.avval] ? ` <i>(avval: ${HOLAT_NOM[k.avval]})</i>` : '';
+    q.push(`• ${sanaHafta(k.sana)} — ${belgi}${tuz}`);
+  }
+  const oylar = [...new Set(kunlar.map((k) => k.sana.slice(0, 7)))].sort();
+  q.push('');
+  oylar.forEach((oy) => q.push(oyYigindisi(ishchi, yoqlama, oy)));
+  if (kunlar.some((k) => k.holat === 'kelmadi')) q.push('<i>Xato bo\'lsa, boshliqqa ayting.</i>');
   return q.join('\n');
 }
 
 // ---------------- 🔔 AVANS / MAOSH XABARI ----------------
 //  yangilar — yangi to'lov yozuvlari (asl yozuvlar)
 //  bekorlar — o'chirilgan yozuvlar jurnaldan: [{ s: so'm, d: createdAt }]
-export function tolovXabarMatni(tur, ishchi, d, oy, yangilar = [], bekorlar = []) {
+export function tolovXabarMatni(tur, ishchi, d, oy, yangilar = [], bekorlar = [], opts = {}) {
   const { yoqlama = {}, avanslar = {}, maoshlar = {} } = d;
   const q = [];
   if (tur === 'avans') {
     if (yangilar.length) {
       q.push(`💸 <b>${yangilar.length > 1 ? 'Avanslar berildi' : 'Avans berildi'}</b>`);
       yangilar.forEach((p) => {
-        q.push(tolovSatri(p), `   <i>→ ${oyNomi(avansOyi(p, oy))} maoshidan ushlanadi</i>`);
+        q.push(tolovSatri(p, opts), `   <i>→ ${oyNomi(avansOyi(p, oy))} maoshidan ushlanadi</i>`);
       });
     }
     if (bekorlar.length) {
@@ -356,7 +391,7 @@ export function tolovXabarMatni(tur, ishchi, d, oy, yangilar = [], bekorlar = []
   } else {
     if (yangilar.length) {
       q.push(`🧾 <b>Maosh berildi — ${oyNomi(oy)}</b>`);
-      yangilar.forEach((p) => q.push(tolovSatri(p)));
+      yangilar.forEach((p) => q.push(tolovSatri(p, opts)));
     }
     if (bekorlar.length) {
       if (q.length) q.push('');

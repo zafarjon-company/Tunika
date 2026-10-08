@@ -16,12 +16,12 @@ import crypto from 'crypto';
 import { getDb, readShop, mergeShop, FieldValue } from './_firebase.js';
 import {
   sendMessage, answerCallbackQuery, editMessageCaption, editMessageText, tokenYukla, webhookSecret,
-  getChatMember,
+  getChatMember, botUsername,
 } from './_tg.js';
-import { findIshchiByPhone, normPhone } from './_match.js';
+import { ishchilarByPhone, normPhone } from './_match.js';
 import { parseCb, HOLAT_LABEL } from './_cb.js';
 import { bugunTashkent, vaqtTashkent } from './_attendance.js';
-import { ishchiTekshir, ishchiMalumoti, bolimMatni, yoqlamaXabarlari } from './_ishchiBot.js';
+import { ishchiTekshir, ishchiMalumoti, bolimMatni, yoqlamaXabarlari, izohKorinsin } from './_ishchiBot.js';
 import { MENYU, menyuBolimi, menyuMatni, esc } from './_ishchiMatn.js';
 
 const MANAGER_ROLES = ['founder', 'admin', 'boshliq', 'boshqaruvchi', 'buxgalter'];
@@ -42,8 +42,8 @@ function safeEqual(a, b) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
-  // Token env'da bo'lmasa — bazadan (Sozlamalar → Telegram bot tokeni); maxfiy so'z
-  // shundan hosil qilinadi. Baza ochilmasa ham pastdagi tekshiruv fail-closed (401).
+  // Token env'da bo'lmasa — bazadan (Sozlamalar → Telegram bot tokeni). Maxfiy so'z —
+  // faqat env TG_WEBHOOK_SECRET; u yo'q bo'lsa yoki baza ochilmasa — fail-closed (401).
   let db = null;
   try {
     db = await getDb();
@@ -78,6 +78,11 @@ async function menejermi(settings, links, chatId, fromId) {
   return !!(r && r.ok && r.result && ['creator', 'administrator', 'member'].includes(r.result.status));
 }
 
+// Telegram ism-familiyasi (ulana olmaganlar ro'yxati uchun, qisqartirilgan)
+function tgIsm(from) {
+  return [from && from.first_name, from && from.last_name].filter(Boolean).join(' ').slice(0, 64);
+}
+
 // ---------------- Xabarlar ----------------
 async function onMessage(db, msg) {
   const chatId = msg.chat.id;
@@ -88,22 +93,39 @@ async function onMessage(db, msg) {
   if (msg.contact) {
     if (!shaxsiy) return;
     if (msg.contact.user_id !== msg.from.id) {
-      await sendMessage(chatId, "❗ Iltimos, faqat O'ZINGIZNING raqamingizni ulashing (pastdagi tugma orqali).");
+      await sendMessage(chatId, "❗ Iltimos, faqat O'ZINGIZNING raqamingizni ulashing (pastdagi tugma orqali).",
+        { reply_markup: TELEFON_TUGMA });
       return;
     }
     const ishchilar = (await readShop(db, 'ishchilar')) || [];
-    const m = findIshchiByPhone(ishchilar, msg.contact.phone_number);
-    if (!m) {
-      await sendMessage(chatId, "❌ Raqamingiz ishchilar ro'yxatida topilmadi.\nBoshqaruvchiga murojaat qiling.",
-        { reply_markup: { remove_keyboard: true } });
+    const mos = ishchilarByPhone(ishchilar, msg.contact.phone_number);
+    if (mos.length !== 1) {
+      // Raqam ko'rsatiladi (bu ishchining O'Z raqami — user_id tekshirildi): ko'pincha
+      // Telegram eski SIM-kartaga ochilgan bo'ladi. Menejer uchun ro'yxatga ham yozamiz
+      // (Sozlamalar → Ishchilar boti → "Ulana olmaganlar").
+      const raqam = `+${String(msg.contact.phone_number || '').replace(/\D/g, '')}`;
+      await mergeShop(db, 'telegram-unlinked', {
+        [tid]: {
+          phone: normPhone(msg.contact.phone_number), raqam, ism: tgIsm(msg.from),
+          sabab: mos.length ? 'kop' : 'yoq', vaqt: new Date().toISOString(),
+        },
+      });
+      const matn = mos.length
+        ? `⚠️ <b>${esc(raqam)}</b> raqami bir nechta ishchi kartochkasida bor — bot qaysi biriga ulashni bilmaydi.\n`
+          + "Boshliqqa ayting: ortiqchasini olib tashlasin, so'ng pastdagi tugmani qayta bosing 👇"
+        : `❌ Telegram raqamingiz: <b>${esc(raqam)}</b>\nBu raqam ishchilar ro'yxatida topilmadi.\n`
+          + "Boshliqqa ayting — kartochkangizga shu raqamni qo'shsin, so'ng pastdagi tugmani qayta bosing 👇";
+      await sendMessage(chatId, matn, { reply_markup: TELEFON_TUGMA });
       return;
     }
+    const m = mos[0];
     await mergeShop(db, 'telegram-links', {
       [tid]: {
         ishchiId: m.id, role: 'ishchi', phone: normPhone(msg.contact.phone_number),
         name: m.name, linkedAt: new Date().toISOString(),
       },
     });
+    await mergeShop(db, 'telegram-unlinked', { [tid]: FieldValue.delete() });
     await sendMessage(chatId, `✅ <b>${esc(m.name)}</b>, akkauntingiz ulandi!\n\n${menyuMatni(m.name)}`,
       { reply_markup: MENYU });
     return;
@@ -111,15 +133,23 @@ async function onMessage(db, msg) {
 
   const text = (msg.text || '').trim();
 
+  // "/buyruq" yoki "/buyruq@bot": boshqa botga atalgan buyruqqa javob bermaymiz
+  const buyruq = /^\/([A-Za-z_]+)(?:@([A-Za-z0-9_]+))?(?:\s|$)/.exec(text);
+  if (buyruq && buyruq[2]) {
+    const u = await botUsername();
+    if (!u || buyruq[2].toLowerCase() !== u.toLowerCase()) return;
+  }
+  const cmd = buyruq ? buyruq[1].toLowerCase() : null;
+
   // Guruh/chat ID ni topish uchun (Sozlamalarga kiritish uchun)
-  if (text === '/id' || text.startsWith('/id@') || text.startsWith('/id ')) {
+  if (cmd === 'id') {
     await sendMessage(chatId,
       `🆔 Bu chat ID:\n<code>${chatId}</code>\n\n`
       + `<i>Menejerlar guruhi bo'lsa — shu ID ni Tunika → Sozlamalar → Nazorat boti'ga kiriting.</i>`);
     return;
   }
 
-  if (text === '/yoqlama' || text.startsWith('/yoqlama@')) {
+  if (cmd === 'yoqlama') {
     const settings = (await readShop(db, 'telegram-settings')) || {};
     const links = (await readShop(db, 'telegram-links')) || {};
     if (await menejermi(settings, links, chatId, msg.from && msg.from.id)) {
@@ -130,17 +160,21 @@ async function onMessage(db, msg) {
     return;
   }
 
-  const bolim = text.startsWith('/start') ? 'start' : menyuBolimi(text);
-
-  // Guruhlarda shaxsiy ma'lumot KO'RSATILMAYDI (maosh/avans boshqalarga ko'rinmasin)
+  // Guruhlarda shaxsiy ma'lumot KO'RSATILMAYDI (maosh/avans boshqalarga ko'rinmasin).
+  // Faqat botga atalgan aniq buyruqqa qisqa javob; oddiy suhbatdagi "avans", "maosh"
+  // so'zlariga javob yozilmaydi (guruhni ifloslamaymiz).
   if (!shaxsiy) {
-    if (bolim) {
+    if (cmd && ['start', 'hisob', 'balans', 'davomat', 'avans', 'maosh', 'menu', 'menyu'].includes(cmd)) {
       await sendMessage(chatId, "🔒 Shaxsiy hisob faqat bot bilan <b>shaxsiy chatda</b> ko'rsatiladi.");
     }
     return;
   }
 
-  const links = (await readShop(db, 'telegram-links')) || {};
+  const bolim = cmd === 'start' ? 'start' : menyuBolimi(text);
+  const [links, settings] = await Promise.all([
+    readShop(db, 'telegram-links').then((v) => v || {}),
+    readShop(db, 'telegram-settings').then((v) => v || {}),
+  ]);
   const link = links[tid];
   const d = link ? await ishchiMalumoti(db) : null;
   const ishchi = link ? ishchiTekshir(link, d.ishchilar) : null;
@@ -174,7 +208,7 @@ async function onMessage(db, msg) {
       { reply_markup: MENYU });
     return;
   }
-  const { text: javob, reply_markup } = bolimMatni(bolim, ishchi, d);
+  const { text: javob, reply_markup } = bolimMatni(bolim, ishchi, d, null, { izoh: izohKorinsin(settings) });
   await sendMessage(chatId, javob, { reply_markup });
 }
 
@@ -211,13 +245,13 @@ async function onCallback(db, cq) {
     const pid = log[date] && log[date][ishchiId] && log[date][ishchiId].person_id;
     if (pid != null) await mergeShop(db, 'camera-links', { [String(pid)]: FieldValue.delete() });
     await mergeShop(db, 'arrival-log', { [date]: { [ishchiId]: { lastStatus: 'bekor' } } });
-    caption = `🚫 <b>Bekor qilindi</b> — bu <s>${nom}</s> emas ekan.\n`
-      + `<i>Kamera bog'lanishi tozalandi (${kim}, ${vaqtTashkent()})</i>`;
+    caption = `🚫 <b>Bekor qilindi</b> — bu <s>${esc(nom)}</s> emas ekan.\n`
+      + `<i>Kamera bog'lanishi tozalandi (${esc(kim)}, ${vaqtTashkent()})</i>`;
   } else if (HOLAT_LABEL[code]) {
     await mergeShop(db, 'yoqlama', { [date]: { [ishchiId]: code } });
     await mergeShop(db, 'arrival-log', { [date]: { [ishchiId]: { lastStatus: code } } });
-    caption = `✏️ <b>${nom}</b> → ${HOLAT_LABEL[code]}\n`
-      + `<i>Tuzatildi (${kim}, ${vaqtTashkent()})</i>`;
+    caption = `✏️ <b>${esc(nom)}</b> → ${HOLAT_LABEL[code]}\n`
+      + `<i>Tuzatildi (${esc(kim)}, ${vaqtTashkent()})</i>`;
   } else {
     await answerCallbackQuery(cq.id);
     return;
@@ -233,7 +267,7 @@ async function onCallback(db, cq) {
   }
   await answerCallbackQuery(cq.id, 'Saqlandi ✅');
   // Ishchining o'ziga ham xabar (tuzatish / bekor)
-  try { await yoqlamaXabarlari(db, date, [ishchiId]); } catch (e) { console.error('ishchi xabari:', e); }
+  try { await yoqlamaXabarlari(db, { [date]: [ishchiId] }); } catch (e) { console.error('ishchi xabari:', e); }
 }
 
 // Ishchi menyusidagi ◀ ▶ oy tugmalari: "ib|<d|a|m>|<YYYY-MM>"
@@ -242,11 +276,14 @@ async function ishchiTugma(db, cq) {
   const bolim = { d: 'davomat', a: 'avans', m: 'maosh' }[k];
   const chat = cq.message && cq.message.chat;
   if (!bolim || !chat || chat.type !== 'private') { await answerCallbackQuery(cq.id); return; }
-  const links = (await readShop(db, 'telegram-links')) || {};
-  const d = await ishchiMalumoti(db);
+  const [links, settings, d] = await Promise.all([
+    readShop(db, 'telegram-links').then((v) => v || {}),
+    readShop(db, 'telegram-settings').then((v) => v || {}),
+    ishchiMalumoti(db),
+  ]);
   const ishchi = ishchiTekshir(links[String(cq.from.id)], d.ishchilar);
   if (!ishchi) { await answerCallbackQuery(cq.id, 'Avval telefon raqamingizni ulang (/start)'); return; }
-  const { text, reply_markup } = bolimMatni(bolim, ishchi, d, oy);
+  const { text, reply_markup } = bolimMatni(bolim, ishchi, d, oy, { izoh: izohKorinsin(settings) });
   await editMessageText(chat.id, cq.message.message_id, text, reply_markup ? { reply_markup } : {});
   await answerCallbackQuery(cq.id);
 }

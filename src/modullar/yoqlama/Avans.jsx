@@ -28,10 +28,12 @@ function maoshKunidan(oy) {
   return `${MAOSH_KUNI}-${nom}dan`;
 }
 
-// Eski (sonli) yoki yangi (massiv) formatni bir xil massivga keltirish
+// Eski (sonli) yoki yangi (massiv) formatni bir xil massivga keltirish.
+// eski: true — helpers.avansYozuvlari bilan bir xil belgi: saqlangandan keyin ham
+// bu yozuv "eski tarix" bo'lib qoladi (ishchi botida "hozir berildi" deb e'lon qilinmaydi).
 function normEntries(v) {
   if (Array.isArray(v)) return v;
-  if (typeof v === 'number' && v > 0) return [{ id: 'eski', method: "So'mda", amount: v, createdAt: null, notes: 'eski format' }];
+  if (typeof v === 'number' && v > 0) return [{ id: 'eski', method: "So'mda", amount: v, createdAt: null, notes: 'eski format', eski: true }];
   return [];
 }
 

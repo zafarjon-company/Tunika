@@ -54,7 +54,7 @@ import {
 } from './lib/constants.js';
 import {
   fmt, genId, genToken, calcItem, makeBlankItem, makeBlankPayment, makeBlankDraft,
-  rangTozala, aksRangKerak, orderItemToDraft, toDateInput, sonQiymat,
+  rangTozala, aksRangKerak, orderItemToDraft, toDateInput, sonQiymat, avansYozuvlari,
 } from './lib/helpers.js';
 import { zakasChiqimlari, kazirokChiqimlari, kamQoldiqlar } from './lib/ombor.js';
 import { SOZLAMA_BOSHLANGICH, RANG_TUR_BOSHLANGICH, seedToplam } from './lib/omborSeed.js';
@@ -63,7 +63,7 @@ import {
   AVTO_ISH_BLANK, normAvtoIsh, kunlikHisobotMatni, zaxiraFayli, bugunKerakmi,
 } from './lib/avtoIsh.js';
 import { sendTelegramDocument, sendTelegramMessage, telegramSozlangan } from './lib/telegram.js';
-import { yoqlamaOzgardi, tolovOzgardi } from './lib/ishchiXabar.js';
+import { signalNiyat, signalNatija, navbatniTiklash } from './lib/ishchiXabar.js';
 import { zaxiraMalumot } from './lib/zaxira.js';
 import { sotuvchilarSatr, tanlanganSotuvchi, qurilmaSotuvchisi, qurilmaSotuvchisiniSaqla } from './lib/sotuvchi.js';
 
@@ -932,31 +932,42 @@ export default function App() {
   function updateYoqlama(v)    { setYoqlama(v);    persist('yoqlama', v); }
   // Yo'qlama — bitta ishchining bitta kunini yozadi (merge). Butun hujjatni
   // qayta yozmaydi, shu sabab kamera avto-yozuvi bilan to'qnashmaydi.
-  // Ishchi boti: yozuv saqlangach ishchiga xabar (src/lib/ishchiXabar.js).
-  // Joriy qiymatlar ref'da — o'zgargan-o'zgarmaganini bilish uchun.
+  // Ishchi boti: o'zgarish niyati Firestore'ga yozishdan OLDIN navbatga tushadi,
+  // yozuv serverda tasdiqlangach ishchiga xabar signali ketadi (src/lib/ishchiXabar.js —
+  // ilova yopilsa / internet uzilsa ham navbatda qoladi va keyin qayta yuboriladi).
+  // Joriy qiymatlar ref'da — o'zgargan-o'zgarmaganini bilish uchun; setterlar uni
+  // DARHOL yangilaydi (qayta chizilishni kutmasdan ketma-ket bosishlar ham to'g'ri).
   const yoqlamaRef = useRef(yoqlama);
   useEffect(() => { yoqlamaRef.current = yoqlama; }, [yoqlama]);
   const avanslarRef = useRef(avanslar);
   useEffect(() => { avanslarRef.current = avanslar; }, [avanslar]);
   const maoshlarRef = useRef(maoshlar);
   useEffect(() => { maoshlarRef.current = maoshlar; }, [maoshlar]);
+  // Ilova ochilganda (va internet qaytganda — modulning o'zi) yuborilmay qolgan signallar
+  useEffect(() => { if (!loading) navbatniTiklash(); }, [loading]);
   function setYoqlamaKun(sana, ishchiId, holat) {
-    const oldi = yoqlamaRef.current?.[sana]?.[ishchiId] ?? null;
+    const joriyKun = { ...(yoqlamaRef.current?.[sana] || {}) };
+    const oldi = joriyKun[ishchiId] ?? null;
+    if (holat == null) delete joriyKun[ishchiId]; else joriyKun[ishchiId] = holat;
+    yoqlamaRef.current = { ...yoqlamaRef.current, [sana]: joriyKun };
     setYoqlama((prev) => {
       const kun = { ...(prev[sana] || {}) };
       if (holat == null) delete kun[ishchiId]; else kun[ishchiId] = holat;
       return { ...prev, [sana]: kun };
     });
+    const k = oldi !== (holat ?? null) ? signalNiyat({ tur: 'yoqlama', sana, ishchiIdlar: [ishchiId] }) : null;
     persistField('yoqlama', { [sana]: { [ishchiId]: holat == null ? O_CHIR : holat } })
-      .then((ok) => { if (ok && oldi !== (holat ?? null)) yoqlamaOzgardi(sana, [ishchiId]); });
+      .then((ok) => { if (k) signalNatija(k, ok); });
   }
   // Bir kunda bir nechta ishchini birdaniga belgilash ("Hammasi keldi").
   function setYoqlamaBulk(sana, map) {
     const kun = yoqlamaRef.current?.[sana] || {};
     const ozgargan = Object.keys(map).filter((id) => kun[id] !== map[id]);
+    yoqlamaRef.current = { ...yoqlamaRef.current, [sana]: { ...kun, ...map } };
     setYoqlama((prev) => ({ ...prev, [sana]: { ...(prev[sana] || {}), ...map } }));
+    const k = ozgargan.length ? signalNiyat({ tur: 'yoqlama', sana, ishchiIdlar: ozgargan }) : null;
     persistField('yoqlama', { [sana]: map })
-      .then((ok) => { if (ok && ozgargan.length) yoqlamaOzgardi(sana, ozgargan); });
+      .then((ok) => { if (k) signalNatija(k, ok); });
   }
   function updateAvanslar(v)   { setAvanslar(v);   persist('avanslar', v); }
 
@@ -1093,24 +1104,30 @@ export default function App() {
   // Avans — faqat BITTA ishchi/oy katagini yozadi (merge, yo'qlama uslubida).
   // Butun hujjatni qayta yozmaydi — ikki qurilma bir vaqtda avans kiritsa,
   // biri ikkinchisining yozuvini o'chirib yubormaydi.
-  // Shu saqlashda qo'shilgan to'lov yozuvlari idlari (ishchi boti "berildi" xabari uchun)
-  const yangiIdlar = (eski, list) => {
-    const bor = new Set((Array.isArray(eski) ? eski : []).map((p) => p && p.id));
-    return (list || []).filter((p) => p && p.id && !bor.has(p.id)).map((p) => p.id);
+  // Shu saqlashda qo'shilgan to'lov yozuvlari idlari (ishchi boti "berildi" xabari uchun).
+  // Eski SONLI katak avansYozuvlari bilan massivga keltiriladi — uning 'eski' yozuvi
+  // hech qachon "yangi" deb e'lon qilinmasin (u allaqachon tarix).
+  const yangiIdlar = (eski, list, oy) => {
+    const bor = new Set(avansYozuvlari(eski, oy).map((p) => p && p.id));
+    return (list || []).filter((p) => p && p.id && p.id !== 'eski' && !bor.has(p.id)).map((p) => p.id);
   };
   function setAvansYozuv(oy, ishchiId, list) {
-    const yangi = yangiIdlar(avanslarRef.current?.[oy]?.[ishchiId], list);
+    const yangi = yangiIdlar(avanslarRef.current?.[oy]?.[ishchiId], list, oy);
+    avanslarRef.current = { ...avanslarRef.current, [oy]: { ...(avanslarRef.current?.[oy] || {}), [ishchiId]: list } };
     setAvanslar((prev) => ({ ...prev, [oy]: { ...(prev[oy] || {}), [ishchiId]: list } }));
+    const k = signalNiyat({ tur: 'avans', oy, ishchiId, yangi });
     persistField('avanslar', { [oy]: { [ishchiId]: list } })
-      .then((ok) => { if (ok) tolovOzgardi('avans', oy, ishchiId, yangi); });
+      .then((ok) => signalNatija(k, ok));
   }
   // Maosh — avans kabi faqat BITTA ishchi/oy katagini yozadi (merge).
   // oy = maosh QAYSI OY UCHUN (to'lov sanasi emas — u yozuv createdAt'ida).
   function setMaoshYozuv(oy, ishchiId, list) {
-    const yangi = yangiIdlar(maoshlarRef.current?.[oy]?.[ishchiId], list);
+    const yangi = yangiIdlar(maoshlarRef.current?.[oy]?.[ishchiId], list, oy);
+    maoshlarRef.current = { ...maoshlarRef.current, [oy]: { ...(maoshlarRef.current?.[oy] || {}), [ishchiId]: list } };
     setMaoshlar((prev) => ({ ...prev, [oy]: { ...(prev[oy] || {}), [ishchiId]: list } }));
+    const k = signalNiyat({ tur: 'maosh', oy, ishchiId, yangi });
     persistField('maoshlar', { [oy]: { [ishchiId]: list } })
-      .then((ok) => { if (ok) tolovOzgardi('maosh', oy, ishchiId, yangi); });
+      .then((ok) => signalNatija(k, ok));
   }
 
   // ----- Kazirok (chizmadan, avtomatik) — savdo hisobiga ulanadi -----

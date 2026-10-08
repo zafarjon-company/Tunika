@@ -30,9 +30,14 @@ export function findIshchiByName(ishchilar, name) {
 }
 
 export function findIshchiByPhone(ishchilar, phone) {
-  const p = normPhone(phone);
-  if (!p || p.length < 7) return null;
-  const m = (ishchilar || []).filter((i) =>
-    (i.phones || []).some((ph) => normPhone(ph) === p));
+  const m = ishchilarByPhone(ishchilar, phone);
   return m.length === 1 ? m[0] : null;
+}
+
+// Raqami mos keladigan BARCHA ishchilar (0 — topilmadi, 2+ — bir raqam bir necha
+// kartochkada: bot qaysi biriga ulashni bilmaydi, menejer ortiqchasini olib tashlasin)
+export function ishchilarByPhone(ishchilar, phone) {
+  const p = normPhone(phone);
+  if (!p || p.length < 7) return [];
+  return (ishchilar || []).filter((i) => i && (i.phones || []).some((ph) => normPhone(ph) === p));
 }

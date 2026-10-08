@@ -317,6 +317,8 @@ const SKIP = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEXTAREA: 1 };
 function processText(n, lang) {
   const p = n.parentNode;
   if (!p || SKIP[p.nodeName]) return;
+  // translate="no" — o'girilmaydi (masalan Telegram bot nomi: @username, t.me/...)
+  if (p.closest && p.closest('[translate="no"]')) return;
   if (n._src == null) n._src = n.nodeValue;
   const out = lang === 'uz' ? n._src : convert(n._src, lang);
   if (n.nodeValue !== out) {

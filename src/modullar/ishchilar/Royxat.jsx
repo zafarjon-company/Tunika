@@ -56,10 +56,12 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
   const [boshatishSana, setBoshatishSana] = useState(toDateInput());
   // Ishchilar boti (Sozlamalar → Ishchilar boti): tid → { ishchiId, phone }
   const [tgLinks, setTgLinks] = useState({});
-  const [tgSozlama, setTgSozlama] = useState({}); // { botUsername, ... }
+  const [tgSozlama, setTgSozlama] = useState({}); // { botUsername, webhookUlangan, ... }
   useEffect(() => storage.subscribe('telegram-links', (v) => setTgLinks(v || {})), []);
   useEffect(() => storage.subscribe('telegram-settings', (v) => setTgSozlama(v || {})), []);
-  const botUsername = tgSozlama.botUsername || '';
+  // Havola faqat bot haqiqatan serverga ulangan bo'lsa (aks holda ishchi START bossa
+  // javob kelmaydi). webhookUlangan'ni Sozlamalar → Ishchilar boti tekshiruvi yozadi.
+  const botUsername = tgSozlama.webhookUlangan ? (tgSozlama.botUsername || '') : '';
   // Ishchining ulangan raqami — hali ham kartochkada bo'lsa (server qoidasi bilan bir xil)
   function tgUlangan(ishchiId) {
     const i = ishchilar.find((x) => x.id === ishchiId);
@@ -344,14 +346,14 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
               {tgUlangan(editing) ? (
                 <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
                   <Check className="w-4 h-4 flex-shrink-0" /> Botga ulangan
-                  {tgUlangan(editing).phone ? <span className="text-slate-500 truncate tabular-nums">+998 {tgUlangan(editing).phone}</span> : null}
+                  {tgUlangan(editing).phone ? <span translate="no" className="text-slate-500 truncate tabular-nums">+998 {tgUlangan(editing).phone}</span> : null}
                 </div>
               ) : botUsername ? (
                 <div className="space-y-1">
                   <div className="flex gap-2">
                     <a href={`https://t.me/${botUsername}`} target="_blank" rel="noreferrer"
                       className="flex-1 text-center px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-medium inline-flex items-center justify-center gap-1 hover:bg-sky-700">
-                      <Send className="w-3.5 h-3.5" /> t.me/{botUsername}
+                      <Send className="w-3.5 h-3.5" /> <span translate="no">t.me/{botUsername}</span>
                     </a>
                     <button type="button"
                       onClick={() => { navigator.clipboard?.writeText(`https://t.me/${botUsername}`); showToast('Havola nusxalandi'); }}
