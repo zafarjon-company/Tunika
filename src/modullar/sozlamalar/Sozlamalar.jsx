@@ -27,6 +27,7 @@ import { Languages, Keyboard } from 'lucide-react';
 import { KEY_ACTIONS, comboFromEvent, comboValid } from '../../lib/keybind.js';
 import { telegramSozlangan, tgChatList } from '../../lib/telegram.js';
 import { NazoratBot } from './NazoratBot.jsx';
+import { IshchiBot } from './IshchiBot.jsx';
 import { SotuvchilarSozlama } from './Sotuvchilar.jsx';
 
 const MAVZULAR = [
@@ -442,6 +443,10 @@ export function SettingsTab({ shopName, updateShopName, shopPhone = '', updateSh
 
       {currentUser?.role !== 'ishchi' && (
         <NazoratBot ishchilar={ishchilar} currentUser={currentUser} showToast={showToast} />
+      )}
+
+      {currentUser?.role !== 'ishchi' && (
+        <IshchiBot ishchilar={ishchilar} showToast={showToast} />
       )}
 
       <Card>

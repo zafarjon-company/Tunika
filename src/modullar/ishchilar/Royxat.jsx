@@ -8,7 +8,13 @@ import { fmt, genId, formatDate, sonMatn, sonQiymat, toDateInput, formatDay, ish
 import { storage } from '../../lib/storage.js';
 import { DarajaNishon, StarRating } from './Lavozimlar.jsx';
 import { NegativeRating } from './Kamchiliklar.jsx';
-import { TelegramSozlama } from './TelegramSozlama.jsx';
+
+// api/_match.js normPhone bilan bir xil: faqat raqamlar, 998 tashlanadi, oxirgi 9 ta
+function normPhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('998') && d.length > 9) d = d.slice(-9);
+  return d.slice(-9);
+}
 
 // ishgaKirgan/ishdanKetgan — 'YYYY-MM-DD'; bo'sh = azaldan ishlaydi / hozir ham ishlaydi
 const BLANK = { name: '', avatar: '', phones: [''], lavozimlar: [], oylikHaqq: '', qobiliyatlar: [], kamchiliklar: [], oylikTarix: [], ishgaKirgan: '', ishdanKetgan: '' };
@@ -48,11 +54,19 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
   const [holatFiltri, setHolatFiltri] = useState('faol'); // 'faol' | 'ketgan' | 'hammasi'
   const [boshatishOchiq, setBoshatishOchiq] = useState(false); // "Ishdan bo'shatish" sana bloki
   const [boshatishSana, setBoshatishSana] = useState(toDateInput());
-  const [tgLinks, setTgLinks] = useState({});     // { ishchiId: {chat_id, username, ...} }
-  const [tgCfg, setTgCfg]     = useState(null);    // { bot_username, arrival_template, enabled }
-  useEffect(() => storage.subscribe('telegram_links', (v) => setTgLinks(v || {})), []);
-  useEffect(() => storage.subscribe('telegram_config', (v) => setTgCfg(v || {})), []);
-  const botUsername = tgCfg?.bot_username || '';
+  // Ishchilar boti (Sozlamalar → Ishchilar boti): tid → { ishchiId, phone }
+  const [tgLinks, setTgLinks] = useState({});
+  const [tgSozlama, setTgSozlama] = useState({}); // { botUsername, ... }
+  useEffect(() => storage.subscribe('telegram-links', (v) => setTgLinks(v || {})), []);
+  useEffect(() => storage.subscribe('telegram-settings', (v) => setTgSozlama(v || {})), []);
+  const botUsername = tgSozlama.botUsername || '';
+  // Ishchining ulangan raqami — hali ham kartochkada bo'lsa (server qoidasi bilan bir xil)
+  function tgUlangan(ishchiId) {
+    const i = ishchilar.find((x) => x.id === ishchiId);
+    if (!i) return null;
+    return Object.values(tgLinks).find((l) => l && l.ishchiId === ishchiId
+      && (!l.phone || (i.phones || []).some((p) => normPhone(p) === normPhone(l.phone)))) || null;
+  }
 
   const ballOf = (i) =>
     (i.qobiliyatlar || []).reduce((s, q) => s + (q.ball || 0), 0)
@@ -202,8 +216,6 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
 
   return (
     <Card>
-      <TelegramSozlama />
-
       <div className="relative mb-3">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ishchi qidirish..." className="w-full pl-10 pr-3 py-2.5 border-2 border-slate-200 rounded-lg focus:border-slate-900 outline-none text-sm" />
@@ -328,27 +340,31 @@ export function IshchilarRoyxat({ ishchilar, updateIshchilar, lavozimlar = [], q
 
           {editing && (
             <div>
-              <label className="block text-xs text-slate-600 mb-1 font-medium">Telegram (kelganda xabar uchun)</label>
-              {tgLinks[editing]?.chat_id ? (
+              <label className="block text-xs text-slate-600 mb-1 font-medium">Telegram bot (davomat, avans, maosh)</label>
+              {tgUlangan(editing) ? (
                 <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                  <Check className="w-4 h-4 flex-shrink-0" /> Telegram ulangan
-                  {tgLinks[editing].username ? <span className="text-slate-500 truncate">@{tgLinks[editing].username}</span> : null}
+                  <Check className="w-4 h-4 flex-shrink-0" /> Botga ulangan
+                  {tgUlangan(editing).phone ? <span className="text-slate-500 truncate tabular-nums">+998 {tgUlangan(editing).phone}</span> : null}
                 </div>
               ) : botUsername ? (
                 <div className="space-y-1">
                   <div className="flex gap-2">
-                    <a href={`https://t.me/${botUsername}?start=${editing}`} target="_blank" rel="noreferrer"
+                    <a href={`https://t.me/${botUsername}`} target="_blank" rel="noreferrer"
                       className="flex-1 text-center px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-medium inline-flex items-center justify-center gap-1 hover:bg-sky-700">
-                      <Send className="w-3.5 h-3.5" /> Telegramga ulash
+                      <Send className="w-3.5 h-3.5" /> t.me/{botUsername}
                     </a>
                     <button type="button"
-                      onClick={() => { navigator.clipboard?.writeText(`https://t.me/${botUsername}?start=${editing}`); showToast('Havola nusxalandi'); }}
+                      onClick={() => { navigator.clipboard?.writeText(`https://t.me/${botUsername}`); showToast('Havola nusxalandi'); }}
                       className="px-3 py-2 rounded-lg border-2 border-slate-200 bg-white text-slate-600"><Copy className="w-3.5 h-3.5" /></button>
                   </div>
-                  <p className="text-[11px] text-slate-400">Bu havolani ishchining <b>o'z telefoniga</b> yuboring — u ochib «START» bossa, xabarlar o'ziga keladi.</p>
+                  <p className="text-[11px] text-slate-400">
+                    Havolani ishchining <b>o'z telefoniga</b> yuboring: u «START» → «📱 Telefonni ulashish» ni bosadi.
+                    Raqami yuqoridagi raqamlardan biri bo'lishi kerak — shunda botda o'z davomati, avansi va maoshini
+                    ko'radi, o'zgarishlar haqida xabar oladi.
+                  </p>
                 </div>
               ) : (
-                <p className="text-[11px] text-amber-600">Bot hali ulanmagan. Kompyuterda <b>Telegram_bot.bat</b> ni ishga tushiring — keyin bu yerda ulash havolasi chiqadi.</p>
+                <p className="text-[11px] text-amber-600">Bot hali ulanmagan — Sozlamalar → <b>Ishchilar boti</b> bo'limida «Botni ulash» ni bosing.</p>
               )}
             </div>
           )}

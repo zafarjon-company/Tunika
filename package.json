@@ -24,7 +24,8 @@
     "test:cmd": "node src/lib/cmdLine.test.mjs",
     "test:mijoz": "node src/lib/mijoz.test.mjs",
     "test:metrli": "node src/lib/metrli.test.mjs",
-    "test:sotuvchi": "node src/lib/sotuvchi.test.mjs"
+    "test:sotuvchi": "node src/lib/sotuvchi.test.mjs",
+    "test:ishchibot": "node src/lib/ishchiBot.test.mjs"
   },
   "dependencies": {
     "dxf": "^5.3.1",

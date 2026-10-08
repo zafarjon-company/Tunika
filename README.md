@@ -166,6 +166,55 @@ foydalanuvchi bergan 01.09.2026 narx varaqasi). Ular Sozlama
 panelidan tahrirlanadi; **"Boshlang'ich sozlamaga qaytarish"** tugmasi faqat
 shu sozlamani tiklaydi, rulonlarga tegmaydi.
 
+## Ishchilar boti (Telegram) — shaxsiy hisob
+
+Har bir ishchi Telegram botda **faqat o'zining** ma'lumotini ko'radi va o'zgarishlar
+haqida xabar oladi. Boshqa ishchilar, savdo, narxlar, kassa — botga umuman chiqmaydi.
+
+**Ishchi nima ko'radi** (pastdagi menyu yoki `/hisob`, `/davomat`, `/avans`, `/maosh`):
+
+| Tugma | Mazmuni |
+|---|---|
+| 💰 Hisobim | shu oy: keldi/kelmadi kunlari, ishlangan, avans; o'tgan oy maoshi qoldig'i; **hozirgi haqqi** |
+| 📅 Davomat | oy bo'yicha keldi / kelmadi / belgilanmagan kunlar, ishlangan summa (◀ ▶ oylar) |
+| 💸 Avanslar | shu oy maoshidan ushlanadigan avanslar (6-sanadan keyingi oyning 5-sigacha), sana, summa, izoh |
+| 🧾 Maosh | oy hisobi (Maosh bo'limidagi jadval bilan bir xil) va berilgan maoshlar |
+
+Raqamlar ilovadagi bilan **aynan bir xil** — bot ham `src/lib/helpers.js` dagi
+`ishchiHisobi` / `oylikBalans` / `avansOyi` ni ishlatadi (server Toshkent vaqtiga
+o'rnatiladi, aks holda 1–5-kun qoidasi UTC'da boshqa oyga tushardi).
+
+**Avtomatik xabarlar** (Sozlamalar → Ishchilar boti'da har birini o'chirsa bo'ladi):
+- *Yo'qlama* — Keldi / Kelmadi belgilansa yoki tuzatilsa ("Tuzatildi — avval: …").
+  Ilova 6 soniya kutib bitta so'rov yuboradi (Kalendarda ketma-ket bosish = bitta xabar);
+  3 daqiqa ichida qayta o'zgarsa — yangi xabar emas, o'sha xabar tahrirlanadi. Kamera
+  "keldi" yozganda (xush kelibsiz DM) qo'lda "Keldi" bosilsa ikkinchi xabar ketmaydi.
+- *Avans* — berilganda (qaysi oy maoshidan ushlanishi, oy jami avansi, hozirgi haqqi) va
+  yozuv o'chirilganda ("bekor qilindi").
+- *Maosh* — berilganda (oy yakuni, berilgan, qoldiq) va o'chirilganda.
+
+**Ishchini ulash:** Sozlamalar → Ishchilar boti'dagi `t.me/<bot>` havolasini ishchiga
+yuboring → u **START** → **«📱 Telefonni ulashish»**. Telegram raqamni o'zi tasdiqlaydi;
+raqam ishchi kartochkasidagi raqamlardan biri bo'lsa ulanadi (qo'lda yozilgan raqam
+qabul qilinmaydi). Kartochkadan raqam olib tashlansa — botdagi kirish ham yopiladi.
+Guruh chatlarida shaxsiy hisob ko'rsatilmaydi; umumiy `/yoqlama` faqat menejerlar
+guruhida va uning a'zolariga.
+
+**Texnik tuzilma:**
+- Bot tokeni: Vercel env `BOT_TOKEN`, bo'lmasa — Sozlamalardagi **Telegram bot tokeni**
+  (`telegram-bot-token`). Webhook maxfiy so'zi: env `TG_WEBHOOK_SECRET`, bo'lmasa tokendan
+  HMAC bilan hosil qilinadi. Sozlamalar → Ishchilar boti → **«Botni ulash»** webhookni
+  `https://<production>/api/telegram` ga ulaydi va buyruqlar menyusini o'rnatadi.
+- `api/telegram.js` — webhook (ulanish, menyu, ◀ ▶ tugmalar, menejer tuzatishlari);
+  `api/ishchi-bot.js` — holat / ulash / xabar signali; `api/_ishchiBot.js` — xabar
+  qarorlari va jurnal; `api/_ishchiMatn.js` — matnlar (sof); `src/lib/ishchiXabar.js` —
+  ilova tomonidagi signal.
+- Ilova summani yubormaydi — faqat "qayerga qarash kerak" (sana / oy / ishchi / yangi
+  yozuv idlari). Server bazadan qayta o'qiydi va har yozuv uchun xabarni **bir marta**
+  yuboradi: jurnallar `ishchi-yoqlama-log` (70 kun), `ishchi-tolov-log` (14 oy) — faqat
+  server ishlatadi (`firestore.rules` → `maxfiyKalitlar`).
+- Test: `npm run test:ishchibot`.
+
 ## Ma'lumotlar qayerda?
 
 Asosiy ma'lumotlar **Firebase Firestore**da saqlanadi va qurilmalar

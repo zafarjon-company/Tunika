@@ -11,10 +11,11 @@
 // ============================================================
 import crypto from 'crypto';
 import { getDb, readShop, mergeShop, FieldValue } from './_firebase.js';
-import { sendMessage, sendPhotoOrText } from './_tg.js';
+import { sendMessage, sendPhotoOrText, tokenYukla } from './_tg.js';
 import { findIshchiByName } from './_match.js';
 import { markArrival, bugunTashkent, vaqtTashkent } from './_attendance.js';
 import { correctionKeyboard } from './_cb.js';
+import { yoqlamaKameraLog } from './_ishchiBot.js';
 
 function safeEqual(a, b) {
   if (!a || !b) return false;
@@ -41,6 +42,7 @@ export default async function handler(req, res) {
 
   try {
     const db = await getDb();
+    await tokenYukla(db, readShop); // env BOT_TOKEN yoki Sozlamalardagi bot tokeni
     const settings = (await readShop(db, 'telegram-settings')) || {};
     const managersChatId = settings.managersChatId || null;
 
@@ -102,17 +104,24 @@ export default async function handler(req, res) {
     }
 
     // --- YO'QLAMA + DEDUP ---
-    const { firstTime } = await markArrival(db, { date, ishchiId, personId: person_id, score });
+    const { firstTime, changed } = await markArrival(db, { date, ishchiId, personId: person_id, score });
     if (!firstTime) return res.status(200).json({ ok: true, duplicate: true });
 
     // --- ISHCHIGA "XUSH KELIBSIZ" DM ---
     const tgLinks = (await readShop(db, 'telegram-links')) || {};
-    const workerTg = Object.keys(tgLinks).find((tid) => tgLinks[tid].ishchiId === ishchiId);
+    const workerTg = Object.keys(tgLinks).find((tid) => tgLinks[tid] && tgLinks[tid].ishchiId === ishchiId);
+    let xabarBerildi = false;
     if (workerTg) {
       const tmpl = settings.welcomeText
         || "Assalomu alaykum, {ism}! 🌅\nIshga xush kelibsiz, charchamang — barakali ish kuni bo'lsin! 💪";
       const text = tmpl.replace(/\{ism\}/g, ishchi.name || '');
-      await sendMessage(workerTg, text);
+      const r = await sendMessage(workerTg, text);
+      xabarBerildi = !!(r && r.ok);
+    }
+    // Ishchi boti jurnali: kamera "keldi" yozdi — keyin qo'lda "Keldi" bosilsa
+    // ishchiga ikkinchi xabar ketmaydi; "Kelmadi"ga tuzatilsa — "tuzatildi" boradi.
+    if (changed) {
+      try { await yoqlamaKameraLog(db, date, ishchiId, xabarBerildi); } catch (e) { console.error('yoqlama log:', e); }
     }
 
     // --- MENEJERLAR GURUHIGA: foto + tuzatish tugmalari ---

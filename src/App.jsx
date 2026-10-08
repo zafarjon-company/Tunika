@@ -63,6 +63,7 @@ import {
   AVTO_ISH_BLANK, normAvtoIsh, kunlikHisobotMatni, zaxiraFayli, bugunKerakmi,
 } from './lib/avtoIsh.js';
 import { sendTelegramDocument, sendTelegramMessage, telegramSozlangan } from './lib/telegram.js';
+import { yoqlamaOzgardi, tolovOzgardi } from './lib/ishchiXabar.js';
 import { zaxiraMalumot } from './lib/zaxira.js';
 import { sotuvchilarSatr, tanlanganSotuvchi, qurilmaSotuvchisi, qurilmaSotuvchisiniSaqla } from './lib/sotuvchi.js';
 
@@ -740,9 +741,10 @@ export default function App() {
   }
 
   // Faqat o'zgargan katakni yozadi (merge) — kamera/bot bilan to'qnashmaydi.
+  // true — server yozuvni tasdiqladi (ishchi botiga signal shundan keyin ketadi).
   async function persistField(key, partial) {
-    try { await storage.saveField(key, partial); }
-    catch (e) { console.error('Saqlashda xatolik:', e); showToast('Saqlashda xatolik'); }
+    try { await storage.saveField(key, partial); return true; }
+    catch (e) { console.error('Saqlashda xatolik:', e); showToast('Saqlashda xatolik'); return false; }
   }
 
   // ----- Amallar jurnali (audit log): kim nima qildi -----
@@ -930,18 +932,31 @@ export default function App() {
   function updateYoqlama(v)    { setYoqlama(v);    persist('yoqlama', v); }
   // Yo'qlama — bitta ishchining bitta kunini yozadi (merge). Butun hujjatni
   // qayta yozmaydi, shu sabab kamera avto-yozuvi bilan to'qnashmaydi.
+  // Ishchi boti: yozuv saqlangach ishchiga xabar (src/lib/ishchiXabar.js).
+  // Joriy qiymatlar ref'da — o'zgargan-o'zgarmaganini bilish uchun.
+  const yoqlamaRef = useRef(yoqlama);
+  useEffect(() => { yoqlamaRef.current = yoqlama; }, [yoqlama]);
+  const avanslarRef = useRef(avanslar);
+  useEffect(() => { avanslarRef.current = avanslar; }, [avanslar]);
+  const maoshlarRef = useRef(maoshlar);
+  useEffect(() => { maoshlarRef.current = maoshlar; }, [maoshlar]);
   function setYoqlamaKun(sana, ishchiId, holat) {
+    const oldi = yoqlamaRef.current?.[sana]?.[ishchiId] ?? null;
     setYoqlama((prev) => {
       const kun = { ...(prev[sana] || {}) };
       if (holat == null) delete kun[ishchiId]; else kun[ishchiId] = holat;
       return { ...prev, [sana]: kun };
     });
-    persistField('yoqlama', { [sana]: { [ishchiId]: holat == null ? O_CHIR : holat } });
+    persistField('yoqlama', { [sana]: { [ishchiId]: holat == null ? O_CHIR : holat } })
+      .then((ok) => { if (ok && oldi !== (holat ?? null)) yoqlamaOzgardi(sana, [ishchiId]); });
   }
   // Bir kunda bir nechta ishchini birdaniga belgilash ("Hammasi keldi").
   function setYoqlamaBulk(sana, map) {
+    const kun = yoqlamaRef.current?.[sana] || {};
+    const ozgargan = Object.keys(map).filter((id) => kun[id] !== map[id]);
     setYoqlama((prev) => ({ ...prev, [sana]: { ...(prev[sana] || {}), ...map } }));
-    persistField('yoqlama', { [sana]: map });
+    persistField('yoqlama', { [sana]: map })
+      .then((ok) => { if (ok && ozgargan.length) yoqlamaOzgardi(sana, ozgargan); });
   }
   function updateAvanslar(v)   { setAvanslar(v);   persist('avanslar', v); }
 
@@ -1078,15 +1093,24 @@ export default function App() {
   // Avans — faqat BITTA ishchi/oy katagini yozadi (merge, yo'qlama uslubida).
   // Butun hujjatni qayta yozmaydi — ikki qurilma bir vaqtda avans kiritsa,
   // biri ikkinchisining yozuvini o'chirib yubormaydi.
+  // Shu saqlashda qo'shilgan to'lov yozuvlari idlari (ishchi boti "berildi" xabari uchun)
+  const yangiIdlar = (eski, list) => {
+    const bor = new Set((Array.isArray(eski) ? eski : []).map((p) => p && p.id));
+    return (list || []).filter((p) => p && p.id && !bor.has(p.id)).map((p) => p.id);
+  };
   function setAvansYozuv(oy, ishchiId, list) {
+    const yangi = yangiIdlar(avanslarRef.current?.[oy]?.[ishchiId], list);
     setAvanslar((prev) => ({ ...prev, [oy]: { ...(prev[oy] || {}), [ishchiId]: list } }));
-    persistField('avanslar', { [oy]: { [ishchiId]: list } });
+    persistField('avanslar', { [oy]: { [ishchiId]: list } })
+      .then((ok) => { if (ok) tolovOzgardi('avans', oy, ishchiId, yangi); });
   }
   // Maosh — avans kabi faqat BITTA ishchi/oy katagini yozadi (merge).
   // oy = maosh QAYSI OY UCHUN (to'lov sanasi emas — u yozuv createdAt'ida).
   function setMaoshYozuv(oy, ishchiId, list) {
+    const yangi = yangiIdlar(maoshlarRef.current?.[oy]?.[ishchiId], list);
     setMaoshlar((prev) => ({ ...prev, [oy]: { ...(prev[oy] || {}), [ishchiId]: list } }));
-    persistField('maoshlar', { [oy]: { [ishchiId]: list } });
+    persistField('maoshlar', { [oy]: { [ishchiId]: list } })
+      .then((ok) => { if (ok) tolovOzgardi('maosh', oy, ishchiId, yangi); });
   }
 
   // ----- Kazirok (chizmadan, avtomatik) — savdo hisobiga ulanadi -----

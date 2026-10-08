@@ -56,8 +56,10 @@ service cloud.firestore {
     // Umumiy qoidadan CHIQARILGAN maxfiy kalitlar:
     //  - 'users'            → faqat asoschi (pastda alohida qoida)
     //  - 'login-urinishlar' → faqat server (admin SDK); klientga UMUMAN ochilmaydi
+    //  - 'ishchi-yoqlama-log', 'ishchi-tolov-log' → ishchilar boti jurnali
+    //    (qaysi xabar yuborilgan) — faqat server (api/_ishchiBot.js)
     function maxfiyKalitlar() {
-      return ['users', 'login-urinishlar'];
+      return ['users', 'login-urinishlar', 'ishchi-yoqlama-log', 'ishchi-tolov-log'];
     }
 
     // Ishchi YOZA OLMAYDIGAN kalitlar (narx, katalog, xodimlar, sozlamalar).
